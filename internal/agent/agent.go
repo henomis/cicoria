@@ -1,0 +1,89 @@
+// Package agent describes how to launch a coding agent and how to read what
+// it reports. Everything specific to one agent lives behind Adapter.
+package agent
+
+import (
+	"os/exec"
+
+	"github.com/henomis/cicoria/internal/ipc"
+)
+
+// Status is what a session is doing, as far as it can be known.
+type Status int
+
+// Session statuses.
+const (
+	Starting Status = iota
+	Working
+	NeedsInput
+	Idle
+	Exited
+)
+
+func (s Status) String() string {
+	switch s {
+	case Starting:
+		return "starting"
+	case Working:
+		return "working"
+	case NeedsInput:
+		return "needs input"
+	case Idle:
+		return "idle"
+	case Exited:
+		return "exited"
+	}
+	return "unknown"
+}
+
+// LaunchOpts is what an adapter needs to build the agent's command line.
+type LaunchOpts struct {
+	// SessionID identifies the session. It is a UUID, stable across restarts.
+	SessionID string
+	// Dir is the project directory the agent runs in.
+	Dir string
+	// Self is the path of the cicoria binary, for agents that call it back.
+	Self string
+	// Socket is where hook events are reported.
+	Socket string
+}
+
+// Update is what an adapter learned from one event.
+type Update struct {
+	// Status is the new status, when HasStatus is set.
+	Status    Status
+	HasStatus bool
+	// File is a file the agent just changed, if any.
+	File string
+	// ContextTokens is the size of the agent's context, if known.
+	ContextTokens int
+}
+
+// Adapter knows one kind of agent.
+type Adapter interface {
+	// Name is how the agent is listed and referred to in saved sessions.
+	Name() string
+	// Command builds the process to run. Launching a session that ran before
+	// continues its conversation when the agent supports that.
+	Command(o LaunchOpts) *exec.Cmd
+	// ReportsStatus says whether the agent reports its status through events.
+	// When it does not, status is guessed from terminal activity.
+	ReportsStatus() bool
+	// Mention returns the text to type at the agent's prompt to refer to a
+	// file of the project.
+	Mention(path string) string
+	// MapEvent interprets an event the agent reported.
+	MapEvent(ev ipc.Event) (Update, bool)
+}
+
+// baseCommand builds a command that runs in the project directory and knows
+// which session it belongs to.
+func baseCommand(o LaunchOpts, argv []string) *exec.Cmd {
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = o.Dir
+	cmd.Env = append(cmd.Environ(),
+		ipc.EnvSocket+"="+o.Socket,
+		ipc.EnvSession+"="+o.SessionID,
+	)
+	return cmd
+}

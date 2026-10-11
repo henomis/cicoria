@@ -1,0 +1,262 @@
+package app
+
+import (
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/henomis/cicoria/internal/agent"
+)
+
+// wheelStep is how many rows one notch of the mouse wheel scrolls.
+const wheelStep = 3
+
+func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
+	key := k.String()
+
+	// A pending question or text field takes every key.
+	if c := m.confirm; c != nil {
+		m.confirm = nil
+		if key == "y" || key == "Y" || key == "enter" {
+			return c.yes()
+		}
+		return nil
+	}
+	if in := m.rename; in != nil {
+		switch key {
+		case "enter":
+			if name := strings.TrimSpace(in.Value()); name != "" && m.current() != nil {
+				m.current().Name = name
+				m.save()
+			}
+			m.rename = nil
+		case "esc":
+			m.rename = nil
+		default:
+			in.Key(k)
+		}
+		return nil
+	}
+
+	switch m.mode {
+	case modeHelp:
+		m.mode = modeWorkspace
+		return nil
+	case modePalette:
+		if key == "esc" {
+			m.mode, m.palette = modeWorkspace, nil
+			return nil
+		}
+		if it, ok := m.palette.Key(k); ok {
+			return m.choose(it)
+		}
+		return nil
+	case modeView:
+		return m.viewKey(k)
+	}
+
+	if m.prefix {
+		m.prefix = false
+		return m.runPrefix(k)
+	}
+	if key == m.cfg.Prefix {
+		m.prefix = true
+		return nil
+	}
+
+	switch m.focus {
+	case focusSessions:
+		return m.sessionsKey(key)
+	case focusFiles:
+		return m.filesKey(key)
+	case focusChanges:
+		return m.changesKey(key)
+	}
+	m.send(k)
+	return nil
+}
+
+// panelKey handles the keys every side panel shares. It reports whether the
+// key was one of them.
+func (m *Model) panelKey(key string) bool {
+	switch key {
+	case "esc", "q":
+		m.focus = focusAgent
+	case "tab":
+		m.focus = map[focus]focus{focusSessions: focusFiles, focusFiles: focusChanges, focusChanges: focusSessions}[m.focus]
+	default:
+		return false
+	}
+	return true
+}
+
+func (m *Model) sessionsKey(key string) tea.Cmd {
+	if m.panelKey(key) {
+		return nil
+	}
+	switch key {
+	case "j", "down":
+		m.sessionCursor = max(min(m.sessionCursor+1, len(m.sessions)-1), 0)
+	case "k", "up":
+		m.sessionCursor = max(m.sessionCursor-1, 0)
+	case "enter", "l", "right":
+		return m.switchTo(m.sessionCursor)
+	case "x":
+		return m.askClose()
+	case "c":
+		return m.askNewSession()
+	}
+	return nil
+}
+
+func (m *Model) filesKey(key string) tea.Cmd {
+	if m.panelKey(key) {
+		return nil
+	}
+	row := m.tree.Selected()
+	switch key {
+	case "j", "down":
+		m.tree.Move(1)
+	case "k", "up":
+		m.tree.Move(-1)
+	case "pgdown":
+		m.tree.Move(m.layout().files.h - 2)
+	case "pgup":
+		m.tree.Move(-(m.layout().files.h - 2))
+	case "h", "left":
+		m.tree.SetOpen(false)
+	case "enter", "l", "right":
+		if row.Dir {
+			m.tree.SetOpen(key != "enter" || !row.Open)
+		} else if row.Path != "" {
+			m.openFile(row.Path)
+		}
+	case "d":
+		if c, ok := m.change(row.Path); ok {
+			m.openDiff(c)
+		} else if row.Path != "" {
+			m.say(row.Path + " has no changes")
+		}
+	case "e":
+		if !row.Dir {
+			return m.edit(row.Path)
+		}
+	case "@":
+		m.mention(row.Path)
+	}
+	return nil
+}
+
+func (m *Model) changesKey(key string) tea.Cmd {
+	if m.panelKey(key) {
+		return nil
+	}
+	var path string
+	if m.changeCursor < len(m.changes) {
+		path = m.changes[m.changeCursor].Path
+	}
+	switch key {
+	case "j", "down":
+		m.changeCursor = max(min(m.changeCursor+1, len(m.changes)-1), 0)
+	case "k", "up":
+		m.changeCursor = max(m.changeCursor-1, 0)
+	case "enter", "l", "right", "d":
+		if path != "" {
+			m.openDiff(m.changes[m.changeCursor])
+		}
+	case "v":
+		if path != "" {
+			m.openFile(path)
+		}
+	case "e":
+		return m.edit(path)
+	case "@":
+		m.mention(path)
+	}
+	return nil
+}
+
+func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
+	mouse := msg.Mouse()
+	_, isWheel := msg.(tea.MouseWheelMsg)
+	_, isClick := msg.(tea.MouseClickMsg)
+
+	wheel := 0
+	if isWheel {
+		switch mouse.Button {
+		case tea.MouseWheelUp:
+			wheel = -wheelStep
+		case tea.MouseWheelDown:
+			wheel = wheelStep
+		}
+	}
+
+	switch m.mode {
+	case modeView:
+		m.view.pager.Scroll(wheel, m.viewHeight())
+		return nil
+	case modePalette, modeHelp:
+		return nil
+	}
+
+	l := m.layout()
+	x, y := mouse.X, mouse.Y
+	switch {
+	case l.agent.contains(x, y):
+		if isClick {
+			m.focus = focusAgent
+		}
+		m.forwardMouse(msg, l.agent)
+
+	case l.panels && l.sessions.contains(x, y):
+		if row := y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) {
+			m.switchTo(row)
+			m.focus = focusSessions
+		}
+
+	case l.panels && l.files.contains(x, y):
+		if isClick {
+			m.focus = focusFiles
+			if row := m.tree.Top + y - l.files.y - 1; row >= 0 && row < len(m.tree.Rows()) && y > l.files.y {
+				m.tree.Cursor = row
+			}
+		}
+		m.tree.Move(wheel)
+
+	case l.panels && l.changes.contains(x, y):
+		if isClick {
+			m.focus = focusChanges
+			if row := m.changeTop + y - l.changes.y - 1; row >= 0 && row < len(m.changes) && y > l.changes.y {
+				m.changeCursor = row
+			}
+		}
+		m.changeCursor = max(min(m.changeCursor+wheel, len(m.changes)-1), 0)
+	}
+	return nil
+}
+
+// forwardMouse passes a mouse event to the agent on screen, in the
+// coordinates of its pane.
+func (m *Model) forwardMouse(msg tea.MouseMsg, pane rect) {
+	s := m.current()
+	if s == nil || s.Term == nil || s.Status == agent.Exited {
+		return
+	}
+	mouse := uv.Mouse(msg.Mouse())
+	mouse.X -= pane.x
+	mouse.Y -= pane.y
+
+	switch msg.(type) {
+	case tea.MouseClickMsg:
+		s.NoteInput(time.Now())
+		s.Term.SendMouse(uv.MouseClickEvent(mouse))
+	case tea.MouseReleaseMsg:
+		s.Term.SendMouse(uv.MouseReleaseEvent(mouse))
+	case tea.MouseMotionMsg:
+		s.Term.SendMouse(uv.MouseMotionEvent(mouse))
+	case tea.MouseWheelMsg:
+		s.Term.SendMouse(uv.MouseWheelEvent(mouse))
+	}
+}
