@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -156,10 +157,17 @@ func (m *Model) toggleSide(hide *bool) tea.Cmd {
 	return nil
 }
 
-// newSession creates a session for an agent working in dir and puts it on
-// screen.
-func (m *Model) newSession(a agent.Adapter, dir string) tea.Cmd {
-	s := session.New(session.NewID(), m.newName(a), dir, a)
+// newSession creates a session of the given name for an agent working in
+// dir and puts it on screen.
+func (m *Model) newSession(a agent.Adapter, name, dir string) tea.Cmd {
+	// One session to a directory is how the panels tell whose work is whose.
+	for _, other := range m.sessions {
+		if filepath.Clean(other.Dir) == filepath.Clean(dir) {
+			m.say(other.Name + " already works in this directory: their changes will be mixed")
+			break
+		}
+	}
+	s := session.New(session.NewID(), name, dir, a)
 	m.sessions = append(m.sessions, s)
 	// The session list grew, which can change the size of the panes.
 	m.resize()
@@ -182,7 +190,21 @@ func (m *Model) askDir(a agent.Adapter) tea.Cmd {
 			m.say(err.Error())
 			return nil
 		}
-		return m.newSession(a, dir)
+		return m.askName(a, dir)
+	}
+	m.prompt = p
+	return nil
+}
+
+// askName asks what to call a new session, offering a name that is free.
+func (m *Model) askName(a agent.Adapter, dir string) tea.Cmd {
+	p := &prompt{input: ui.Input{Prompt: "session name: "}}
+	p.input.Set(m.newName(a))
+	p.done = func(name string) tea.Cmd {
+		if name == "" {
+			name = m.newName(a)
+		}
+		return m.newSession(a, name, dir)
 	}
 	m.prompt = p
 	return nil

@@ -62,7 +62,7 @@ In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses 
 
 Only Claude Code says when its turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
 
-Each session has its own working directory, so one cicoria can hold sessions from several projects. A new session asks for the agent and then for the directory, offering the one of the session on screen: `tab` completes, `ctrl+w` deletes a path component, `ctrl+u` clears, and `~` and relative paths work. The file and change panels always show the project of the session on screen.
+Each session has its own working directory, so one cicoria can hold sessions from several projects. A new session asks for the agent and then for the directory, offering the one of the session on screen: `tab` completes, `ctrl+w` deletes a path component, `ctrl+u` clears, and `~` and relative paths work. Last it asks for a name, offering one that is free. Keep one session to a directory: cicoria warns when a second one opens where another already works, since their changes cannot be told apart. The file and change panels always show the project of the session on screen.
 
 Sessions, with their directories, are remembered for the directory cicoria was opened on and reopened the next time. Agents stop when cicoria closes; Claude Code sessions continue their conversation when reopened.
 

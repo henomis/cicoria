@@ -245,7 +245,11 @@ func TestWorkspace(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude-2 · claude · idle")
+	// Two sessions in one directory cannot be told apart by their changes.
+	w.see("claude-1 already works in this directory")
 	w.line("second")
 	w.see("got second")
 	w.prefix('1')
@@ -284,7 +288,11 @@ func TestWorkspace(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
 	w.see("shell in directory: ../other/")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("shell-1 · shell", "Files · other", "elsewhere.txt", "not a git repository")
+	w.see("session name: shell-1")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("scratch")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("scratch · shell", "Files · other", "elsewhere.txt", "not a git repository")
 	w.gone("main.go")
 	w.line("pwd")
 	w.see(filepath.Join(filepath.Dir(w.dir), "other"))
@@ -304,9 +312,9 @@ func TestWorkspace(t *testing.T) {
 	// The directory of each session is remembered too.
 	w.quit()
 	w.launch(140, 40)
-	w.see("claude-1", "claude-2", "shell-1")
+	w.see("claude-1", "claude-2", "scratch")
 	w.prefix('3')
-	w.see("shell-1 · shell", "Files · other", "elsewhere.txt")
+	w.see("scratch · shell", "Files · other", "elsewhere.txt")
 	w.prefix('2')
 	w.see("claude-2 · claude · idle", "Files · project")
 
@@ -316,7 +324,7 @@ func TestWorkspace(t *testing.T) {
 	w.typeText("y")
 	w.gone("claude-2")
 	// The session that takes its place comes on screen, with its project.
-	w.see("shell-1 · shell", "Files · other")
+	w.see("scratch · shell", "Files · other")
 	w.quit()
 }
 
@@ -382,6 +390,8 @@ func TestAnimations(t *testing.T) {
 	w.see("agent ›")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("launching claude-2", "|[]|")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -553,6 +563,8 @@ func TestQueue(t *testing.T) {
 	w.typeText("shell")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell-1 · shell")
 	w.queue("echo $((6*7))x")
