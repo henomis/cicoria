@@ -42,7 +42,7 @@ func (c *Claude) Mention(path string) string { return "@" + path + " " }
 
 // claudeHookEvents are the hooks cicoria listens to.
 var claudeHookEvents = []string{
-	"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop",
+	"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "StopFailure",
 }
 
 // hookSettings returns Claude Code settings that run command on every hook
@@ -69,9 +69,17 @@ func (c *Claude) Command(o LaunchOpts) *exec.Cmd {
 	argv := append([]string{}, c.argv...)
 
 	// A session that already has a transcript is resumed; otherwise a new one
-	// is started under the same ID, so that it can be resumed next time.
-	if _, err := os.Stat(claudeTranscript(o.Dir, o.SessionID)); err == nil {
-		argv = append(argv, "--resume", o.SessionID)
+	// is started under the same ID, so that it can be resumed next time. The
+	// conversation Claude Code was last in comes first: /clear starts another
+	// one, under an ID of its own.
+	resume := ""
+	for _, id := range []string{o.Resume, o.SessionID} {
+		if _, err := os.Stat(claudeTranscript(o.Dir, id)); id != "" && resume == "" && err == nil {
+			resume = id
+		}
+	}
+	if resume != "" {
+		argv = append(argv, "--resume", resume)
 	} else {
 		argv = append(argv, "--session-id", o.SessionID)
 	}
@@ -98,6 +106,7 @@ func claudeTranscript(dir, sessionID string) string {
 // claudeHook is the part of a Claude Code hook payload cicoria reads.
 type claudeHook struct {
 	Event            string `json:"hook_event_name"`
+	SessionID        string `json:"session_id"`
 	TranscriptPath   string `json:"transcript_path"`
 	NotificationType string `json:"notification_type"`
 	ToolInput        struct {
@@ -112,7 +121,14 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 	if err := json.Unmarshal(ev.Payload, &h); err != nil {
 		return Update{}, false
 	}
+	u, ok := c.mapHook(h)
+	if ok {
+		u.Conversation = h.SessionID
+	}
+	return u, ok
+}
 
+func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 	switch h.Event {
 	case "SessionStart":
 		// A conversation that is resumed has a count already.
@@ -127,18 +143,25 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 		}
 		return Update{Status: Working, HasStatus: true, File: file}, true
 	case "Notification":
-		// An idle reminder is not a request; every other notification means
-		// the agent is blocked on the user.
-		if h.NotificationType == "idle_prompt" {
+		switch h.NotificationType {
+		case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
+			return Update{Status: NeedsInput, HasStatus: true}, true
+		case "idle_prompt":
 			return Update{Status: Idle, HasStatus: true}, true
 		}
-		return Update{Status: NeedsInput, HasStatus: true}, true
-	case "Stop":
+		// The rest is news, such as a login that went well, and asks for
+		// nothing.
+		return Update{}, false
+	case "Stop", "StopFailure":
 		t := c.count(h.TranscriptPath)
+		// A turn that ended on an error is over, but there is no answer to
+		// follow up on: what waits in the queue stays there.
+		failed := h.Event == "StopFailure"
 		return Update{
 			Status:        Idle,
 			HasStatus:     true,
-			TurnEnded:     true,
+			TurnEnded:     !failed,
+			Failed:        failed,
 			ContextTokens: t.context,
 			InputTokens:   t.in,
 			OutputTokens:  t.out,

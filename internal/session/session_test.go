@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/henomis/cicoria/internal/agent"
+	"github.com/henomis/cicoria/internal/term"
 )
 
 func TestStateRoundTrip(t *testing.T) {
@@ -17,7 +18,7 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("missing file: %+v, %v", st, err)
 	}
 
-	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Queue: []string{"x", "y"}, Paused: true}}, Active: 1}
+	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Conversation: "c", Queue: []string{"x", "y"}, Paused: true}}, Active: 1}
 	if err := SaveState(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -67,11 +68,54 @@ func TestApply(t *testing.T) {
 		t.Errorf("touched = %v", s.Touched)
 	}
 
+	// The conversation the agent is in is remembered when it is another one.
+	s.Apply(agent.Update{Conversation: "1"}, true, now)
+	if s.Conversation != "" {
+		t.Errorf("conversation = %q, want none", s.Conversation)
+	}
+	s.Apply(agent.Update{Conversation: "2"}, true, now)
+	if s.Conversation != "2" {
+		t.Errorf("conversation = %q, want 2", s.Conversation)
+	}
+
 	// Nothing revives an exited session.
 	s.Exit(true)
 	s.Apply(agent.Update{Status: agent.Working, HasStatus: true}, true, now)
 	if s.Status != agent.Exited {
 		t.Errorf("status after exit = %v", s.Status)
+	}
+}
+
+func TestStalled(t *testing.T) {
+	now := time.Now()
+	s := New("1", "s", "/p", agent.NewClaude(nil))
+	s.Term = &term.Terminal{}
+
+	s.Apply(agent.Update{Status: agent.Working, HasStatus: true}, true, now)
+	if s.Stalled(now.Add(stallAfter - time.Second)) {
+		t.Error("stalled too soon")
+	}
+	if !s.Stalled(now.Add(stallAfter + time.Second)) {
+		t.Error("not stalled after a long silence")
+	}
+	// Output, or word from the agent, is a sign of life.
+	s.NoteOutput(true, now.Add(20*time.Second))
+	if s.Stalled(now.Add(stallAfter+time.Second)) || s.Status != agent.Working {
+		t.Errorf("stalled although it drew: %v", s.Status)
+	}
+	s.Apply(agent.Update{Status: agent.Working, HasStatus: true}, true, now.Add(45*time.Second))
+	if s.Stalled(now.Add(60 * time.Second)) {
+		t.Error("stalled although it reported")
+	}
+	// Only working can stall, and only for agents that report.
+	s.Apply(agent.Update{Status: agent.Idle, HasStatus: true}, true, now)
+	if s.Stalled(now.Add(time.Hour)) {
+		t.Error("an idle session stalled")
+	}
+	g := New("2", "g", "/p", agent.NewGeneric("shell", []string{"sh"}))
+	g.Status = agent.Working
+	if g.Stalled(now.Add(time.Hour)) {
+		t.Error("a session with a guessed status stalled")
 	}
 }
 

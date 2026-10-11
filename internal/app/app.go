@@ -184,6 +184,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 				sdir = dir
 			}
 			s := session.New(saved.ID, saved.Name, sdir, a)
+			s.Conversation = saved.Conversation
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
 			s.Queue, s.Paused = saved.Queue, saved.Paused || len(saved.Queue) > 0
@@ -280,7 +281,8 @@ func (m *Model) save() {
 	st := session.State{Active: m.active}
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
-			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Queue: s.Queue, Paused: s.Paused,
+			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation,
+			Queue: s.Queue, Paused: s.Paused,
 		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {
@@ -486,8 +488,14 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 		return nil
 	}
 
-	before := s.Status
+	before, conversation := s.Status, s.Conversation
 	s.Apply(u, m.watching(i), time.Now())
+	if s.Conversation != conversation {
+		m.save()
+	}
+	if u.Failed {
+		m.say(s.Name + ": the turn ended on an error")
+	}
 
 	var cmds []tea.Cmd
 	if u.TurnEnded {

@@ -25,6 +25,8 @@ while read -r cmd arg; do
     work) hook '{"hook_event_name":"UserPromptSubmit"}' ;;
     ask)  hook '{"hook_event_name":"Notification","notification_type":"permission_prompt"}' ;;
     stop) hook '{"hook_event_name":"Stop"}' ;;
+    fail) hook '{"hook_event_name":"StopFailure"}' ;;
+    news) hook '{"hook_event_name":"Notification","notification_type":"auth_success"}' ;;
     edit) echo "hello from the agent" > "$arg"
           hook "{\"hook_event_name\":\"PostToolUse\",\"tool_input\":{\"file_path\":\"$PWD/$arg\"}}" ;;
     size) echo "size $(stty size)" ;;
@@ -204,6 +206,16 @@ func TestWorkspace(t *testing.T) {
 	w.see("claude-1 · claude · needs input")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
+
+	// News that asks for nothing is not a request, and a turn that fails is
+	// over.
+	w.line("work")
+	w.see("claude-1 · claude · working")
+	w.line("news")
+	w.line("pong")
+	w.see("got pong", "claude-1 · claude · working")
+	w.line("fail")
+	w.see("claude-1 · claude · idle", "claude-1: the turn ended on an error")
 
 	// A file the agent writes shows up as a change.
 	w.line("edit notes.txt")

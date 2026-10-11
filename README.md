@@ -15,7 +15,7 @@ A terminal workspace for the AI-first engineer: run several coding agents side b
  ▲ fix-flaky-test needs input                   ctx 82k · in 4.2M · out 38k · ctrl+a ? help
 ```
 
-Agents run as their own command-line program inside a pane, so nothing of their interface is lost and any agent works. Claude Code gets extra integration: its status (working, needs input, idle) comes from hooks, sessions are resumed across restarts, and files it edits are highlighted in the tree. The status bar counts its tokens: `ctx` is the size of the context, `in` and `out` what the model has read and written over the whole conversation, cached input included.
+Agents run as their own command-line program inside a pane, so nothing of their interface is lost and any agent works. Claude Code gets extra integration: its status (working, needs input, idle) comes from hooks, and reads `working?` when it has given no sign of life for a while, as after an interrupted turn, sessions are resumed across restarts, and files it edits are highlighted in the tree. The status bar counts its tokens: `ctx` is the size of the context, `in` and `out` what the model has read and written over the whole conversation, cached input included.
 
 ## Install
 

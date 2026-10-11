@@ -42,6 +42,9 @@ type LaunchOpts struct {
 	SessionID string
 	// Dir is the directory the agent works in.
 	Dir string
+	// Resume is the agent's own name for the conversation to continue, when
+	// it reported one that is not SessionID.
+	Resume string
 	// Self is the path of the cicoria binary, for agents that call it back.
 	Self string
 	// Socket is where hook events are reported.
@@ -56,6 +59,11 @@ type Update struct {
 	// TurnEnded says the agent finished answering and waits for the next
 	// message.
 	TurnEnded bool
+	// Failed says the turn ended on an error instead of an answer.
+	Failed bool
+	// Conversation is the agent's own name for the conversation it is in,
+	// when it tells. An agent can start a new one in the same process.
+	Conversation string
 	// File is a file the agent just changed, if any.
 	File string
 	// ContextTokens is the size of the agent's context, if known.

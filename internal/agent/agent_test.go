@@ -23,9 +23,17 @@ func TestClaudeMapEvent(t *testing.T) {
 		{`{"hook_event_name":"PostToolUse","tool_input":{"file_path":"/p/a.go"}}`, Update{Status: Working, HasStatus: true, File: "/p/a.go"}, true},
 		{`{"hook_event_name":"PostToolUse","tool_input":{"command":"ls"}}`, Update{Status: Working, HasStatus: true}, true},
 		{`{"hook_event_name":"Notification","notification_type":"permission_prompt"}`, Update{Status: NeedsInput, HasStatus: true}, true},
-		{`{"hook_event_name":"Notification"}`, Update{Status: NeedsInput, HasStatus: true}, true},
+		{`{"hook_event_name":"Notification","notification_type":"elicitation_dialog"}`, Update{Status: NeedsInput, HasStatus: true}, true},
+		{`{"hook_event_name":"Notification","notification_type":"agent_needs_input"}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		{`{"hook_event_name":"Notification","notification_type":"idle_prompt"}`, Update{Status: Idle, HasStatus: true}, true},
+		// News that asks for nothing changes nothing.
+		{`{"hook_event_name":"Notification","notification_type":"auth_success"}`, Update{}, false},
+		{`{"hook_event_name":"Notification","notification_type":"quota_auto_resume_fired"}`, Update{}, false},
+		{`{"hook_event_name":"Notification"}`, Update{}, false},
 		{`{"hook_event_name":"Stop"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true}, true},
+		// A turn that failed is over, without being an answer.
+		{`{"hook_event_name":"StopFailure"}`, Update{Status: Idle, HasStatus: true, Failed: true}, true},
+		{`{"hook_event_name":"Stop","session_id":"conv"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Conversation: "conv"}, true},
 		{`{"hook_event_name":"SubagentStop"}`, Update{}, false},
 		{`garbage`, Update{}, false},
 	}
@@ -83,6 +91,23 @@ func TestClaudeCommand(t *testing.T) {
 	}
 	if got := c.Command(o).Args[:3]; !slices.Equal(got, []string{"claude", "--resume", "abc"}) {
 		t.Errorf("resumed session args = %v", got)
+	}
+
+	// The conversation Claude Code was last in is the one to continue, as
+	// long as it left a transcript.
+	o.Resume = "later"
+	if got := c.Command(o).Args[:3]; !slices.Equal(got, []string{"claude", "--resume", "abc"}) {
+		t.Errorf("args with a conversation that has no transcript = %v", got)
+	}
+	if err := os.WriteFile(claudeTranscript(o.Dir, "later"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd = c.Command(o)
+	if got := cmd.Args[:3]; !slices.Equal(got, []string{"claude", "--resume", "later"}) {
+		t.Errorf("args with a later conversation = %v", got)
+	}
+	if !slices.Contains(cmd.Env, "CICORIA_SESSION=abc") {
+		t.Error("the session lost its own ID")
 	}
 }
 

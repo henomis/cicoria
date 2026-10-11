@@ -18,6 +18,9 @@ type Saved struct {
 	// Dir is the session's working directory. Sessions saved before it was
 	// recorded have none, and work in the directory cicoria was opened on.
 	Dir string `json:"dir,omitempty"`
+	// Conversation is the agent's own name for the conversation to continue,
+	// when it is not ID.
+	Conversation string `json:"conversation,omitempty"`
 	// Queue and Paused are the messages waiting to be sent and whether they
 	// are held back.
 	Queue  []string `json:"queue,omitempty"`

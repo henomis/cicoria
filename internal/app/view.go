@@ -155,7 +155,11 @@ func (m *Model) renderAgent(l layout) []string {
 			lines = append(lines, ui.Bad.Render("  could not start: "+s.Err.Error()))
 		}
 	default:
-		title = fmt.Sprintf("%s · %s · %s · %s", s.Name, s.Adapter.Name(), s.Status, tilde(s.Dir))
+		status := s.Status.String()
+		if s.Stalled(time.Now()) {
+			status += "?"
+		}
+		title = fmt.Sprintf("%s · %s · %s · %s", s.Name, s.Adapter.Name(), status, tilde(s.Dir))
 		lines = strings.Split(s.Term.Render(), "\n")
 	}
 
@@ -169,6 +173,9 @@ func (m *Model) renderAgent(l layout) []string {
 func badge(s *session.Session) string {
 	switch s.Status {
 	case agent.Working:
+		if s.Stalled(time.Now()) {
+			return ui.Dim.Render("●")
+		}
 		return ui.Good.Render("●")
 	case agent.NeedsInput:
 		return ui.Warn.Render("▲")

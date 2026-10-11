@@ -17,6 +17,9 @@ const (
 	echoWindow = 300 * time.Millisecond
 	// quietAfter is how long without output until a session counts as idle.
 	quietAfter = 1500 * time.Millisecond
+	// stallAfter is how long an agent that says it is working can go without
+	// a sign of life before that is doubted. A working agent keeps drawing.
+	stallAfter = 30 * time.Second
 )
 
 // Session is one agent and its terminal.
@@ -26,6 +29,9 @@ type Session struct {
 	// Dir is the directory the agent works in.
 	Dir     string
 	Adapter agent.Adapter
+	// Conversation is the agent's own name for the conversation it is in,
+	// when it is not ID: what to continue the next time.
+	Conversation string
 	// Term is the agent's terminal. It is nil until Start succeeds.
 	Term *term.Terminal
 	// Err is why the agent could not be started, if it could not.
@@ -75,7 +81,7 @@ func (s *Session) Start(o agent.LaunchOpts, width, height int) error {
 		s.Term = nil
 	}
 
-	o.SessionID, o.Dir = s.ID, s.Dir
+	o.SessionID, o.Dir, o.Resume = s.ID, s.Dir, s.Conversation
 	t, err := term.Start(s.Adapter.Command(o), width, height)
 	s.Err = err
 	if err != nil {
@@ -103,8 +109,13 @@ func (s *Session) setStatus(st agent.Status, active bool) {
 // Apply records what the agent reported. active says whether the session is
 // the one on screen.
 func (s *Session) Apply(u agent.Update, active bool, now time.Time) {
+	// Word from the agent is a sign of life, like its output.
+	s.lastOutput = now
 	if u.HasStatus && s.Status != agent.Exited {
 		s.setStatus(u.Status, active)
+	}
+	if u.Conversation != "" && u.Conversation != s.ID {
+		s.Conversation = u.Conversation
 	}
 	if u.ContextTokens > 0 {
 		s.ContextTokens = u.ContextTokens
@@ -130,7 +141,13 @@ func (s *Session) NoteInput(now time.Time) {
 // NoteOutput records that the agent's screen changed. For agents that do not
 // report their status, this is what it is guessed from.
 func (s *Session) NoteOutput(active bool, now time.Time) {
-	if s.Term == nil || s.Adapter.ReportsStatus() || s.Status == agent.Exited {
+	if s.Term == nil || s.Status == agent.Exited {
+		return
+	}
+	if s.Adapter.ReportsStatus() {
+		// The agent says itself what it does; its output only tells that it
+		// is still there.
+		s.lastOutput = now
 		return
 	}
 	if s.Term.TakeBell() {
@@ -159,6 +176,13 @@ func (s *Session) Tick(active bool, now time.Time) {
 	case agent.Starting:
 		s.Status = agent.Idle
 	}
+}
+
+// Stalled reports whether an agent that says it is working has been silent
+// for so long that it has probably stopped without saying so, as one whose
+// turn the user interrupted does.
+func (s *Session) Stalled(now time.Time) bool {
+	return s.Adapter.ReportsStatus() && s.Status == agent.Working && now.Sub(s.lastOutput) > stallAfter
 }
 
 // Enqueue adds a message at the end of the queue.
