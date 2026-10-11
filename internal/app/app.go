@@ -29,6 +29,8 @@ const (
 	refreshTicks = 4
 	// messageFor is how long a status bar message stays.
 	messageFor = 4 * time.Second
+	// hintFor is how long the message about other workspaces stays.
+	hintFor = 15 * time.Second
 )
 
 // focus is the part of the workspace that receives keys.
@@ -62,6 +64,10 @@ type Model struct {
 	adapters []agent.Adapter
 	ipc      *ipc.Server
 	dark     bool
+	// unlock gives up the mark that says this workspace is in use, and next
+	// is the directory of the workspace to open once this one is closed.
+	unlock func()
+	next   string
 
 	sessions []*session.Session
 	active   int
@@ -83,7 +89,10 @@ type Model struct {
 	shown         string
 	loading       bool
 	files         []string
-	changes       []git.Change
+	// ignored are the files git ignores, listed when showIgnored is set.
+	ignored     []string
+	showIgnored bool
+	changes     []git.Change
 	// changesBase is the commit the changes are counted from, or empty when
 	// they are what is not committed; commits is how many were made since.
 	changesBase  string
@@ -92,7 +101,10 @@ type Model struct {
 	changeTop    int
 	queueCursor  int
 	repo         bool
-	refreshing   bool
+	// refreshing says a look at the project is under way, and stale that it
+	// began before something it depends on changed.
+	refreshing bool
+	stale      bool
 
 	// anim is the animation playing, if any; animating says its frames are
 	// being asked for.
@@ -150,6 +162,7 @@ type (
 		base    string
 		lost    bool
 		files   []string
+		ignored []string
 		changes []git.Change
 		commits int
 		repo    bool
@@ -173,20 +186,24 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 	self, _ := os.Executable()
 
 	m := &Model{
-		cfg:       cfg,
-		hideLeft:  !cfg.LeftPanel,
-		hideRight: !cfg.RightPanel,
-		dir:       dir,
-		self:      self,
-		adapters:  cfg.Adapters(),
-		ipc:       srv,
-		dark:      dark,
-		trees:     map[string]*ui.Tree{},
+		cfg:         cfg,
+		hideLeft:    !cfg.LeftPanel,
+		hideRight:   !cfg.RightPanel,
+		showIgnored: cfg.IgnoredFiles,
+		dir:         dir,
+		self:        self,
+		adapters:    cfg.Adapters(),
+		ipc:         srv,
+		dark:        dark,
+		trees:       map[string]*ui.Tree{},
+		unlock:      session.Lock(dir),
 	}
 
 	st, err := session.LoadState(session.StatePath(dir))
 	if err != nil {
 		m.say("could not read saved sessions: " + err.Error())
+	} else if len(st.Sessions) == 0 {
+		m.hintWorkspaces()
 	}
 	for _, saved := range st.Sessions {
 		if a := m.adapter(saved.Agent); a != nil {
@@ -206,6 +223,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 	if len(m.sessions) == 0 {
 		a := m.adapter(cfg.DefaultAgent)
 		if a == nil {
+			m.unlock()
 			_ = srv.Close()
 			return nil, fmt.Errorf("default agent %q is not configured", cfg.DefaultAgent)
 		}
@@ -293,7 +311,7 @@ func (m *Model) say(msg string) {
 
 // save remembers the sessions for the next run.
 func (m *Model) save() {
-	st := session.State{Active: m.active}
+	st := session.State{Dir: m.dir, Active: m.active}
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
@@ -311,8 +329,13 @@ func (m *Model) Close() error {
 	for _, s := range m.sessions {
 		s.Close()
 	}
+	m.unlock()
 	return m.ipc.Close()
 }
+
+// Next returns the directory of the workspace the user asked to open in
+// place of this one, if any.
+func (m *Model) Next() string { return m.next }
 
 // Init implements tea.Model.
 func (m *Model) Init() tea.Cmd {
@@ -356,6 +379,13 @@ func (m *Model) reviewBase() string {
 	return ""
 }
 
+// refreshNow looks at the project on screen again after a change to what is
+// shown of it, even when a look is already under way.
+func (m *Model) refreshNow() tea.Cmd {
+	m.stale = m.refreshing
+	return m.refresh()
+}
+
 // refresh looks at the project on screen in the background.
 func (m *Model) refresh() tea.Cmd {
 	if m.refreshing {
@@ -363,9 +393,14 @@ func (m *Model) refresh() tea.Cmd {
 	}
 	m.refreshing = true
 	dir, base := m.project(), m.reviewBase()
+	// What an ignored directory holds is only read while it is open.
+	ignored, open := m.showIgnored, m.tree().Open()
 	return func() tea.Msg {
 		msg := refreshMsg{dir: dir, base: base}
 		msg.files, _ = git.Files(dir)
+		if ignored {
+			msg.ignored = git.Ignored(dir, open)
+		}
 		if base != "" && !git.Exists(dir, base) {
 			base, msg.lost = "", true
 		}
@@ -471,7 +506,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.refreshing = false
 		// A look at a project that is no longer on screen is of no use, and
 		// the one that is on screen has not been looked at yet.
-		if msg.dir != m.project() || msg.base != m.reviewBase() {
+		if msg.dir != m.project() || msg.base != m.reviewBase() || m.stale {
+			m.stale = false
 			return m.refresh()
 		}
 		if s := m.current(); msg.lost && s != nil {
@@ -562,8 +598,8 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 
 func (m *Model) applyRefresh(msg refreshMsg) {
 	m.loading = false
-	m.files = msg.files
-	m.tree().SetFiles(msg.files)
+	m.files, m.ignored = msg.files, msg.ignored
+	m.tree().SetFiles(msg.files, msg.ignored)
 	m.repo = msg.repo
 	m.changesBase, m.commits = msg.base, msg.commits
 	if msg.lost {

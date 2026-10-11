@@ -248,3 +248,48 @@ func TestCanAutoSend(t *testing.T) {
 		t.Errorf("status after Sent = %v", g.Status)
 	}
 }
+
+func TestWorkspaces(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	one := []Saved{{ID: "1", Name: "a", Agent: "claude"}}
+	for _, st := range []State{
+		{Dir: "/work/b", Sessions: one},
+		{Dir: "/work/a", Sessions: one},
+		// Nothing to go back to.
+		{Dir: "/work/empty"},
+	} {
+		if err := SaveState(StatePath(st.Dir), st); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Saved before the directory was recorded.
+	if err := SaveState(StatePath("/work/old"), State{Sessions: one}); err != nil {
+		t.Fatal(err)
+	}
+
+	all := Workspaces()
+	if len(all) != 2 || all[0].Dir != "/work/a" || all[1].Dir != "/work/b" {
+		t.Errorf("workspaces: %+v", all)
+	}
+}
+
+func TestLock(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if InUse("/work/a") {
+		t.Fatal("in use before it was opened")
+	}
+	release := Lock("/work/a")
+	if !InUse("/work/a") || InUse("/work/b") {
+		t.Errorf("in use: a %v, b %v", InUse("/work/a"), InUse("/work/b"))
+	}
+	// Opening it a second time changes nothing, and neither does closing
+	// that one.
+	Lock("/work/a")()
+	if !InUse("/work/a") {
+		t.Error("the second opening took the mark away")
+	}
+	release()
+	if InUse("/work/a") {
+		t.Error("still in use after it was closed")
+	}
+}

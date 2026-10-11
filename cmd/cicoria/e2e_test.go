@@ -354,6 +354,51 @@ func TestWorkspace(t *testing.T) {
 	w.quit()
 }
 
+// Sessions belong to the directory cicoria was opened on. Opened on another
+// one, it says where they are and goes there when asked.
+func TestOtherWorkspaces(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("agent ready", "claude-1 · claude · idle")
+	w.prefix('w')
+	w.see("no other workspace is saved")
+
+	// A session of this workspace that works in another directory.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("../other")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: shell-1")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("scratch")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("scratch · shell", "Files · other")
+	w.quit()
+
+	// Opened on that directory, cicoria has no session of its own to show,
+	// and points at the one that works there.
+	w.dir = filepath.Join(filepath.Dir(w.dir), "other")
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle", "scratch works here from the workspace")
+	w.prefix('w')
+	w.see("workspace ›", "project", "scratch works here")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("scratch · shell", "claude-1", "Files · other")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle", "Files · project", "main.go")
+
+	// The way back is there too.
+	w.prefix('w')
+	w.see("workspace ›", "other", "1 session(s)")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("workspace ›")
+	w.quit()
+}
+
 // Unless the settings say otherwise, the changes are what is not committed,
 // and what a session did since it started is one key away.
 func TestChangesAreUncommittedByDefault(t *testing.T) {
@@ -379,6 +424,63 @@ func TestChangesAreUncommittedByDefault(t *testing.T) {
 	w.prefix('g')
 	w.typeText("s")
 	w.see("everything since it started", "Changes (1) · 1 commit", "A notes.txt")
+	w.quit()
+}
+
+// ignore makes git ignore a file and a folder of the project.
+func (w *workspace) ignore() {
+	w.t.Helper()
+	for name, content := range map[string]string{
+		".gitignore":    "secret.env\nbuild/\n",
+		"secret.env":    "KEY=1\n",
+		"build/out.bin": "x\n",
+	} {
+		path := filepath.Join(w.dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			w.t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			w.t.Fatal(err)
+		}
+	}
+}
+
+// What git ignores is in the files panel too, an ignored folder with what
+// it holds once it is open, and one key hides it all.
+func TestIgnoredFiles(t *testing.T) {
+	w := newWorkspace(t)
+	w.ignore()
+	w.launch(140, 40)
+	w.see("agent ready", "main.go", "secret.env", "▸ build/")
+
+	// Folders come first: api, then build.
+	w.prefix('f')
+	w.typeText("jl")
+	w.see("▾ build/", "out.bin")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.gone("out.bin")
+
+	w.typeText("i")
+	w.see("ignored files hidden")
+	w.gone("secret.env")
+	w.gone("build/")
+	w.typeText("i")
+	w.see("ignored files shown", "secret.env", "▸ build/")
+	w.quit()
+}
+
+// The settings can leave what git ignores out until it is asked for.
+func TestIgnoredFilesHiddenBySetting(t *testing.T) {
+	w := newWorkspace(t)
+	w.ignore()
+	w.set(`ignored_files = false`)
+	w.launch(140, 40)
+	w.see("agent ready", "main.go", ".gitignore")
+	w.gone("secret.env")
+
+	w.prefix('f')
+	w.typeText("i")
+	w.see("ignored files shown", "secret.env", "▸ build/")
 	w.quit()
 }
 

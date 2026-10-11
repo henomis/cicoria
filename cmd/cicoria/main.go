@@ -74,10 +74,17 @@ func run(args []string) error {
 	}
 
 	dark := lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
-	m, err := app.New(cfg, dir, dark)
-	if err != nil {
-		return err
+	// One workspace after the other, for as long as the user asks for another.
+	for dir != "" {
+		m, err := app.New(cfg, dir, dark)
+		if err != nil {
+			return err
+		}
+		_, err = tea.NewProgram(m).Run()
+		if err = errors.Join(err, m.Close()); err != nil {
+			return err
+		}
+		dir = m.Next()
 	}
-	_, err = tea.NewProgram(m).Run()
-	return errors.Join(err, m.Close())
+	return nil
 }

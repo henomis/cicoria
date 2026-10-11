@@ -278,11 +278,17 @@ func (m *Model) renderFiles(r rect) []string {
 		tail := ""
 		switch {
 		case row.Dir && row.Open:
-			name = ui.Info.Render("▾ " + name + "/")
+			name = "▾ " + name + "/"
 		case row.Dir:
-			name = ui.Info.Render("▸ " + name + "/")
+			name = "▸ " + name + "/"
 		default:
 			name = "  " + name
+		}
+		switch {
+		case row.Ignored:
+			name = ui.Dim.Render(name)
+		case row.Dir:
+			name = ui.Info.Render(name)
 		}
 		if row.Dir && dirty[row.Path] {
 			tail = ui.Dim.Render("•")
@@ -385,6 +391,11 @@ func (m *Model) renderHelp() []string {
 		"    directory, ctrl+w deletes a path component, ctrl+u clears. The side panels",
 		"    follow the session on screen.",
 		"",
+		ui.Bold.Render("  Workspaces"),
+		"    sessions are saved for the directory cicoria was opened on, wherever they",
+		"    work, and only come back when it is opened on that directory again.",
+		"    "+p+" w lists the other saved workspaces and opens one in place of this.",
+		"",
 		ui.Bold.Render("  Queue"),
 		"    messages wait in the queue and go to the agent one by one, each when it ends",
 		"    its turn; to an idle agent the first goes at once. Agents that do not report",
@@ -394,6 +405,7 @@ func (m *Model) renderHelp() []string {
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
 		"    files: h/l close/open folder · d diff · e editor · @ mention to the agent",
+		"           i show ⇄ hide what git ignores, which is grey",
 		"    changes: enter diff · v file · e editor · @ mention to the agent",
 		"             s what is not committed ⇄ everything since the session started",
 		"",

@@ -14,15 +14,18 @@ type Row struct {
 	Dir   bool
 	Depth int
 	Open  bool
+	// Ignored says git ignores it.
+	Ignored bool
 }
 
 // Tree is a collapsible view over a flat list of file paths.
 type Tree struct {
-	files  []string
-	open   map[string]bool
-	rows   []Row
-	Cursor int
-	Top    int
+	files   []string
+	ignored []string
+	open    map[string]bool
+	rows    []Row
+	Cursor  int
+	Top     int
 }
 
 // NewTree returns an empty tree.
@@ -30,14 +33,16 @@ func NewTree() *Tree {
 	return &Tree{open: map[string]bool{}}
 }
 
-// SetFiles replaces the files shown. The paths must be sorted. The cursor
-// stays on the same path when it is still there.
-func (t *Tree) SetFiles(files []string) {
-	if slices.Equal(files, t.files) {
+// SetFiles replaces the files shown, and those among them that git ignores.
+// The paths must be sorted; an ignored one that ends in a slash is a
+// directory, shown even when nothing is known to be inside. The cursor stays
+// on the same path when it is still there.
+func (t *Tree) SetFiles(files, ignored []string) {
+	if slices.Equal(files, t.files) && slices.Equal(ignored, t.ignored) {
 		return
 	}
 	selected := t.Selected().Path
-	t.files = files
+	t.files, t.ignored = files, ignored
 	t.rebuild()
 	t.moveTo(selected)
 }
@@ -54,7 +59,7 @@ func (t *Tree) rebuild() {
 	// Collect every directory and file once, then order them so that each
 	// directory lists its subdirectories before its files.
 	var entries []entry
-	for _, f := range t.files {
+	parents := func(f string) {
 		for dir := path.Dir(f); dir != "."; dir = path.Dir(dir) {
 			if seen[dir] {
 				break
@@ -62,7 +67,22 @@ func (t *Tree) rebuild() {
 			seen[dir] = true
 			entries = append(entries, entry{dir, true})
 		}
+	}
+	for _, f := range t.files {
+		parents(f)
 		entries = append(entries, entry{f, false})
+	}
+	ignored := map[string]bool{}
+	for _, f := range t.ignored {
+		p := strings.TrimSuffix(f, "/")
+		ignored[p] = true
+		parents(p)
+		if p == f {
+			entries = append(entries, entry{p, false})
+		} else if !seen[p] {
+			seen[p] = true
+			entries = append(entries, entry{p, true})
+		}
 	}
 	dirs := map[string]bool{}
 	for _, e := range entries {
@@ -87,11 +107,12 @@ func (t *Tree) rebuild() {
 			continue
 		}
 		t.rows = append(t.rows, Row{
-			Path:  e.path,
-			Name:  path.Base(e.path),
-			Dir:   e.dir,
-			Depth: strings.Count(e.path, "/"),
-			Open:  e.dir && t.open[e.path],
+			Path:    e.path,
+			Name:    path.Base(e.path),
+			Dir:     e.dir,
+			Depth:   strings.Count(e.path, "/"),
+			Open:    e.dir && t.open[e.path],
+			Ignored: ignored[e.path],
 		})
 	}
 	t.Cursor = max(min(t.Cursor, len(t.rows)-1), 0)
@@ -125,6 +146,17 @@ func (t *Tree) moveTo(p string) {
 			return
 		}
 	}
+}
+
+// Open returns the directories that are open.
+func (t *Tree) Open() []string {
+	var dirs []string
+	for dir, open := range t.open {
+		if open {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs
 }
 
 // Rows returns the visible rows.

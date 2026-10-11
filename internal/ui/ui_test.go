@@ -61,7 +61,7 @@ func paths(rows []Row) []string {
 
 func TestTree(t *testing.T) {
 	tr := NewTree()
-	tr.SetFiles([]string{"README.md", "api/auth.go", "api/v1/users.go", "main.go", "zeta/z.go"})
+	tr.SetFiles([]string{"README.md", "api/auth.go", "api/v1/users.go", "main.go", "zeta/z.go"}, nil)
 
 	// Directories come first and start closed.
 	if got := paths(tr.Rows()); !slices.Equal(got, []string{"api", "zeta", "README.md", "main.go"}) {
@@ -93,9 +93,49 @@ func TestTree(t *testing.T) {
 	}
 
 	// The cursor follows its file when the list changes around it.
-	tr.SetFiles([]string{"README.md", "aaa.go", "api/auth.go", "api/v1/users.go", "main.go"})
+	tr.SetFiles([]string{"README.md", "aaa.go", "api/auth.go", "api/v1/users.go", "main.go"}, nil)
 	if tr.Selected().Path != "api/v1/users.go" {
 		t.Errorf("cursor moved to %q after a refresh", tr.Selected().Path)
+	}
+}
+
+func TestTreeIgnored(t *testing.T) {
+	tr := NewTree()
+	tr.SetFiles([]string{"main.go", "src/a.go"}, []string{".env", "build/", "src/a.log"})
+
+	// An ignored directory is there before anything is known to be in it.
+	if got := paths(tr.Rows()); !slices.Equal(got, []string{"build", "src", ".env", "main.go"}) {
+		t.Fatalf("closed tree = %v", got)
+	}
+	for _, r := range tr.Rows() {
+		if want := r.Path == "build" || r.Path == ".env"; r.Ignored != want {
+			t.Errorf("%s: ignored = %v", r.Path, r.Ignored)
+		}
+	}
+	if r := tr.Rows()[0]; !r.Dir {
+		t.Errorf("row = %+v", r)
+	}
+
+	// Once open, it is among the open directories and takes what is inside.
+	tr.SetOpen(true)
+	if got := tr.Open(); !slices.Equal(got, []string{"build"}) {
+		t.Fatalf("open = %v", got)
+	}
+	tr.SetFiles([]string{"main.go", "src/a.go"}, []string{".env", "build/", "build/out.bin", "build/obj/", "src/a.log"})
+	if got := paths(tr.Rows()); !slices.Equal(got, []string{"build", "build/obj", "build/out.bin", "src", ".env", "main.go"}) {
+		t.Fatalf("build open = %v", got)
+	}
+	if r := tr.Rows()[2]; !r.Ignored || r.Dir || r.Depth != 1 {
+		t.Errorf("row = %+v", r)
+	}
+	if tr.Selected().Path != "build" {
+		t.Errorf("cursor moved to %q", tr.Selected().Path)
+	}
+
+	// Without the ignored files, only the others are left.
+	tr.SetFiles([]string{"main.go", "src/a.go"}, nil)
+	if got := paths(tr.Rows()); !slices.Equal(got, []string{"src", "main.go"}) {
+		t.Fatalf("ignored hidden = %v", got)
 	}
 }
 

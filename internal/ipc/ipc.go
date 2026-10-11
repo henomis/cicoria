@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -90,7 +91,12 @@ func (s *Server) Events() <-chan Event { return s.events }
 
 // Close stops the server and removes the socket.
 func (s *Server) Close() error {
-	return errors.Join(s.ln.Close(), os.Remove(s.path))
+	err := s.ln.Close()
+	// Closing the listener takes the socket away with it, as a rule.
+	if rm := os.Remove(s.path); rm != nil && !errors.Is(rm, fs.ErrNotExist) {
+		err = errors.Join(err, rm)
+	}
+	return err
 }
 
 // Send reports one event to the server listening on path.

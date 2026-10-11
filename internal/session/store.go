@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"syscall"
 )
 
 // Saved is what is remembered of a session between runs.
@@ -33,6 +36,9 @@ type Saved struct {
 
 // State is a saved workspace.
 type State struct {
+	// Dir is the directory the workspace was opened on. Workspaces saved
+	// before it was recorded have none, and are not listed.
+	Dir      string  `json:"dir,omitempty"`
 	Sessions []Saved `json:"sessions"`
 	Active   int     `json:"active"`
 }
@@ -81,4 +87,56 @@ func SaveState(path string, st State) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// Workspaces returns every saved workspace that says which directory it
+// belongs to and has sessions, ordered by directory.
+func Workspaces() []State {
+	// Every workspace is filed next to this one.
+	root := filepath.Dir(filepath.Dir(StatePath("")))
+	paths, _ := filepath.Glob(filepath.Join(root, "*", "sessions.json"))
+	var all []State
+	for _, path := range paths {
+		st, err := LoadState(path)
+		if err == nil && st.Dir != "" && len(st.Sessions) > 0 {
+			all = append(all, st)
+		}
+	}
+	slices.SortFunc(all, func(a, b State) int { return cmp.Compare(a.Dir, b.Dir) })
+	return all
+}
+
+// lockPath returns the file that is locked while the workspace opened on
+// dir is in use.
+func lockPath(dir string) string {
+	return filepath.Join(filepath.Dir(StatePath(dir)), "lock")
+}
+
+// Lock marks the workspace opened on dir as in use, until the returned
+// function is called or the process ends. It does nothing when the workspace
+// is already in use: opening one twice is allowed.
+func Lock(dir string) (release func()) {
+	path := lockPath(dir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return func() {}
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return func() {}
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		return func() {}
+	}
+	return func() { _ = f.Close() }
+}
+
+// InUse reports whether the workspace opened on dir is marked as in use.
+func InUse(dir string) bool {
+	f, err := os.Open(lockPath(dir))
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	return syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil
 }

@@ -223,6 +223,21 @@ func TestFiles(t *testing.T) {
 		t.Errorf("files = %v, want %v", files, want)
 	}
 
+	// What git ignores is listed apart, a directory without what it holds
+	// until it is open.
+	writeFile(t, dir, "ignored/deep/y.txt", "y\n")
+	if got := Ignored(dir, nil); !slices.Equal(got, []string{"ignored/"}) {
+		t.Errorf("ignored = %v", got)
+	}
+	want = []string{"ignored/", "ignored/deep/", "ignored/x.txt"}
+	if got := Ignored(dir, []string{"ignored"}); !slices.Equal(got, want) {
+		t.Errorf("ignored, open = %v, want %v", got, want)
+	}
+	want = []string{"ignored/", "ignored/deep/", "ignored/deep/y.txt", "ignored/x.txt"}
+	if got := Ignored(dir, []string{"ignored", "ignored/deep"}); !slices.Equal(got, want) {
+		t.Errorf("ignored, both open = %v, want %v", got, want)
+	}
+
 	plain := t.TempDir()
 	writeFile(t, plain, "a.txt", "")
 	writeFile(t, plain, "d/b.txt", "")
@@ -233,5 +248,8 @@ func TestFiles(t *testing.T) {
 	}
 	if !slices.Equal(files, []string{"a.txt", "d/b.txt"}) {
 		t.Errorf("files outside a repository = %v", files)
+	}
+	if got := Ignored(plain, nil); got != nil {
+		t.Errorf("ignored outside a repository = %v", got)
 	}
 }

@@ -57,6 +57,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `1`-`9`, `n`, `p` | Go to a session |
 | `a` | Go to the next session that needs input |
 | `,` `r` `x` | Rename, restart, close the session |
+| `w` | Open another workspace in place of this one |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `m` | Queue a message for the agent |
 | `u` | Focus the queue panel |
@@ -72,6 +73,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `ctrl+a` | Send `ctrl+a` to the agent |
 
 In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
+
+The files panel also lists what git ignores, in grey; an ignored folder is read when you open it. `i` in the panel hides those files and shows them again, and `ignored_files = false` in the settings opens without them.
 
 ## Sessions
 
@@ -126,6 +129,7 @@ notify = true            # desktop notification when a background session needs 
 left_panel = true        # false opens with sessions and files hidden; ctrl+a [ shows them
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
 changes = "uncommitted"  # "session" opens on everything a session changed since it started
+ignored_files = true     # false opens with the files git ignores left out of the files panel
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 
 # Any command line can be an agent. Its status is guessed from terminal
@@ -145,6 +149,8 @@ With `animations` on, a second of ASCII art plays in the agent pane when cicoria
 ## What is remembered
 
 Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes; Claude Code sessions continue their conversation when reopened.
+
+A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
 
 ## Develop
 
