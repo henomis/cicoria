@@ -361,3 +361,69 @@ func TestInputEditing(t *testing.T) {
 		}
 	}
 }
+
+func TestPagerWrap(t *testing.T) {
+	var p Pager
+	long := Bad.Render(strings.TrimSpace(strings.Repeat("word ", 12)))
+	p.SetContent([]string{"one", long, "three", "four", "five", "six"}, nil)
+	p.Noted = map[int]bool{1: true}
+	const w, h = 22, 5
+
+	// Cut, a long line takes one row and ends with an ellipsis.
+	rows := p.View(w, h)
+	if got := strings.TrimSpace(ansi.Strip(rows[1])); !strings.HasSuffix(got, "…") {
+		t.Errorf("a cut line = %q", got)
+	}
+
+	// Wrapped, it goes on in the rows under it, all of it.
+	p.Wrap = true
+	rows = p.View(w, h)
+	var text []string
+	for _, r := range rows[1:4] {
+		if ansi.StringWidth(r) != w {
+			t.Errorf("a wrapped row is %d cells wide: %q", ansi.StringWidth(r), r)
+		}
+		text = append(text, strings.Fields(ansi.Strip(r)[1:])...)
+	}
+	if len(text) != 12 || len(rows) != h {
+		t.Errorf("a wrapped line shows %d words on %d rows: %q", len(text), len(rows), rows)
+	}
+	if !strings.HasPrefix(ansi.Strip(rows[1]), "* ") || !strings.HasPrefix(ansi.Strip(rows[2]), "  ") {
+		t.Errorf("the note mark of a wrapped line: %q, %q", rows[1], rows[2])
+	}
+	if got := strings.TrimSpace(ansi.Strip(rows[4])); got != "three" {
+		t.Errorf("the row under a wrapped line = %q", got)
+	}
+
+	// Rows of the screen and lines of the text are not the same thing.
+	if a, b, c := p.LineAt(1, h), p.LineAt(3, h), p.LineAt(4, h); a != 1 || b != 1 || c != 2 {
+		t.Errorf("lines at rows 1, 3, 4 = %d, %d, %d", a, b, c)
+	}
+	if got := p.Status(h); got != "1-3/6" {
+		t.Errorf("status = %q", got)
+	}
+	// The cursor moves by lines, and the text follows it by whole lines.
+	p.Move(3, h)
+	if p.Cursor != 3 || p.Top != 1 {
+		t.Errorf("after moving below the screen: cursor %d, top %d", p.Cursor, p.Top)
+	}
+	p.Scroll(1, h)
+	if p.Top != 2 {
+		t.Errorf("scrolling a row past a wrapped line: top %d", p.Top)
+	}
+	p.Scroll(1000, h)
+	if p.Top != 2 || p.Cursor != 3 {
+		t.Errorf("scrolled past the end: cursor %d, top %d", p.Cursor, p.Top)
+	}
+
+	// A line taller than the screen is cut where the screen ends.
+	p.SetContent([]string{strings.Repeat("word ", 100), "last"}, nil)
+	rows = p.View(w, h)
+	if got := strings.TrimSpace(ansi.Strip(rows[h-1])); !strings.HasSuffix(got, "…") || p.bottom(h) != 0 {
+		t.Errorf("a line taller than the screen ends with %q", got)
+	}
+	p.Move(1, h)
+	if p.Cursor != 1 || p.Top != 1 {
+		t.Errorf("past a line taller than the screen: cursor %d, top %d", p.Cursor, p.Top)
+	}
+}

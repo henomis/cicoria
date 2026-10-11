@@ -293,7 +293,7 @@ func (m *Model) reloadView() {
 	} else {
 		m.openFile(m.view.path)
 	}
-	m.view.pager.Scroll(top, m.viewHeight())
+	m.view.pager.Top = top
 	m.view.pager.SetCursor(cursor, m.viewHeight())
 }
 
@@ -400,6 +400,10 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		m.stepView(-1)
 	case "d":
 		m.toggleView()
+	case "w":
+		// The line the cursor is on stays on screen.
+		p.Wrap = !p.Wrap
+		p.SetCursor(p.Cursor, h)
 	case "e":
 		return m.edit(m.view.path)
 	case "@":

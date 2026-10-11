@@ -95,7 +95,7 @@ Each row also shows for how long the session has been in its status. A Claude Co
 
 The changes of a session are everything that differs from the commit it started on, committed or not; the panel says how many commits were made since. In the changes panel, `s` switches to what is not committed and back. `ctrl+a h` starts the count again from the last commit, once you have looked.
 
-Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `e` opens `$EDITOR`, `@` mentions the file to the agent, `q` goes back.
+Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `e` opens `$EDITOR`, `@` mentions the file to the agent, `q` goes back.
 
 ### Notes
 
@@ -150,13 +150,16 @@ Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HO
 ```sh
 make build      # build ./cicoria
 make check      # formatting, vet and tests: run it before a commit
+make lint       # golangci-lint, as the CI runs it
 make test-real  # the test that embeds the real Claude Code
-make site       # serve the website in docs/ on http://localhost:8000
+make site       # serve the website in web/ on http://localhost:8000
 make help       # every target
 ```
 
-The website lives in `docs/` and is plain HTML, CSS and JavaScript, with no build step.
+The website lives in `web/` and is plain HTML, CSS and JavaScript, with no build step.
 
 ## The name
 
 Cicoria is Italian for chicory. One grows in the agent pane each time you start.
+
+The name turned up uninvited at 5:15 in the morning of 11 October 2026. The idea took shape over the rest of the morning, and then its author went to cook chicory while an agent implemented the plan. So cicoria was built the way it is meant to be used: the agent works and you watch the pan. Only one of the two tells you when it needs you.

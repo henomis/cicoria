@@ -401,6 +401,7 @@ func (m *Model) renderHelp() []string {
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
 		"    tab/shift+tab next/previous changed file · d file ⇄ diff · e editor · q back",
+		"    w wrap long lines ⇄ cut them",
 		"    v select lines · c write a note on them · x delete it · s send the notes",
 		"",
 		ui.Bold.Render("  Notes"),

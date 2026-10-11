@@ -229,7 +229,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		m.view.pager.Scroll(wheel, m.viewHeight())
 		// The text starts under the header line.
 		if isClick && mouse.Y >= 1 && mouse.Y <= m.viewHeight() {
-			m.view.pager.SetCursor(m.view.pager.Top+mouse.Y-1, m.viewHeight())
+			m.view.pager.SetCursor(m.view.pager.LineAt(mouse.Y-1, m.viewHeight()), m.viewHeight())
 		}
 		return nil
 	case modePalette, modeHelp:

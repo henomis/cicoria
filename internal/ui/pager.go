@@ -2,10 +2,15 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
+
+// gutter is the width of the columns at the left of the text.
+const gutter = 2
 
 // Pager shows styled text that is longer than the screen.
 type Pager struct {
@@ -23,6 +28,13 @@ type Pager struct {
 	Cursor int
 	// Noted says which lines carry a mark in the gutter.
 	Noted map[int]bool
+	// Wrap says a line too long for the screen goes on in the rows under it
+	// instead of being cut.
+	Wrap bool
+	// width is how wide the pager was last drawn, and wrapped the rows of
+	// the lines that were wrapped to it so far.
+	width   int
+	wrapped map[int][]string
 	// selecting says a selection runs from anchor to the cursor.
 	selecting bool
 	anchor    int
@@ -40,24 +52,99 @@ func (p *Pager) SetContent(lines []string, marks []int) {
 	for i, l := range lines {
 		p.plain[i] = strings.ToLower(ansi.Strip(l))
 	}
-	p.Top, p.Cursor, p.selecting = 0, 0, false
+	p.Top, p.Cursor, p.selecting, p.wrapped = 0, 0, false, nil
 	p.Search(p.query)
 }
 
 // Len returns the number of lines.
 func (p *Pager) Len() int { return len(p.lines) }
 
+// rows returns the rows line i is shown on: one, unless long lines are
+// wrapped. A line that would not fit on the screen is cut at height rows.
+func (p *Pager) rows(i, height int) []string {
+	text := p.width - gutter
+	if !p.Wrap || text < 1 {
+		return p.lines[i : i+1]
+	}
+	rows, ok := p.wrapped[i]
+	if !ok {
+		rows = strings.Split(lipgloss.Wrap(p.lines[i], text, ""), "\n")
+		if p.wrapped == nil {
+			p.wrapped = map[int][]string{}
+		}
+		p.wrapped[i] = rows
+	}
+	if height = max(height, 1); len(rows) > height {
+		rows = append(slices.Clone(rows[:height-1]), ansi.Truncate(rows[height-1], text-1, "")+"…")
+	}
+	return rows
+}
+
+// topFor returns the first line that can be at the top of the screen with
+// line last still whole on it.
+func (p *Pager) topFor(last, height int) int {
+	top, used := last, len(p.rows(last, height))
+	for top > 0 && used+len(p.rows(top-1, height)) <= height {
+		top--
+		used += len(p.rows(top, height))
+	}
+	return top
+}
+
+// bottom returns the last line that is whole on the screen.
+func (p *Pager) bottom(height int) int {
+	last, used := p.Top, len(p.rows(p.Top, height))
+	for last+1 < len(p.lines) && used+len(p.rows(last+1, height)) <= height {
+		last++
+		used += len(p.rows(last, height))
+	}
+	return last
+}
+
+// LineAt returns the line shown on a row of the screen, counted from 0.
+func (p *Pager) LineAt(row, height int) int {
+	p.clamp(height)
+	line := p.Top
+	for used := 0; line+1 < len(p.lines); line++ {
+		if used += len(p.rows(line, height)); row < used {
+			break
+		}
+	}
+	return line
+}
+
 // clamp keeps the scroll position within the text for a body of height rows,
 // and the cursor on a line that is shown.
 func (p *Pager) clamp(height int) {
-	p.Top = max(min(p.Top, len(p.lines)-height), 0)
-	p.Cursor = max(min(p.Cursor, p.Top+height-1, len(p.lines)-1), p.Top)
+	if len(p.lines) == 0 {
+		p.Top, p.Cursor = 0, 0
+		return
+	}
+	p.Top = max(min(p.Top, p.topFor(len(p.lines)-1, height)), 0)
+	p.Cursor = max(min(p.Cursor, p.bottom(height)), p.Top)
 }
 
-// Scroll moves the text by delta lines. The cursor follows when it would
-// be left behind.
+// Scroll moves the text by delta rows, a whole line at a time and by one
+// line at least. The cursor follows when it would be left behind.
 func (p *Pager) Scroll(delta, height int) {
-	p.Top += delta
+	p.clamp(height)
+	down := delta > 0
+	for n := 0; down && delta > 0 && p.Top < len(p.lines)-1; n++ {
+		tall := len(p.rows(p.Top, height))
+		if n > 0 && tall > delta {
+			break
+		}
+		delta -= tall
+		p.Top++
+	}
+	for n := 0; !down && delta < 0 && p.Top > 0; n++ {
+		tall := len(p.rows(p.Top-1, height))
+		if n > 0 && tall > -delta {
+			break
+		}
+		delta += tall
+		p.Top--
+	}
 	p.clamp(height)
 }
 
@@ -69,12 +156,13 @@ func (p *Pager) Move(delta, height int) {
 
 // SetCursor puts the cursor on a line.
 func (p *Pager) SetCursor(line, height int) {
+	p.clamp(height)
 	line = max(min(line, len(p.lines)-1), 0)
-	if line < p.Top {
+	switch {
+	case line < p.Top:
 		p.Top = line
-	}
-	if line >= p.Top+height {
-		p.Top = line - height + 1
+	case len(p.lines) > 0 && line > p.bottom(height):
+		p.Top = p.topFor(line, height)
 	}
 	p.Cursor = line
 	p.clamp(height)
@@ -170,7 +258,7 @@ func (p *Pager) NextMatch(dir int) {
 func (p *Pager) Status(height int) string {
 	s := "empty"
 	if n := len(p.lines); n > 0 {
-		s = fmt.Sprintf("%d-%d/%d", p.Top+1, min(p.Top+height, n), n)
+		s = fmt.Sprintf("%d-%d/%d", p.Top+1, p.bottom(height)+1, n)
 	}
 	if p.query != "" {
 		if len(p.matches) == 0 {
@@ -184,8 +272,10 @@ func (p *Pager) Status(height int) string {
 
 // View renders height rows of the text, width cells wide.
 func (p *Pager) View(width, height int) []string {
+	if width != p.width {
+		p.width, p.wrapped = width, nil
+	}
 	p.clamp(height)
-	end := min(p.Top+height, len(p.lines))
 
 	isMatch := map[int]bool{}
 	for _, m := range p.matches {
@@ -196,7 +286,7 @@ func (p *Pager) View(width, height int) []string {
 	// the cursor, the selection and the search matches.
 	from, to := p.Selection()
 	rows := make([]string, 0, height)
-	for i := p.Top; i < end; i++ {
+	for i := p.Top; i < len(p.lines) && len(rows) < height; i++ {
 		note, bar := " ", " "
 		if p.Noted[i] {
 			note = Warn.Render("*")
@@ -207,7 +297,13 @@ func (p *Pager) View(width, height int) []string {
 		case isMatch[i]:
 			bar = Warn.Render("▌")
 		}
-		rows = append(rows, note+bar+p.lines[i])
+		// Only the first row of a wrapped line says it carries a note.
+		for j, row := range p.rows(i, height) {
+			if j > 0 {
+				note = " "
+			}
+			rows = append(rows, note+bar+row)
+		}
 	}
 	return Block(rows, width, height)
 }
