@@ -76,6 +76,7 @@ default_agent = "claude"
 notify = true            # desktop notification when a background session needs input
 left_panel = true        # false opens with sessions and files hidden; ctrl+a [ shows them
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
+animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.
@@ -88,6 +89,8 @@ command = ["claude", "--model", "opus"]
 ```
 
 A plain `shell` is always available as a session type.
+
+With `animations` on, a short piece of ASCII art plays in the agent pane when cicoria opens and quits and when a session is created or closed. Any key ends it.
 
 ## Develop
 

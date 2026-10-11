@@ -27,6 +27,9 @@ type Config struct {
 	// on the right.
 	LeftPanel  bool `toml:"left_panel"`
 	RightPanel bool `toml:"right_panel"`
+	// Animations enables the ASCII art that plays when cicoria opens and
+	// quits and when a session is created or closed.
+	Animations bool `toml:"animations"`
 	// Agents are command lines to offer as agents, by name. An entry named
 	// "claude" changes how Claude Code is started.
 	Agents map[string]AgentConfig `toml:"agents"`
@@ -39,7 +42,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Animations: true}
 }
 
 // Path returns where the config file is looked for.

@@ -84,7 +84,7 @@ func newWorkspace(t *testing.T) *workspace {
 		}
 	}
 
-	config := fmt.Sprintf("notify = false\n\n[agents.claude]\ncommand = [\"sh\", \"-c\", %q, \"fake-claude\"]\n", fakeAgent)
+	config := fmt.Sprintf("notify = false\nanimations = false\n\n[agents.claude]\ncommand = [\"sh\", \"-c\", %q, \"fake-claude\"]\n", fakeAgent)
 	must(os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0o644))
 	must(os.MkdirAll(filepath.Join(home, "run"), 0o700))
 
@@ -358,6 +358,50 @@ func TestHidePanelsBySide(t *testing.T) {
 	w.prefix('b')
 	w.see("Sessions", "Changes")
 	w.quit()
+}
+
+func TestAnimations(t *testing.T) {
+	w := newWorkspace(t)
+	path := filepath.Join(filepath.Dir(w.dir), "config.toml")
+	config, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config = []byte(strings.Replace(string(config), "animations = false", "animations = true", 1))
+	if err := os.WriteFile(path, config, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The chicory grows over the name while the agent starts under it.
+	w.launch(140, 40)
+	w.see("─ cicoria ", "c i c o r i a", "( @ )")
+	w.see("agent ready")
+
+	// A new session lifts off, and a key brings the agent forward.
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("launching claude-2", "|[]|")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.gone("launching claude-2")
+	w.see("claude-2 · claude", "agent ready")
+
+	// A closed session goes in a puff.
+	w.prefix('x')
+	w.see("close claude-2")
+	w.typeText("y")
+	w.see("claude-2 closed", "*poof*")
+	w.see("claude-1 · claude")
+
+	w.prefix('q')
+	w.see("─ ciao ", "c i a o !")
+	select {
+	case <-w.tm.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("did not quit; screen:\n%s", w.tm.String())
+	}
 }
 
 // TestRealAgent embeds the real Claude Code and checks that its hooks reach

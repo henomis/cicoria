@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -98,7 +99,7 @@ func (m *Model) View() tea.View {
 			h := min(l.body.h-2, 18)
 			box := m.palette.View("", w, h)
 			rows = ui.Overlay(rows, box, (m.width-w)/2, max((l.body.h-h)/3, 0))
-		} else if s := m.current(); s != nil && s.Term != nil && m.focus == focusAgent && m.typing() {
+		} else if s := m.current(); s != nil && s.Term != nil && m.focus == focusAgent && m.typing() && m.anim == nil {
 			if x, y, visible := s.Term.Cursor(); visible && s.Status != agent.Exited {
 				v.Cursor = tea.NewCursor(l.agent.x+x, l.agent.y+y)
 			}
@@ -141,6 +142,10 @@ func (m *Model) renderAgent(l layout) []string {
 	var lines []string
 	title := ""
 	switch {
+	case m.anim != nil:
+		title = m.anim.title
+		p := float64(time.Since(m.anim.start)) / float64(animFor)
+		lines = m.anim.scene(min(p, 1), l.agent.w, l.agent.h)
 	case s == nil:
 		lines = []string{"", ui.Dim.Render(fmt.Sprintf("  no sessions — %s c starts one", m.cfg.Prefix))}
 	case s.Term == nil:

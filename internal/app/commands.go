@@ -158,6 +158,7 @@ func (m *Model) newSession(a agent.Adapter, dir string) tea.Cmd {
 	m.sessions = append(m.sessions, s)
 	// The session list grew, which can change the size of the panes.
 	m.resize()
+	m.play(ui.Liftoff, "launching "+s.Name, nil)
 	return tea.Batch(m.start(s), m.switchTo(len(m.sessions)-1))
 }
 
@@ -297,6 +298,9 @@ func (m *Model) askClose() tea.Cmd {
 }
 
 func (m *Model) closeSession(i int) tea.Cmd {
+	if i == m.active {
+		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
+	}
 	m.sessions[i].Close()
 	m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
 	if m.active > i || m.active >= len(m.sessions) {
@@ -318,12 +322,14 @@ func (m *Model) askQuit() tea.Cmd {
 			working++
 		}
 	}
+	// Any key cuts the goodbye short.
+	quit := func() tea.Cmd { return m.play(ui.Wilt, "ciao", tea.Quit) }
 	if working == 0 {
-		return tea.Quit
+		return quit()
 	}
 	m.confirm = &confirm{
 		question: fmt.Sprintf("%d session(s) still working will be stopped. quit?", working),
-		yes:      func() tea.Cmd { return tea.Quit },
+		yes:      quit,
 	}
 	return nil
 }

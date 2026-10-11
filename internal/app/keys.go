@@ -17,6 +17,12 @@ const wheelStep = 3
 func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
 
+	// Any key ends an animation. When something waits for its end, the key
+	// only brings that forward.
+	if then := m.stopAnim(); then != nil {
+		return then
+	}
+
 	// A pending question or text field takes every key.
 	if c := m.confirm; c != nil {
 		m.confirm = nil

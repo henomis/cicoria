@@ -90,6 +90,11 @@ type Model struct {
 	repo          bool
 	refreshing    bool
 
+	// anim is the animation playing, if any; animating says its frames are
+	// being asked for.
+	anim      *animation
+	animating bool
+
 	view    fullView
 	palette *ui.Palette
 
@@ -370,6 +375,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if s := m.current(); m.focus == focusQueue && (s == nil || len(s.Queue) == 0) {
 		m.focus = focusAgent
 	}
+	if m.anim != nil && !m.animating {
+		m.animating = true
+		cmd = tea.Batch(cmd, frame())
+	}
 	return m, cmd
 }
 
@@ -382,11 +391,19 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		m.started = true
+		m.play(ui.Bloom, "cicoria", nil)
 		var cmds []tea.Cmd
 		for _, s := range m.sessions {
 			cmds = append(cmds, m.start(s))
 		}
 		return tea.Batch(cmds...)
+
+	case frameMsg:
+		if m.anim != nil && time.Since(m.anim.start) < animFor {
+			return frame()
+		}
+		m.animating = false
+		return m.stopAnim()
 
 	case tea.FocusMsg:
 		m.blurred = false
