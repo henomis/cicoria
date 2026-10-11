@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cicoria: a terminal workspace for coding agents</title>
+<meta name="description" content="Run several coding agents side by side in your terminal, see which one needs you, and review what they changed.">
+<meta property="og:title" content="cicoria: a terminal workspace for coding agents">
+<meta property="og:description" content="Run several coding agents side by side in your terminal, see which one needs you, and review what they changed.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141834'/%3E%3Cg stroke='%238fa8ff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M16 5v22M5 16h22M8.2 8.2l15.6 15.6M23.8 8.2 8.2 23.8'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='4' fill='%23141834' stroke='%238fa8ff' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="name" href="./" aria-current="page"><span>✽</span> cicoria</a>
+  <a href="docs.html">Docs</a>
+  <a href="https://github.com/henomis/cicoria">GitHub</a>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <h1>Run several coding agents side by side, and see which one needs you.</h1>
+    <p class="lede">cicoria is a workspace for your terminal. Each agent runs as its own program in a real terminal pane. Around it you get every session with its status, the files, and what changed.</p>
+
+    <div class="install">
+      <code id="install">go install github.com/henomis/cicoria/cmd/cicoria@latest</code>
+      <button type="button" data-copy="install">Copy</button>
+    </div>
+    <p class="next"><a href="docs.html">Read the docs</a><a href="https://github.com/henomis/cicoria">Source on GitHub</a></p>
+
+    <div class="screen-box">
+      <div class="screen" id="screen" tabindex="0" role="img" aria-label="A drawing of the cicoria workspace"><pre aria-hidden="true"></pre></div>
+      <p class="screen-note">A drawing, not a recording. Click a session, or focus it and press 1, 2, 3 as you would after ctrl+a.</p>
+    </div>
+  </div>
+
+  <div class="wrap section">
+    <h2>What you get around the agent</h2>
+    <ul class="abilities">
+      <li>
+        <pre><span class="d">1</span> <span class="g">●</span> auth-refactor   <span class="d">3m app</span>
+<span class="d">2</span> <span class="w">▲</span> fix-flaky-test  <span class="d">6m worker</span>
+<span class="d">3</span> <span class="g">✓</span> docs-pass      <span class="d">12m site</span></pre>
+        <div>
+          <h3>A status for every session</h3>
+          <p>Working, waiting for your answer, or finished while you were elsewhere, and for how long. <kbd>ctrl+a</kbd> <kbd>a</kbd> takes you to the next session that needs input, and a desktop notification tells you when one starts waiting in the background.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="d">╭─ Changes (3) · 2 commits ──╮</span>
+<span class="d">│</span><span class="w">M</span> api/auth.go       <span class="g">+42</span> <span class="r">-3</span>  <span class="d">│</span>
+<span class="d">│</span><span class="g">A</span> api/token.go         <span class="g">+18</span>  <span class="d">│</span>
+<span class="d">╰────────────────────────────╯</span></pre>
+        <div>
+          <h3>Everything a session changed, even after it commits</h3>
+          <p>Changes are counted from the commit the session started on, so work the agent has already committed is still there to review. Diffs open on the whole screen, with search and jumps between hunks.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="d"> </span><span class="b">▌</span>41     if tok == "" {
+<span class="w">*</span><span class="b">▌</span>42         return nil
+<span class="w">*</span> 43     }
+ note on api/auth.go:42-43: <span class="d">█</span></pre>
+        <div>
+          <h3>Notes on the lines you mean</h3>
+          <p>Select lines in a file or a diff and write what you think. When you are done, all your notes go to the agent as one message that names each file and its lines and quotes them.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="d">╭─ Queue (2) ────────────────╮</span>
+<span class="d">│</span><span class="b">▸ </span>then run the linter       <span class="d">│</span>
+<span class="d">│</span>  update the changelog      <span class="d">│</span>
+<span class="d">╰────────────────────────────╯</span></pre>
+        <div>
+          <h3>A queue of what to say next</h3>
+          <p>Line up messages while the agent works. Each one is sent when the agent ends its turn, and nothing is sent while it waits for a permission.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="d">[agents.copilot]</span>
+command = ["copilot"]
+
+<span class="d">[agents.claude]</span>
+command = ["claude", "--model", "opus"]</pre>
+        <div>
+          <h3>Any agent, with its own interface</h3>
+          <p>An agent is a command line. cicoria runs it in a terminal of its own, so nothing of its interface is lost. Claude Code reports its status through hooks; for the others it is guessed from what the terminal does.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="d">ctx 82k · in 4.2M · out 38k</span></pre>
+        <div>
+          <h3>Tokens, counted</h3>
+          <p>For Claude Code sessions the status bar shows the size of the context and what the model has read and written over the whole conversation.</p>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <div class="wrap section">
+    <h2>The first minute</h2>
+    <ol class="steps">
+      <li><div>
+        <p>Install it. You need Go 1.26 or later, git, and the agents you want to run. Claude Code is the default.</p>
+        <pre>go install github.com/henomis/cicoria/cmd/cicoria@latest</pre>
+      </div></li>
+      <li><div>
+        <p>Open it on a project. The first session starts, and what you type goes to the agent.</p>
+        <pre>cd ~/src/app
+cicoria</pre>
+      </div></li>
+      <li><div>
+        <p>Press <kbd>ctrl+a</kbd> then <kbd>c</kbd> for another session: pick the agent, the directory it works in, and a name.</p>
+      </div></li>
+      <li><div>
+        <p>Press <kbd>ctrl+a</kbd> then <kbd>?</kbd> for every key, or read <a href="docs.html">the docs</a>.</p>
+      </div></li>
+    </ol>
+  </div>
+</main>
+
+<footer class="wrap foot">
+  <pre aria-hidden="true">    \ | /
+  '. \|/ .'
+ ---( @ )---
+  .' /|\ '.
+    / | \
+<span class="stem">      |/
+     \|
+      |</span></pre>
+  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start.</p>
+  <nav aria-label="Footer"><a href="docs.html">Docs</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
+</footer>
+
+<script src="hero.js"></script>
+<script>
+  // Symbols a fallback font might draw wider each get a cell of their own.
+  for (const pre of document.querySelectorAll(".abilities pre")) {
+    pre.innerHTML = pre.innerHTML.replace(/[●▲✓○▸▾•█▌]/g, "<i>$&</i>");
+  }
+  for (const button of document.querySelectorAll("[data-copy]")) {
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Select it";
+        getSelection().selectAllChildren(document.getElementById(button.dataset.copy));
+      }
+      setTimeout(() => (button.textContent = "Copy"), 1600);
+    });
+  }
+</script>
+</body>
+</html>

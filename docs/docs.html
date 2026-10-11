@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cicoria docs</title>
+<meta name="description" content="How to install, use and configure cicoria, a terminal workspace for coding agents.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141834'/%3E%3Cg stroke='%238fa8ff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M16 5v22M5 16h22M8.2 8.2l15.6 15.6M23.8 8.2 8.2 23.8'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='4' fill='%23141834' stroke='%238fa8ff' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="name" href="./"><span>✽</span> cicoria</a>
+  <a href="docs.html" aria-current="page">Docs</a>
+  <a href="https://github.com/henomis/cicoria">GitHub</a>
+</header>
+
+<div class="wrap doc-layout">
+  <nav class="toc" aria-label="On this page">
+    <ol>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#open">Open a workspace</a></li>
+      <li><a href="#commands">Commands</a></li>
+      <li><a href="#sessions">Sessions</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#panels">Side panels</a></li>
+      <li><a href="#review">Review changes</a></li>
+      <li><a href="#notes">Notes</a></li>
+      <li><a href="#queue">Queue</a></li>
+      <li><a href="#agents">Agents</a></li>
+      <li><a href="#configure">Configure</a></li>
+      <li><a href="#remembered">What is remembered</a></li>
+      <li><a href="#develop">Develop</a></li>
+    </ol>
+  </nav>
+
+  <main class="doc">
+    <h1>Using cicoria</h1>
+    <p>cicoria runs coding agents in terminal panes and shows, around the one on screen, its sessions, files and changes. This page covers everything it does.</p>
+
+    <section id="install">
+      <h2>Install</h2>
+      <pre>go install github.com/henomis/cicoria/cmd/cicoria@latest</pre>
+      <p>You need:</p>
+      <ul>
+        <li>Go 1.26 or later, to build it.</li>
+        <li><code>git</code>, for the changes panel and the diffs.</li>
+        <li>The agents you want to run. Claude Code (<code>claude</code>) is the default.</li>
+        <li>A Unix-like system. cicoria is developed and tested on Linux. Desktop notifications use <code>notify-send</code> and are skipped where it is missing.</li>
+      </ul>
+    </section>
+
+    <section id="open">
+      <h2>Open a workspace</h2>
+      <pre>cicoria            <span class="c"># on the current directory</span>
+cicoria ~/src/app  <span class="c"># or on another one</span>
+cicoria -config ./my.toml ~/src/app</pre>
+      <p>The directory you open is the workspace: its sessions are saved under it and come back the next time. The first time, one session starts with the default agent.</p>
+      <p>Everything you type goes to the agent on screen. To talk to cicoria instead, press the prefix key, <kbd>ctrl+a</kbd>, and then a command key. The mouse works too: click a panel or a session, scroll with the wheel, and clicks inside the agent pane go to the agent.</p>
+    </section>
+
+    <section id="commands">
+      <h2>Commands</h2>
+      <p>Press <kbd>ctrl+a</kbd>, then:</p>
+      <div class="table"><table>
+        <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>c</td><td>New session</td></tr>
+          <tr><td>1 to 9</td><td>Go to a session by its number</td></tr>
+          <tr><td>n, p</td><td>Next, previous session</td></tr>
+          <tr><td>a</td><td>Go to the next session that needs input</td></tr>
+          <tr><td>,</td><td>Rename the session</td></tr>
+          <tr><td>r</td><td>Restart a session whose agent has exited</td></tr>
+          <tr><td>x</td><td>Close the session</td></tr>
+          <tr><td>s, f, g</td><td>Focus the sessions, files, changes panel</td></tr>
+          <tr><td>m</td><td>Queue a message for the agent</td></tr>
+          <tr><td>u</td><td>Focus the queue panel</td></tr>
+          <tr><td>d</td><td>Review changes: open the diff of the selected file</td></tr>
+          <tr><td>t</td><td>Send your review notes to the agent</td></tr>
+          <tr><td>h</td><td>Review from here: count changes from the last commit</td></tr>
+          <tr><td>o</td><td>Open a file by name</td></tr>
+          <tr><td>b</td><td>Show or hide the side panels</td></tr>
+          <tr><td>[, ]</td><td>Show or hide the left, the right panels</td></tr>
+          <tr><td>space</td><td>Command palette: every command, by name</td></tr>
+          <tr><td>?</td><td>Help</td></tr>
+          <tr><td>q</td><td>Quit</td></tr>
+          <tr><td>ctrl+a</td><td>Send <kbd>ctrl+a</kbd> itself to the agent</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="sessions">
+      <h2>Sessions</h2>
+      <p>A session is one agent working in one directory. <kbd>ctrl+a</kbd> <kbd>c</kbd> creates one and asks three things:</p>
+      <ul>
+        <li>The agent, when more than one is configured.</li>
+        <li>The directory it works in, starting from the one of the session on screen. <kbd>tab</kbd> completes, <kbd>ctrl+w</kbd> deletes a path component, <kbd>ctrl+u</kbd> clears, and <code>~</code> and relative paths work.</li>
+        <li>A name. A free one, such as <code>claude-2</code>, is offered; <kbd>enter</kbd> accepts it.</li>
+      </ul>
+      <p>Keep one session to a directory. The files and changes panels show the project of the session on screen, so two sessions in the same directory cannot be told apart by their changes. cicoria lets you do it and warns you.</p>
+      <p>Closing a session whose agent is still running, or that has queued messages, asks first. Quitting asks when a Claude Code session is still working.</p>
+    </section>
+
+    <section id="status">
+      <h2>Status</h2>
+      <p>Each session carries a mark in the list, and its row shows for how long it has been so once that is a minute or more.</p>
+      <div class="table"><table class="status-key">
+        <thead><tr><th>Mark</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="mark-g">●</td><td>Working</td></tr>
+          <tr><td class="mark-w">▲</td><td>Needs input: the agent asks a question or a permission</td></tr>
+          <tr><td class="mark-g">✓</td><td>Finished its turn while you were looking elsewhere</td></tr>
+          <tr><td class="mark-d">○</td><td>Idle</td></tr>
+          <tr><td class="mark-r">✕</td><td>The agent's process has exited; <kbd>ctrl+a</kbd> <kbd>r</kbd> restarts it</td></tr>
+          <tr><td class="mark-d">◌</td><td>Starting</td></tr>
+        </tbody>
+      </table></div>
+      <p>A session that needs input and is not on screen is also named in the status bar, and raises a desktop notification when <code>notify</code> is on.</p>
+      <p>Claude Code tells cicoria what it is doing. When it says it is working but has shown no sign of life for 30 seconds, its status reads <code>working?</code> and its mark is dimmed. This happens after you interrupt a turn. For other agents the status is guessed: output means working, quiet means idle, the terminal bell means it needs input.</p>
+    </section>
+
+    <section id="panels">
+      <h2>Side panels</h2>
+      <p>Sessions and files are on the left, changes and the queue on the right. In a panel, <kbd>j</kbd> and <kbd>k</kbd> move, <kbd>tab</kbd> goes to the next panel, and <kbd>esc</kbd> gives the keys back to the agent.</p>
+      <div class="table"><table>
+        <thead><tr><th>Panel</th><th>Keys</th></tr></thead>
+        <tbody>
+          <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>x</kbd> close it, <kbd>c</kbd> new session</td></tr>
+          <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>@</kbd> mention the file to the agent</td></tr>
+          <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>@</kbd> mention, <kbd>s</kbd> since the start or uncommitted only</td></tr>
+          <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
+        </tbody>
+      </table></div>
+      <p>In the file tree, folders are blue, files Claude Code has edited in this run are highlighted, and changed files carry git's letter at the right.</p>
+      <p><kbd>ctrl+a</kbd> <kbd>[</kbd> and <kbd>]</kbd> hide one side, <kbd>b</kbd> both. A terminal too narrow for the agent and the panels you asked for shows the agent alone.</p>
+    </section>
+
+    <section id="review">
+      <h2>Review changes</h2>
+      <p>The changes of a session are everything that differs from the commit its work tree was on when the session was created, committed or not. Work the agent commits stays in the panel, and the title says how many commits were made since.</p>
+      <ul>
+        <li><kbd>s</kbd> in the changes panel switches to what is not committed, and back.</li>
+        <li><kbd>ctrl+a</kbd> <kbd>h</kbd> starts the count again from the last commit, for when you have looked at everything so far.</li>
+      </ul>
+      <p>Outside a git repository the panel says so and the file tree lists the directory as it is.</p>
+      <h3>The full-screen view</h3>
+      <p>Files and diffs open on the whole screen.</p>
+      <div class="table"><table>
+        <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>j, k</td><td>Move the cursor a line</td></tr>
+          <tr><td>space, b</td><td>A page down, up</td></tr>
+          <tr><td>g, G</td><td>First, last line</td></tr>
+          <tr><td>/, n, N</td><td>Search, next match, previous match</td></tr>
+          <tr><td>[, ]</td><td>Previous, next hunk of a diff</td></tr>
+          <tr><td>tab, shift+tab</td><td>Next, previous changed file</td></tr>
+          <tr><td>d</td><td>Switch between the file and its diff</td></tr>
+          <tr><td>e</td><td>Open the file in <code>$VISUAL</code> or <code>$EDITOR</code></td></tr>
+          <tr><td>@</td><td>Mention the file to the agent</td></tr>
+          <tr><td>v, c, x, s</td><td>Select lines, write a note, delete it, send the notes</td></tr>
+          <tr><td>q</td><td>Back to the workspace</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="notes">
+      <h2>Notes</h2>
+      <p>A note is a remark on one or more lines of a file or a diff. In the full-screen view:</p>
+      <ul>
+        <li>Move to a line and press <kbd>c</kbd> to write a note on it. To cover several lines, press <kbd>v</kbd> first and move.</li>
+        <li><kbd>c</kbd> on a line that has a note rewrites it. <kbd>x</kbd> deletes it.</li>
+        <li>Lines with a note carry a <code>*</code> in the margin.</li>
+      </ul>
+      <p>Notes wait until you send them with <kbd>s</kbd>, or <kbd>ctrl+a</kbd> <kbd>t</kbd> from the workspace. You choose whether they go to the agent at once or through the queue. They go together, as one message:</p>
+      <pre>Review notes:
+
+api/auth.go:42-43
+&gt;         return nil
+&gt;     }
+return an error here, the caller ignores nil
+
+api/token.go:7
+&gt; +const ttl = 3600
+make this a duration</pre>
+      <p>If the agent is asking a question when you send them at once, they are queued instead, so they are not taken for the answer.</p>
+    </section>
+
+    <section id="queue">
+      <h2>Queue</h2>
+      <p>While an agent works you can line up what to tell it next. <kbd>ctrl+a</kbd> <kbd>m</kbd> asks for a message. You can edit the line with the arrows, <kbd>ctrl+w</kbd>, <kbd>ctrl+u</kbd> and the like. Messages wait in a panel under the changes and go to the agent one by one, each when it ends its turn. An idle agent gets the first at once. Nothing is sent while the agent waits for a permission, or after a turn that ended on an error.</p>
+      <p>In the queue panel (<kbd>ctrl+a</kbd> <kbd>u</kbd>):</p>
+      <div class="table"><table>
+        <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>enter</td><td>Send the next message now</td></tr>
+          <tr><td>p</td><td>Pause and resume. Pause when a turn ends with a question you want to answer first</td></tr>
+          <tr><td>a, e, x</td><td>Add, edit, delete a message</td></tr>
+          <tr><td>J, K</td><td>Move a message down, up</td></tr>
+        </tbody>
+      </table></div>
+      <p>Only Claude Code says when its turn ends. Other agents keep a queue too, marked manual: each message is sent when you press <kbd>enter</kbd> in the panel.</p>
+    </section>
+
+    <section id="agents">
+      <h2>Agents</h2>
+      <p>An agent is a command line that cicoria runs in a terminal of its own. Three kinds are offered when you create a session:</p>
+      <ul>
+        <li>Claude Code, always. It reports its status through hooks that cicoria registers for the process it launches, without touching your Claude Code settings. Its conversation continues when the session is reopened. The files it edits are highlighted in the tree.</li>
+        <li>Any command you add to the configuration. Its status is guessed from terminal activity.</li>
+        <li>A plain shell, always.</li>
+      </ul>
+      <h3>Tokens</h3>
+      <p>For Claude Code sessions the status bar shows <code>ctx</code>, the size of the context at the last reply, and <code>in</code> and <code>out</code>, what the model has read and written over the whole conversation. Cached input is counted in <code>in</code>, which is why it grows fast. With several sessions counting, <code>all</code> is their sum.</p>
+    </section>
+
+    <section id="configure">
+      <h2>Configure</h2>
+      <p>Settings live in <code>~/.config/cicoria/config.toml</code>. All are optional, and an unknown one is reported as an error.</p>
+      <div class="table"><table>
+        <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>prefix</td><td><code>"ctrl+a"</code></td><td>The key that starts a command</td></tr>
+          <tr><td>default_agent</td><td><code>"claude"</code></td><td>The agent of the first session of a new workspace</td></tr>
+          <tr><td>notify</td><td><code>true</code></td><td>Desktop notification when a background session needs input</td></tr>
+          <tr><td>left_panel</td><td><code>true</code></td><td>Open with sessions and files shown</td></tr>
+          <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
+          <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and when a session is created or closed. Any key ends it</td></tr>
+        </tbody>
+      </table></div>
+      <pre>prefix = "ctrl+b"
+right_panel = false
+
+<span class="c"># Any command line can be an agent.</span>
+[agents.copilot]
+command = ["copilot"]
+
+<span class="c"># An entry named "claude" changes how Claude Code is started,</span>
+<span class="c"># and one named "shell" which shell is run.</span>
+[agents.claude]
+command = ["claude", "--model", "opus"]</pre>
+    </section>
+
+    <section id="remembered">
+      <h2>What is remembered</h2>
+      <p>For each directory you open cicoria on, it keeps the sessions with their names, directories, starting commits, notes and queues. They are stored under <code>$XDG_STATE_HOME/cicoria</code>, or <code>~/.local/state/cicoria</code>.</p>
+      <p>Agents stop when cicoria closes. The next time, every session is started again; Claude Code picks up its conversation. Queues come back paused, so that opening cicoria never sends a message by itself.</p>
+    </section>
+
+    <section id="develop">
+      <h2>Develop</h2>
+      <pre>git clone https://github.com/henomis/cicoria
+cd cicoria
+go test ./...
+
+<span class="c"># drives the real Claude Code; needs a folder it already trusts</span>
+CICORIA_E2E_REAL=$PWD go test -run TestRealAgent -v ./cmd/cicoria</pre>
+      <p>The end-to-end tests in <code>cmd/cicoria</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
+    </section>
+  </main>
+</div>
+
+<footer class="wrap foot">
+  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start.</p>
+  <nav aria-label="Footer"><a href="./">Home</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
+</footer>
+
+<script>
+  // Mark the section being read in the list at the side.
+  const links = new Map([...document.querySelectorAll(".toc a")].map((a) => [a.hash.slice(1), a]));
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      for (const a of links.values()) a.classList.remove("here");
+      links.get(entry.target.id)?.classList.add("here");
+    }
+  }, { rootMargin: "-10% 0px -75% 0px" });
+  for (const id of links.keys()) seen.observe(document.getElementById(id));
+</script>
+</body>
+</html>
