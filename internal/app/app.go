@@ -101,6 +101,8 @@ type Model struct {
 
 	view    fullView
 	palette *ui.Palette
+	// paletteFrom is what was on screen when the palette was opened.
+	paletteFrom mode
 
 	// One-line interactions in the status bar.
 	prompt    *prompt
@@ -193,7 +195,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 				sdir = dir
 			}
 			s := session.New(saved.ID, saved.Name, sdir, a)
-			s.Conversation, s.Base = saved.Conversation, saved.Base
+			s.Conversation, s.Base, s.Notes = saved.Conversation, saved.Base, saved.Notes
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
 			s.Queue, s.Paused = saved.Queue, saved.Paused || len(saved.Queue) > 0
@@ -293,7 +295,7 @@ func (m *Model) save() {
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
-			Queue: s.Queue, Paused: s.Paused,
+			Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
 		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {

@@ -386,6 +386,86 @@ func TestReviewSinceTheStart(t *testing.T) {
 	w.quit()
 }
 
+// Notes are written on lines of a diff or a file and reach the agent as one
+// message, at once or through the queue.
+func TestNotes(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("agent ready")
+	w.line("edit notes.txt")
+	w.see("Changes (1)")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+
+	// In a diff, the lines of the file can carry a note; its headers cannot.
+	w.prefix('g')
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("diff  notes.txt", "+hello from the agent")
+	w.typeText("c")
+	w.see("no line of the file here")
+	w.typeText("Gc")
+	w.see("note on notes.txt:1:")
+	w.line("say hi properly")
+	w.see("1 note(s)", "*▌+hello from the agent")
+	w.typeText("q")
+	w.see("Sessions")
+
+	// In a file, several lines are selected first.
+	w.prefix('o')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  main.go")
+	w.typeText("vjjc")
+	w.see("note on main.go:1-3:")
+	w.line("add a doc comment")
+	w.see("2 note(s)", "* 1 package main", "*▌3 func main() {}")
+
+	// Leaving the question of how to send them goes back to the file.
+	w.typeText("s")
+	w.see("send 2 note(s) to claude-1", "Send to the agent now", "Add to the queue")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.see("file  main.go", "2 note(s)")
+
+	// Sent at once, the agent gets one message with every note.
+	w.typeText("s")
+	w.see("Send to the agent now")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("got Review", "got notes.txt:1", "got say", "got main.go:1-3", "got add")
+	w.gone("note(s)")
+
+	// Through the queue, they wait for the end of the turn. A note can be
+	// rewritten and deleted before it goes.
+	w.prefix('o')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  main.go")
+	w.typeText("jjc")
+	w.see("note on main.go:3:")
+	w.line("too short")
+	w.see("1 note(s)")
+	w.typeText("x")
+	w.gone("note(s)")
+	w.typeText("c")
+	w.line("too short")
+	w.typeText("c")
+	w.see("note on main.go:3: too short")
+	w.line("ly named")
+	w.see("1 note(s)")
+	w.typeText("s")
+	w.see("Add to the queue")
+	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Queue (1)", "▸ Review notes: …")
+	w.line("stop")
+	w.see("got main.go:3", "too shortly named", "got too")
+	w.gone("Queue (")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.quit()
+}
+
 func TestNarrowTerminalHidesPanels(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(60, 20)

@@ -134,6 +134,91 @@ func TestDiffLines(t *testing.T) {
 	}
 }
 
+func TestDiffRefs(t *testing.T) {
+	diff := "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n one\n-two\n+2\n@@ -9 +9,2 @@ func x\n-a\n+b\n+--- not a header\n\\ No newline at end of file\n"
+	want := []LineRef{
+		{}, {}, {}, {},
+		{Old: 1, New: 1}, {Old: 2}, {New: 2},
+		{},
+		{Old: 9}, {New: 9}, {New: 10},
+		{},
+	}
+	if got := DiffRefs(diff); !slices.Equal(got, want) {
+		t.Errorf("DiffRefs = %v\nwant      %v", got, want)
+	}
+	lines, _ := DiffLines(diff)
+	if len(lines) != len(want) {
+		t.Errorf("%d lines for %d refs", len(lines), len(want))
+	}
+}
+
+func TestPagerCursor(t *testing.T) {
+	var p Pager
+	p.SetContent(make([]string, 100), []int{50})
+	const h = 20
+
+	// The cursor moves alone until it would leave the screen.
+	p.Move(5, h)
+	if p.Cursor != 5 || p.Top != 0 {
+		t.Errorf("after moving down: cursor %d, top %d", p.Cursor, p.Top)
+	}
+	p.Move(30, h)
+	if p.Cursor != 35 || p.Top != 16 {
+		t.Errorf("after moving off screen: cursor %d, top %d", p.Cursor, p.Top)
+	}
+	// Scrolling takes it along when it would be left behind.
+	p.Scroll(10, h)
+	if p.Cursor != 35 || p.Top != 26 {
+		t.Errorf("after scrolling a little: cursor %d, top %d", p.Cursor, p.Top)
+	}
+	p.Scroll(30, h)
+	if p.Cursor != 56 || p.Top != 56 {
+		t.Errorf("after scrolling a lot: cursor %d, top %d", p.Cursor, p.Top)
+	}
+	p.Move(1000, h)
+	if p.Cursor != 99 || p.Top != 80 {
+		t.Errorf("at the end: cursor %d, top %d", p.Cursor, p.Top)
+	}
+	p.Mark(-1)
+	if p.Cursor != 50 || p.Top != 50 {
+		t.Errorf("at the mark: cursor %d, top %d", p.Cursor, p.Top)
+	}
+
+	// A selection runs from where it started to the cursor, either way.
+	if from, to := p.Selection(); from != 50 || to != 50 {
+		t.Errorf("no selection = %d-%d", from, to)
+	}
+	p.Select()
+	p.Move(-3, h)
+	if from, to := p.Selection(); from != 47 || to != 50 || !p.Selecting() {
+		t.Errorf("selection upwards = %d-%d", from, to)
+	}
+	p.Move(5, h)
+	if from, to := p.Selection(); from != 50 || to != 52 {
+		t.Errorf("selection downwards = %d-%d", from, to)
+	}
+	p.Noted = map[int]bool{51: true}
+	rows := p.View(40, h)
+	if got := ansi.Strip(rows[51-p.Top]); !strings.HasPrefix(got, "*▌") {
+		t.Errorf("a selected line with a note = %q", got)
+	}
+	if got := ansi.Strip(rows[53-p.Top]); !strings.HasPrefix(got, "  ") {
+		t.Errorf("a line outside the selection = %q", got)
+	}
+	p.Unselect()
+	if from, to := p.Selection(); from != 52 || to != 52 {
+		t.Errorf("after dropping the selection = %d-%d", from, to)
+	}
+
+	// An empty text has nothing to stand on, and nothing breaks.
+	p.SetContent(nil, nil)
+	p.Move(3, h)
+	p.Scroll(3, h)
+	if p.Cursor != 0 || p.Top != 0 || len(p.View(10, h)) != h {
+		t.Errorf("empty: cursor %d, top %d", p.Cursor, p.Top)
+	}
+}
+
 func TestFileLines(t *testing.T) {
 	lines := FileLines("main.go", "package main\n\nfunc main() {\n\tprintln(\"hi\")\n}\n", true)
 	if len(lines) != 5 {

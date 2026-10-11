@@ -44,6 +44,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a command:
 | `m` | Queue a message for the agent |
 | `u` | Focus the queue panel |
 | `d` | Review changes (full-screen diff) |
+| `t` | Send review notes to the agent |
 | `h` | Review from here: count changes from the last commit |
 | `o` | Open a file by name |
 | `b` | Show or hide the side panels |
@@ -54,6 +55,10 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a command:
 | `ctrl+a` | Send `ctrl+a` to the agent |
 
 Files and diffs open on the whole screen: `j`/`k`/`space`/`b` scroll, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `e` opens `$EDITOR`, `@` mentions the file to the agent, `q` goes back.
+
+### Notes
+
+A note is a remark on one or more lines of a file or diff. In the full-screen view, move to a line (or press `v` and move to select several) and press `c` to write one; `c` on a line that has a note rewrites it, `x` deletes it. Lines with a note carry a `*` in the margin. Notes wait until you send them with `s` (or `ctrl+a t`): all together, as one message that names each file and its lines, quotes them and gives your text. You choose whether it goes to the agent at once or through the queue. Notes are remembered across restarts.
 
 ### Queue
 

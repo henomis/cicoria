@@ -54,7 +54,7 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case modePalette:
 		if key == "esc" {
-			m.mode, m.palette = modeWorkspace, nil
+			m.mode, m.palette = m.paletteFrom, nil
 			return nil
 		}
 		if it, ok := m.palette.Key(k); ok {
@@ -227,6 +227,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	switch m.mode {
 	case modeView:
 		m.view.pager.Scroll(wheel, m.viewHeight())
+		// The text starts under the header line.
+		if isClick && mouse.Y >= 1 && mouse.Y <= m.viewHeight() {
+			m.view.pager.SetCursor(m.view.pager.Top+mouse.Y-1, m.viewHeight())
+		}
 		return nil
 	case modePalette, modeHelp:
 		return nil

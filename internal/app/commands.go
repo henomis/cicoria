@@ -40,6 +40,7 @@ func init() {
 		{"m", "Queue a message for the agent", (*Model).askQueue},
 		{"u", "Focus queue", func(m *Model) tea.Cmd { return m.setFocus(focusQueue) }},
 		{"d", "Review changes", (*Model).review},
+		{"t", "Send review notes to the agent", (*Model).askSendNotes},
 		{"h", "Review from here: count changes from the last commit", (*Model).rebase},
 		{"o", "Open file…", (*Model).askFile},
 		{"b", "Show or hide side panels", (*Model).togglePanels},
@@ -247,6 +248,10 @@ func (m *Model) askFile() tea.Cmd {
 
 func (m *Model) openPalette(prompt string, items []ui.Item) {
 	m.palette = ui.NewPalette(prompt, items)
+	// Leaving it without a choice goes back to where it was opened from.
+	if m.mode != modePalette {
+		m.paletteFrom = m.mode
+	}
 	m.mode = modePalette
 }
 
@@ -259,6 +264,8 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return v.run(m)
 	case agent.Adapter:
 		return m.askDir(v)
+	case sendNotes:
+		return m.sendReview(v.queue)
 	case string:
 		m.tree().Reveal(v)
 		m.openFile(v)

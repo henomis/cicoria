@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/henomis/cicoria/internal/agent"
@@ -55,6 +57,9 @@ type Session struct {
 	// to Dir.
 	Touched map[string]time.Time
 
+	// Notes are remarks on lines of code, waiting to be sent to the agent.
+	Notes []Note
+
 	// Queue holds messages waiting to be sent to the agent, one per turn.
 	Queue []string
 	// Paused holds the queue back.
@@ -62,6 +67,74 @@ type Session struct {
 
 	lastInput  time.Time
 	lastOutput time.Time
+}
+
+// Note is a remark of the user on some lines of a file.
+type Note struct {
+	// Path is the file, relative to the session's directory.
+	Path string `json:"path"`
+	// From and To are the first and last line the note is about. Removed
+	// says they are lines of the file as it was, which the change took away.
+	From    int  `json:"from"`
+	To      int  `json:"to"`
+	Removed bool `json:"removed,omitempty"`
+	// Quote is the lines themselves, as they were shown.
+	Quote []string `json:"quote,omitempty"`
+	Text  string   `json:"text"`
+}
+
+// Where names the lines a note is about, as in "api/auth.go:42-44".
+func (n Note) Where() string {
+	where := fmt.Sprintf("%s:%d", n.Path, n.From)
+	if n.To > n.From {
+		where += fmt.Sprintf("-%d", n.To)
+	}
+	if n.Removed {
+		where += " (removed)"
+	}
+	return where
+}
+
+// Covers reports whether the note is about a line, given by its number in
+// the old and in the new file, of which one may be missing.
+func (n Note) Covers(path string, old, cur int) bool {
+	line := cur
+	if n.Removed {
+		// A line that is still there is not one the change took away.
+		if cur != 0 {
+			return false
+		}
+		line = old
+	}
+	return n.Path == path && line >= n.From && line <= n.To && line > 0
+}
+
+// Review writes the notes as one message for the agent, file by file.
+func Review(notes []Note) string {
+	sorted := slices.Clone(notes)
+	first := map[string]int{}
+	for i, n := range sorted {
+		if _, ok := first[n.Path]; !ok {
+			first[n.Path] = i
+		}
+	}
+	slices.SortStableFunc(sorted, func(a, b Note) int {
+		if a.Path != b.Path {
+			return first[a.Path] - first[b.Path]
+		}
+		return a.From - b.From
+	})
+
+	var b strings.Builder
+	b.WriteString("Review notes:\n")
+	for _, n := range sorted {
+		b.WriteString("\n" + n.Where() + "\n")
+		for _, q := range n.Quote {
+			b.WriteString("> " + q + "\n")
+		}
+		b.WriteString(n.Text + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // New returns a session for the given agent, working in dir, that has not

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -59,14 +60,20 @@ func (m *Model) sendNext(s *session.Session) tea.Cmd {
 		return nil
 	}
 	text, _ := s.Dequeue()
+	m.queueCursor = max(min(m.queueCursor, len(s.Queue)-1), 0)
+	m.save()
+	return m.deliver(s, text)
+}
+
+// deliver gives a message to a running agent: pasted now, with enter
+// following shortly.
+func (m *Model) deliver(s *session.Session, text string) tea.Cmd {
 	now := time.Now()
 	s.NoteInput(now)
 	s.Term.Paste(text)
 	// From here the agent counts as working, so that nothing else is sent
 	// before it says so itself.
 	s.Sent(now)
-	m.queueCursor = max(min(m.queueCursor, len(s.Queue)-1), 0)
-	m.save()
 
 	id, t := s.ID, s.Term
 	return tea.Tick(submitAfter, func(time.Time) tea.Msg { return submitMsg{id, t} })
@@ -107,7 +114,11 @@ func (m *Model) queueKey(key string) tea.Cmd {
 	case "a":
 		return m.askQueue()
 	case "e":
-		if i < len(s.Queue) {
+		switch {
+		case i >= len(s.Queue):
+		case strings.Contains(s.Queue[i], "\n"):
+			m.say("a message of several lines cannot be changed here")
+		default:
 			m.askEdit(s, i)
 		}
 	}
@@ -147,7 +158,12 @@ func (m *Model) renderQueue(r rect) []string {
 		if i == 0 {
 			lead = ui.Accent.Render("▸ ")
 		}
-		lines = append(lines, ui.Selected(lead+s.Queue[i], inner, focused && i == cursor, true))
+		// Of a message of several lines, the first tells which one it is.
+		text, more, _ := strings.Cut(s.Queue[i], "\n")
+		if more != "" {
+			text += " …"
+		}
+		lines = append(lines, ui.Selected(lead+text, inner, focused && i == cursor, true))
 	}
 
 	title := fmt.Sprintf("Queue (%d)", len(s.Queue))

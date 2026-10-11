@@ -18,7 +18,7 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("missing file: %+v, %v", st, err)
 	}
 
-	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Conversation: "c", Queue: []string{"x", "y"}, Paused: true}}, Active: 1}
+	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Conversation: "c", Base: "abc", Notes: []Note{{Path: "x", From: 1, To: 2, Quote: []string{"q"}, Text: "t"}}, Queue: []string{"x", "y"}, Paused: true}}, Active: 1}
 	if err := SaveState(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +83,50 @@ func TestApply(t *testing.T) {
 	s.Apply(agent.Update{Status: agent.Working, HasStatus: true}, true, now)
 	if s.Status != agent.Exited {
 		t.Errorf("status after exit = %v", s.Status)
+	}
+}
+
+func TestNotes(t *testing.T) {
+	added := Note{Path: "a.go", From: 4, To: 6, Text: "why?"}
+	gone := Note{Path: "a.go", From: 9, To: 9, Removed: true, Text: "keep it"}
+	if added.Where() != "a.go:4-6" || gone.Where() != "a.go:9 (removed)" {
+		t.Errorf("Where = %q, %q", added.Where(), gone.Where())
+	}
+
+	// A note is about lines of the file as it is, unless it says otherwise.
+	for _, tt := range []struct {
+		note     Note
+		path     string
+		old, cur int
+		want     bool
+	}{
+		{added, "a.go", 0, 4, true},
+		{added, "a.go", 7, 6, true},
+		{added, "a.go", 5, 7, false},
+		{added, "a.go", 5, 0, false},
+		{added, "b.go", 4, 4, false},
+		{gone, "a.go", 9, 0, true},
+		{gone, "a.go", 9, 9, false},
+		{gone, "a.go", 8, 0, false},
+	} {
+		if got := tt.note.Covers(tt.path, tt.old, tt.cur); got != tt.want {
+			t.Errorf("%s covers %s old %d new %d = %v", tt.note.Where(), tt.path, tt.old, tt.cur, got)
+		}
+	}
+
+	// One message, file by file in the order they were first noted, each in
+	// the order of its lines.
+	notes := []Note{
+		{Path: "b.go", From: 30, To: 30, Quote: []string{"+x := 1"}, Text: "name it"},
+		added,
+		{Path: "b.go", From: 2, To: 3, Quote: []string{" a", " b"}, Text: "first"},
+	}
+	want := "Review notes:\n\nb.go:2-3\n>  a\n>  b\nfirst\n\nb.go:30\n> +x := 1\nname it\n\na.go:4-6\nwhy?"
+	if got := Review(notes); got != want {
+		t.Errorf("Review =\n%s\nwant\n%s", got, want)
+	}
+	if notes[0].From != 30 {
+		t.Error("Review reordered the notes it was given")
 	}
 }
 

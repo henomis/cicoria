@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -107,4 +109,54 @@ func DiffLines(diff string) (lines []string, hunks []int) {
 		lines = append(lines, l)
 	}
 	return lines, hunks
+}
+
+// LineRef says which line of the file a line of a diff shows: its number in
+// the old file, in the new one, or both. A line that shows none, such as a
+// header, has neither.
+type LineRef struct{ Old, New int }
+
+var hunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
+
+// DiffRefs tells, for every line DiffLines returns, which line of the file
+// it shows.
+func DiffRefs(diff string) []LineRef {
+	lines := strings.Split(strings.TrimSuffix(diff, "\n"), "\n")
+	refs := make([]LineRef, len(lines))
+	// oldLeft and newLeft are the lines the hunk still has to show.
+	var old, cur, oldLeft, newLeft int
+	for i, l := range lines {
+		if oldLeft <= 0 && newLeft <= 0 {
+			if m := hunkHeader.FindStringSubmatch(l); m != nil {
+				old, oldLeft = hunkRange(m[1], m[2])
+				cur, newLeft = hunkRange(m[3], m[4])
+			}
+			continue
+		}
+		switch {
+		case strings.HasPrefix(l, "+"):
+			refs[i] = LineRef{New: cur}
+			cur, newLeft = cur+1, newLeft-1
+		case strings.HasPrefix(l, "-"):
+			refs[i] = LineRef{Old: old}
+			old, oldLeft = old+1, oldLeft-1
+		case strings.HasPrefix(l, "\\"):
+			// "No newline at end of file" is about the line before.
+		default:
+			refs[i] = LineRef{Old: old, New: cur}
+			old, oldLeft, cur, newLeft = old+1, oldLeft-1, cur+1, newLeft-1
+		}
+	}
+	return refs
+}
+
+// hunkRange reads the first line and the length of one side of a hunk
+// header; a length that is left out is one.
+func hunkRange(start, length string) (int, int) {
+	n, _ := strconv.Atoi(start)
+	count := 1
+	if length != "" {
+		count, _ = strconv.Atoi(length)
+	}
+	return n, count
 }

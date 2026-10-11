@@ -382,6 +382,12 @@ func (m *Model) renderHelp() []string {
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
 		"    tab/shift+tab next/previous changed file · d file ⇄ diff · e editor · q back",
+		"    v select lines · c write a note on them · x delete it · s send the notes",
+		"",
+		ui.Bold.Render("  Notes"),
+		"    a note is a remark on one or more lines of a file or diff. They wait, marked",
+		"    with * in the margin, until you send them: together, as one message with the",
+		"    file, the lines and their text, at once or through the queue.",
 		"",
 		ui.Dim.Render("  press any key to close"),
 	)
@@ -432,7 +438,10 @@ func (m *Model) renderStatus() string {
 	switch m.mode {
 	case modeView:
 		left = append(left, m.view.pager.Status(m.viewHeight()))
-		right = "q back · / search · [ ] hunks · tab next file · d file⇄diff · e edit"
+		if s := m.current(); s != nil && len(s.Notes) > 0 {
+			left = append(left, ui.Warn.Render(fmt.Sprintf("%d note(s)", len(s.Notes))))
+		}
+		right = "q back · / search · [ ] hunks · tab file · d diff · v select · c note · s send"
 	default:
 		if s := m.current(); s != nil {
 			if s.Status == agent.Exited {
