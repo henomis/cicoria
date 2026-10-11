@@ -404,6 +404,33 @@ func TestAnimations(t *testing.T) {
 	}
 }
 
+// A side that does not fit next to the one on screen stays hidden, and
+// leaves the other where it is.
+func TestNarrowTerminalKeepsTheSideOnScreen(t *testing.T) {
+	w := newWorkspace(t)
+	path := filepath.Join(filepath.Dir(w.dir), "config.toml")
+	config, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append([]byte("left_panel = false\n"), config...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 70 columns have room for the agent and one side, not both.
+	w.launch(70, 20)
+	w.see("agent ready", "Changes")
+	w.prefix('s')
+	w.see("too narrow", "Changes")
+	if strings.Contains(w.tm.String(), "Sessions") {
+		t.Errorf("the left panels are on screen:\n%s", w.tm.String())
+	}
+	// The agent still has the keys, and its size.
+	w.line("size")
+	w.see("size 17 40")
+	w.quit()
+}
+
 // TestRealAgent embeds the real Claude Code and checks that its hooks reach
 // cicoria. It is a manual check, since it needs a logged-in Claude Code and a
 // folder it already trusts: set CICORIA_E2E_REAL to that folder. No prompt is

@@ -116,9 +116,14 @@ func (m *Model) setFocus(f focus) tea.Cmd {
 		hide, shown = &m.hideRight, func() bool { return m.layout().right }
 	}
 	if !shown() {
+		before := *hide
 		*hide = false
 		m.resize()
 		if !shown() {
+			// Asking for it took the room of the other side: leave things
+			// as they were.
+			*hide = before
+			m.resize()
 			m.say("the terminal is too narrow for the side panels")
 			return nil
 		}
