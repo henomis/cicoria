@@ -60,6 +60,9 @@ type Update struct {
 	File string
 	// ContextTokens is the size of the agent's context, if known.
 	ContextTokens int
+	// InputTokens and OutputTokens are what the model read and wrote over
+	// the whole conversation, if known.
+	InputTokens, OutputTokens int
 }
 
 // Adapter knows one kind of agent.

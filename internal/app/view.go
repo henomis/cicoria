@@ -368,6 +368,17 @@ func (m *Model) renderHelp() []string {
 	return ui.Box("Help", lines, m.width, max(m.height-1, 2), true)
 }
 
+// tokens writes a number of tokens in a few characters.
+func tokens(n int) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprint(n)
+	case n < 999_500:
+		return fmt.Sprintf("%dk", (n+500)/1000)
+	}
+	return fmt.Sprintf("%.1fM", float64(n)/1e6)
+}
+
 // renderStatus draws the bottom line.
 func (m *Model) renderStatus() string {
 	switch {
@@ -411,7 +422,10 @@ func (m *Model) renderStatus() string {
 				right = fmt.Sprintf("queue %d%s · ", n, map[bool]string{true: " paused"}[s.Paused])
 			}
 			if s.ContextTokens > 0 {
-				right += fmt.Sprintf("ctx %dk · ", (s.ContextTokens+500)/1000)
+				right += fmt.Sprintf("ctx %s · ", tokens(s.ContextTokens))
+			}
+			if s.InputTokens > 0 || s.OutputTokens > 0 {
+				right += fmt.Sprintf("in %s · out %s · ", tokens(s.InputTokens), tokens(s.OutputTokens))
 			}
 		}
 		right += m.cfg.Prefix + " ? help"

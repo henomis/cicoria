@@ -17,6 +17,9 @@ import (
 // that report what the agent is doing.
 type Claude struct {
 	argv []string
+	// tallies holds the token count of each transcript by its path, so that
+	// only what is new has to be read. MapEvent is its only user.
+	tallies map[string]*tally
 }
 
 // NewClaude returns the Claude Code adapter. argv is the command line to
@@ -112,7 +115,9 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 
 	switch h.Event {
 	case "SessionStart":
-		return Update{Status: Idle, HasStatus: true}, true
+		// A conversation that is resumed has a count already.
+		t := c.count(h.TranscriptPath)
+		return Update{Status: Idle, HasStatus: true, ContextTokens: t.context, InputTokens: t.in, OutputTokens: t.out}, true
 	case "UserPromptSubmit", "PreToolUse":
 		return Update{Status: Working, HasStatus: true}, true
 	case "PostToolUse":
@@ -129,51 +134,98 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 		}
 		return Update{Status: NeedsInput, HasStatus: true}, true
 	case "Stop":
+		t := c.count(h.TranscriptPath)
 		return Update{
 			Status:        Idle,
 			HasStatus:     true,
 			TurnEnded:     true,
-			ContextTokens: claudeContextTokens(h.TranscriptPath),
+			ContextTokens: t.context,
+			InputTokens:   t.in,
+			OutputTokens:  t.out,
 		}, true
 	}
 	return Update{}, false
 }
 
-// claudeContextTokens reads the size of the context from the last model
-// reply recorded in a transcript. It returns 0 when it cannot tell.
-func claudeContextTokens(path string) int {
+// claudeUsage is what one model reply cost, as a transcript records it.
+type claudeUsage struct {
+	Input         int `json:"input_tokens"`
+	CacheCreation int `json:"cache_creation_input_tokens"`
+	CacheRead     int `json:"cache_read_input_tokens"`
+	Output        int `json:"output_tokens"`
+}
+
+func (u claudeUsage) in() int { return u.Input + u.CacheCreation + u.CacheRead }
+
+// tally is the token count of a transcript, as far as it has been read.
+type tally struct {
+	// offset is where reading goes on from.
+	offset int64
+	// replies holds the cost of each model reply by its ID. A transcript has
+	// one line for every part of a reply, each with the cost of the whole.
+	replies map[string]claudeUsage
+	// in and out are the tokens read and written by the model over the whole
+	// conversation; context is the size of the context at the last reply.
+	in, out, context int
+}
+
+// read counts what was added to the transcript since the last time. A
+// transcript that cannot be read leaves the count as it was.
+func (t *tally) read(path string) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0
+		return
 	}
 	defer func() { _ = f.Close() }()
 
-	// The last reply is near the end; there is no need to read it all.
-	const tail = 256 << 10
-	if st, err := f.Stat(); err == nil && st.Size() > tail {
-		_, _ = f.Seek(-tail, io.SeekEnd)
+	// A transcript that got shorter is another one: count it from the start.
+	if st, err := f.Stat(); err != nil || st.Size() < t.offset {
+		*t = tally{}
+	}
+	if t.replies == nil {
+		t.replies = map[string]claudeUsage{}
+	}
+	if _, err := f.Seek(t.offset, io.SeekStart); err != nil {
+		return
 	}
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return 0
+		return
 	}
+	// A line still being written is left for the next time.
+	data = data[:bytes.LastIndexByte(data, '\n')+1]
+	t.offset += int64(len(data))
 
-	lines := bytes.Split(data, []byte("\n"))
-	for i := len(lines) - 1; i >= 0; i-- {
+	for _, line := range bytes.Split(data, []byte("\n")) {
 		var entry struct {
 			Message struct {
-				Usage *struct {
-					Input         int `json:"input_tokens"`
-					CacheCreation int `json:"cache_creation_input_tokens"`
-					CacheRead     int `json:"cache_read_input_tokens"`
-				} `json:"usage"`
+				ID    string       `json:"id"`
+				Usage *claudeUsage `json:"usage"`
 			} `json:"message"`
 		}
-		if json.Unmarshal(lines[i], &entry) != nil || entry.Message.Usage == nil {
+		if json.Unmarshal(line, &entry) != nil || entry.Message.Usage == nil {
 			continue
 		}
-		u := entry.Message.Usage
-		return u.Input + u.CacheCreation + u.CacheRead
+		u, id := *entry.Message.Usage, entry.Message.ID
+		if id != "" {
+			before := t.replies[id]
+			t.in, t.out = t.in-before.in(), t.out-before.Output
+			t.replies[id] = u
+		}
+		t.in, t.out, t.context = t.in+u.in(), t.out+u.Output, u.in()
 	}
-	return 0
+}
+
+// count returns the token count of a transcript, read as far as it goes.
+func (c *Claude) count(path string) *tally {
+	if c.tallies == nil {
+		c.tallies = map[string]*tally{}
+	}
+	t := c.tallies[path]
+	if t == nil {
+		t = &tally{}
+		c.tallies[path] = t
+	}
+	t.read(path)
+	return t
 }
