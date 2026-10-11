@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -88,11 +89,21 @@ func (m *Model) panelKey(key string) bool {
 	case "esc", "q":
 		m.focus = focusAgent
 	case "tab":
-		next := map[focus]focus{focusSessions: focusFiles, focusFiles: focusChanges, focusChanges: focusQueue, focusQueue: focusSessions}[m.focus]
-		if s := m.current(); next == focusQueue && (s == nil || len(s.Queue) == 0) {
-			next = focusSessions
+		// Only the panels on screen take part in the round.
+		l := m.layout()
+		var round []focus
+		if l.left {
+			round = append(round, focusSessions, focusFiles)
 		}
-		m.focus = next
+		if l.right {
+			round = append(round, focusChanges)
+			if l.queue.h > 0 {
+				round = append(round, focusQueue)
+			}
+		}
+		if i := slices.Index(round, m.focus); i >= 0 {
+			m.focus = round[(i+1)%len(round)]
+		}
 	default:
 		return false
 	}
@@ -217,13 +228,13 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		m.forwardMouse(msg, l.agent)
 
-	case l.panels && l.sessions.contains(x, y):
+	case l.sessions.contains(x, y):
 		if row := y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) {
 			m.switchTo(row)
 			m.focus = focusSessions
 		}
 
-	case l.panels && l.files.contains(x, y):
+	case l.files.contains(x, y):
 		if isClick {
 			m.focus = focusFiles
 			tree := m.tree()
@@ -233,7 +244,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		m.tree().Move(wheel)
 
-	case l.panels && l.changes.contains(x, y):
+	case l.changes.contains(x, y):
 		if isClick {
 			m.focus = focusChanges
 			if row := m.changeTop + y - l.changes.y - 1; row >= 0 && row < len(m.changes) && y > l.changes.y {
@@ -242,7 +253,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		m.changeCursor = max(min(m.changeCursor+wheel, len(m.changes)-1), 0)
 
-	case l.panels && l.queue.contains(x, y):
+	case l.queue.contains(x, y):
 		if s := m.current(); isClick && s != nil {
 			m.focus = focusQueue
 			if row := y - l.queue.y - 1; row >= 0 && row < len(s.Queue) {

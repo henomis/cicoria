@@ -22,6 +22,11 @@ type Config struct {
 	DefaultAgent string `toml:"default_agent"`
 	// Notify enables desktop notifications when a session needs input.
 	Notify bool `toml:"notify"`
+	// LeftPanel and RightPanel say whether cicoria opens with the panels on
+	// that side shown: sessions and files on the left, changes and the queue
+	// on the right.
+	LeftPanel  bool `toml:"left_panel"`
+	RightPanel bool `toml:"right_panel"`
 	// Agents are command lines to offer as agents, by name. An entry named
 	// "claude" changes how Claude Code is started.
 	Agents map[string]AgentConfig `toml:"agents"`
@@ -34,7 +39,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true}
 }
 
 // Path returns where the config file is looked for.

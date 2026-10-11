@@ -20,7 +20,7 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Prefix != "ctrl+a" || cfg.DefaultAgent != "claude" || !cfg.Notify {
+	if cfg.Prefix != "ctrl+a" || cfg.DefaultAgent != "claude" || !cfg.Notify || !cfg.LeftPanel || !cfg.RightPanel {
 		t.Errorf("defaults = %+v", cfg)
 	}
 }
@@ -29,6 +29,7 @@ func TestLoadAndAdapters(t *testing.T) {
 	cfg, err := Load(write(t, `
 prefix = "ctrl+b"
 notify = false
+right_panel = false
 
 [agents.copilot]
 command = ["copilot", "--banner"]
@@ -39,7 +40,7 @@ command = ["aider"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Prefix != "ctrl+b" || cfg.Notify || cfg.DefaultAgent != "claude" {
+	if cfg.Prefix != "ctrl+b" || cfg.Notify || !cfg.LeftPanel || cfg.RightPanel || cfg.DefaultAgent != "claude" {
 		t.Errorf("cfg = %+v", cfg)
 	}
 

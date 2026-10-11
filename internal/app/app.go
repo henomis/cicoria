@@ -72,7 +72,8 @@ type Model struct {
 	prefix        bool
 	focus         focus
 	mode          mode
-	hidePanels    bool
+	hideLeft      bool
+	hideRight     bool
 	ticks         int
 
 	// Left and right panels. The files and changes are those of the project
@@ -156,13 +157,15 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 	self, _ := os.Executable()
 
 	m := &Model{
-		cfg:      cfg,
-		dir:      dir,
-		self:     self,
-		adapters: cfg.Adapters(),
-		ipc:      srv,
-		dark:     dark,
-		trees:    map[string]*ui.Tree{},
+		cfg:       cfg,
+		hideLeft:  !cfg.LeftPanel,
+		hideRight: !cfg.RightPanel,
+		dir:       dir,
+		self:      self,
+		adapters:  cfg.Adapters(),
+		ipc:       srv,
+		dark:      dark,
+		trees:     map[string]*ui.Tree{},
 	}
 
 	st, err := session.LoadState(session.StatePath(dir))

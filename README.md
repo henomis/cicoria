@@ -46,6 +46,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a command:
 | `d` | Review changes (full-screen diff) |
 | `o` | Open a file by name |
 | `b` | Show or hide the side panels |
+| `[` `]` | Show or hide the left, right panels |
 | `space` | Command palette |
 | `?` | Help |
 | `q` | Quit |
@@ -73,6 +74,8 @@ Sessions, with their directories, are remembered for the directory cicoria was o
 prefix = "ctrl+a"
 default_agent = "claude"
 notify = true            # desktop notification when a background session needs input
+left_panel = true        # false opens with sessions and files hidden; ctrl+a [ shows them
+right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
 
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.

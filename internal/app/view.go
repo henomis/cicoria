@@ -22,8 +22,9 @@ func (r rect) contains(x, y int) bool {
 
 // layout is where everything goes for the current window size.
 type layout struct {
-	// panels says whether the side panels are shown.
-	panels bool
+	// left and right say whether the panels on that side are shown; panels
+	// whether any are.
+	left, right, panels bool
 	// body is everything above the status bar.
 	body rect
 	// sessions, files, changes and queue are the side panels, borders
@@ -43,19 +44,29 @@ func (m *Model) layout() layout {
 	if m.width < 120 {
 		left, right = 24, 28
 	}
-	if m.hidePanels || m.width < left+right+30 || l.body.h < 8 {
+	if m.hideLeft {
+		left = 0
+	}
+	if m.hideRight {
+		right = 0
+	}
+	if left+right == 0 || m.width < left+right+30 || l.body.h < 8 {
 		return l
 	}
-	l.panels = true
+	l.left, l.right, l.panels = left > 0, right > 0, true
 
-	sessionsH := max(min(len(m.sessions)+2, l.body.h/2), 3)
-	l.sessions = rect{0, 0, left, sessionsH}
-	l.files = rect{0, sessionsH, left, l.body.h - sessionsH}
-	l.changes = rect{m.width - right, 0, right, l.body.h}
-	if s := m.current(); s != nil && len(s.Queue) > 0 {
-		queueH := max(min(len(s.Queue)+2, l.body.h/3), 3)
-		l.changes.h -= queueH
-		l.queue = rect{l.changes.x, l.changes.h, right, queueH}
+	if l.left {
+		sessionsH := max(min(len(m.sessions)+2, l.body.h/2), 3)
+		l.sessions = rect{0, 0, left, sessionsH}
+		l.files = rect{0, sessionsH, left, l.body.h - sessionsH}
+	}
+	if l.right {
+		l.changes = rect{m.width - right, 0, right, l.body.h}
+		if s := m.current(); s != nil && len(s.Queue) > 0 {
+			queueH := max(min(len(s.Queue)+2, l.body.h/3), 3)
+			l.changes.h -= queueH
+			l.queue = rect{l.changes.x, l.changes.h, right, queueH}
+		}
 	}
 	l.agentBox = rect{left, 0, m.width - left - right, l.body.h}
 	l.agent = rect{left + 1, 1, l.agentBox.w - 2, l.agentBox.h - 2}
@@ -109,12 +120,19 @@ func (m *Model) renderWorkspace(l layout) []string {
 	if !l.panels {
 		return agentRows
 	}
-	left := append(m.renderSessions(l.sessions), m.renderFiles(l.files)...)
-	right := m.renderChanges(l.changes)
-	if l.queue.h > 0 {
-		right = append(right, m.renderQueue(l.queue)...)
+	rows := agentRows
+	if l.left {
+		left := append(m.renderSessions(l.sessions), m.renderFiles(l.files)...)
+		rows = ui.JoinColumns(left, rows)
 	}
-	return ui.JoinColumns(left, agentRows, right)
+	if l.right {
+		right := m.renderChanges(l.changes)
+		if l.queue.h > 0 {
+			right = append(right, m.renderQueue(l.queue)...)
+		}
+		rows = ui.JoinColumns(rows, right)
+	}
+	return rows
 }
 
 func (m *Model) renderAgent(l layout) []string {

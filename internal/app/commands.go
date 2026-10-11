@@ -40,6 +40,8 @@ func init() {
 		{"d", "Review changes", (*Model).review},
 		{"o", "Open file…", (*Model).askFile},
 		{"b", "Show or hide side panels", (*Model).togglePanels},
+		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }},
+		{"]", "Show or hide the right panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideRight) }},
 		{"space", "Command palette", (*Model).askCommand},
 		{"?", "Help", func(m *Model) tea.Cmd { m.mode = modeHelp; return nil }},
 		{"q", "Quit", (*Model).askQuit},
@@ -108,10 +110,15 @@ func (m *Model) nextAttention() tea.Cmd {
 }
 
 func (m *Model) setFocus(f focus) tea.Cmd {
-	if !m.layout().panels {
-		m.hidePanels = false
+	// A panel that is asked for comes back, with its side.
+	hide, shown := &m.hideLeft, func() bool { return m.layout().left }
+	if f == focusChanges || f == focusQueue {
+		hide, shown = &m.hideRight, func() bool { return m.layout().right }
+	}
+	if !shown() {
+		*hide = false
 		m.resize()
-		if !m.layout().panels {
+		if !shown() {
 			m.say("the terminal is too narrow for the side panels")
 			return nil
 		}
@@ -128,7 +135,17 @@ func (m *Model) setFocus(f focus) tea.Cmd {
 }
 
 func (m *Model) togglePanels() tea.Cmd {
-	m.hidePanels = !m.hidePanels
+	// With only one side on screen, both go.
+	hide := !m.hideLeft || !m.hideRight
+	m.hideLeft, m.hideRight = hide, hide
+	m.focus = focusAgent
+	m.resize()
+	return nil
+}
+
+// toggleSide shows or hides the panels of one side.
+func (m *Model) toggleSide(hide *bool) tea.Cmd {
+	*hide = !*hide
 	m.focus = focusAgent
 	m.resize()
 	return nil

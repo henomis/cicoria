@@ -332,6 +332,34 @@ func TestNarrowTerminalHidesPanels(t *testing.T) {
 	w.quit()
 }
 
+func TestHidePanelsBySide(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("agent ready", "Sessions", "Changes")
+
+	w.prefix('[')
+	w.gone("Sessions")
+	w.see("Changes")
+	// The agent gets the room of the left panels: 140 less 36 and the border.
+	w.line("size")
+	w.see("size 37 102")
+
+	w.prefix(']')
+	w.gone("Changes")
+	// Asking for a panel brings its side back, and only that one.
+	w.prefix('g')
+	w.see("Changes")
+	if strings.Contains(w.tm.String(), "Sessions") {
+		t.Errorf("left panels came back with the right ones:\n%s", w.tm.String())
+	}
+	// With one side on screen, b hides it; again, and both are back.
+	w.prefix('b')
+	w.gone("Changes")
+	w.prefix('b')
+	w.see("Sessions", "Changes")
+	w.quit()
+}
+
 // TestRealAgent embeds the real Claude Code and checks that its hooks reach
 // cicoria. It is a manual check, since it needs a logged-in Claude Code and a
 // folder it already trusts: set CICORIA_E2E_REAL to that folder. No prompt is
