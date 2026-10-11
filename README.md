@@ -57,6 +57,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `1`-`9`, `n`, `p` | Go to a session |
 | `a` | Go to the next session that needs input |
 | `,` `r` `x` | Rename, restart, close the session |
+| `w` | Open another workspace in place of this one |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `m` | Queue a message for the agent |
 | `u` | Focus the queue panel |
@@ -148,6 +149,8 @@ With `animations` on, a second of ASCII art plays in the agent pane when cicoria
 ## What is remembered
 
 Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes; Claude Code sessions continue their conversation when reopened.
+
+A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
 
 ## Develop
 

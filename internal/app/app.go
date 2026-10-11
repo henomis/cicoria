@@ -29,6 +29,8 @@ const (
 	refreshTicks = 4
 	// messageFor is how long a status bar message stays.
 	messageFor = 4 * time.Second
+	// hintFor is how long the message about other workspaces stays.
+	hintFor = 15 * time.Second
 )
 
 // focus is the part of the workspace that receives keys.
@@ -62,6 +64,10 @@ type Model struct {
 	adapters []agent.Adapter
 	ipc      *ipc.Server
 	dark     bool
+	// unlock gives up the mark that says this workspace is in use, and next
+	// is the directory of the workspace to open once this one is closed.
+	unlock func()
+	next   string
 
 	sessions []*session.Session
 	active   int
@@ -190,11 +196,14 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 		ipc:         srv,
 		dark:        dark,
 		trees:       map[string]*ui.Tree{},
+		unlock:      session.Lock(dir),
 	}
 
 	st, err := session.LoadState(session.StatePath(dir))
 	if err != nil {
 		m.say("could not read saved sessions: " + err.Error())
+	} else if len(st.Sessions) == 0 {
+		m.hintWorkspaces()
 	}
 	for _, saved := range st.Sessions {
 		if a := m.adapter(saved.Agent); a != nil {
@@ -214,6 +223,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 	if len(m.sessions) == 0 {
 		a := m.adapter(cfg.DefaultAgent)
 		if a == nil {
+			m.unlock()
 			_ = srv.Close()
 			return nil, fmt.Errorf("default agent %q is not configured", cfg.DefaultAgent)
 		}
@@ -301,7 +311,7 @@ func (m *Model) say(msg string) {
 
 // save remembers the sessions for the next run.
 func (m *Model) save() {
-	st := session.State{Active: m.active}
+	st := session.State{Dir: m.dir, Active: m.active}
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
@@ -319,8 +329,13 @@ func (m *Model) Close() error {
 	for _, s := range m.sessions {
 		s.Close()
 	}
+	m.unlock()
 	return m.ipc.Close()
 }
+
+// Next returns the directory of the workspace the user asked to open in
+// place of this one, if any.
+func (m *Model) Next() string { return m.next }
 
 // Init implements tea.Model.
 func (m *Model) Init() tea.Cmd {

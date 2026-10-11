@@ -76,6 +76,7 @@ cicoria -config ./my.toml ~/src/app</pre>
           <tr><td>,</td><td>Rename the session</td></tr>
           <tr><td>r</td><td>Restart a session whose agent has exited</td></tr>
           <tr><td>x</td><td>Close the session</td></tr>
+          <tr><td>w</td><td>Open another workspace in place of this one</td></tr>
           <tr><td>s, f, g</td><td>Focus the sessions, files, changes panel</td></tr>
           <tr><td>m</td><td>Queue a message for the agent</td></tr>
           <tr><td>u</td><td>Focus the queue panel</td></tr>
@@ -252,6 +253,7 @@ command = ["claude", "--model", "opus"]</pre>
       <h2>What is remembered</h2>
       <p>For each directory you open cicoria on, it keeps the sessions with their names, directories, starting commits, notes and queues. They are stored under <code>$XDG_STATE_HOME/cicoria</code>, or <code>~/.local/state/cicoria</code>.</p>
       <p>Agents stop when cicoria closes. The next time, every session is started again; Claude Code picks up its conversation. Queues come back paused, so that opening cicoria never sends a message by itself.</p>
+      <p>A session belongs to the workspace it was created in, wherever it works: one created from <code>~/src/app</code> to work in <code>~/src/lib</code> comes back when cicoria is opened on <code>~/src/app</code>, not on <code>~/src/lib</code>. <kbd>ctrl+a</kbd> <kbd>w</kbd> lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.</p>
     </section>
 
     <section id="develop">

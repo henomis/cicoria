@@ -354,6 +354,51 @@ func TestWorkspace(t *testing.T) {
 	w.quit()
 }
 
+// Sessions belong to the directory cicoria was opened on. Opened on another
+// one, it says where they are and goes there when asked.
+func TestOtherWorkspaces(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("agent ready", "claude-1 · claude · idle")
+	w.prefix('w')
+	w.see("no other workspace is saved")
+
+	// A session of this workspace that works in another directory.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("../other")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: shell-1")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("scratch")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("scratch · shell", "Files · other")
+	w.quit()
+
+	// Opened on that directory, cicoria has no session of its own to show,
+	// and points at the one that works there.
+	w.dir = filepath.Join(filepath.Dir(w.dir), "other")
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle", "scratch works here from the workspace")
+	w.prefix('w')
+	w.see("workspace ›", "project", "scratch works here")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("scratch · shell", "claude-1", "Files · other")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle", "Files · project", "main.go")
+
+	// The way back is there too.
+	w.prefix('w')
+	w.see("workspace ›", "other", "1 session(s)")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("workspace ›")
+	w.quit()
+}
+
 // Unless the settings say otherwise, the changes are what is not committed,
 // and what a session did since it started is one key away.
 func TestChangesAreUncommittedByDefault(t *testing.T) {

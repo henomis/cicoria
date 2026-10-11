@@ -35,6 +35,7 @@ func init() {
 		{",", "Rename session", (*Model).askRename},
 		{"r", "Restart session", (*Model).restart},
 		{"x", "Close session", (*Model).askClose},
+		{"w", "Open another workspace…", (*Model).askWorkspace},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }},
 		{"g", "Focus changes", func(m *Model) tea.Cmd { return m.setFocus(focusChanges) }},
@@ -273,6 +274,8 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askDir(v)
 	case sendNotes:
 		return m.sendReview(v.queue)
+	case workspace:
+		return m.askOpen(v)
 	case string:
 		m.tree().Reveal(v)
 		m.openFile(v)
@@ -358,6 +361,12 @@ func (m *Model) closeSession(i int) tea.Cmd {
 }
 
 func (m *Model) askQuit() tea.Cmd {
+	return m.askLeave("quit?", "")
+}
+
+// askLeave closes the workspace, asking first when that stops agents at
+// work. With next, the workspace of that directory is opened in its place.
+func (m *Model) askLeave(question, next string) tea.Cmd {
 	// Only agents that say so themselves count: a status guessed from
 	// terminal output would raise the question for a shell printing a prompt.
 	working := 0
@@ -367,12 +376,15 @@ func (m *Model) askQuit() tea.Cmd {
 		}
 	}
 	// Any key cuts the goodbye short.
-	quit := func() tea.Cmd { return m.play(ui.Wilt, "ciao", tea.Quit) }
+	quit := func() tea.Cmd {
+		m.next = next
+		return m.play(ui.Wilt, "ciao", tea.Quit)
+	}
 	if working == 0 {
 		return quit()
 	}
 	m.confirm = &confirm{
-		question: fmt.Sprintf("%d session(s) still working will be stopped. quit?", working),
+		question: fmt.Sprintf("%d session(s) still working will be stopped. %s", working, question),
 		yes:      quit,
 	}
 	return nil
