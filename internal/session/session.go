@@ -21,8 +21,10 @@ const (
 
 // Session is one agent and its terminal.
 type Session struct {
-	ID      string
-	Name    string
+	ID   string
+	Name string
+	// Dir is the directory the agent works in.
+	Dir     string
 	Adapter agent.Adapter
 	// Term is the agent's terminal. It is nil until Start succeeds.
 	Term *term.Terminal
@@ -36,16 +38,22 @@ type Session struct {
 	// ContextTokens is the size of the agent's context, when it reports it.
 	ContextTokens int
 	// Touched records when the agent last changed each file, by path relative
-	// to the project.
+	// to Dir.
 	Touched map[string]time.Time
+
+	// Queue holds messages waiting to be sent to the agent, one per turn.
+	Queue []string
+	// Paused holds the queue back.
+	Paused bool
 
 	lastInput  time.Time
 	lastOutput time.Time
 }
 
-// New returns a session for the given agent that has not been started.
-func New(id, name string, a agent.Adapter) *Session {
-	return &Session{ID: id, Name: name, Adapter: a, Touched: map[string]time.Time{}}
+// New returns a session for the given agent, working in dir, that has not
+// been started.
+func New(id, name, dir string, a agent.Adapter) *Session {
+	return &Session{ID: id, Name: name, Dir: dir, Adapter: a, Touched: map[string]time.Time{}}
 }
 
 // NewID returns a random UUID.
@@ -64,7 +72,7 @@ func (s *Session) Start(o agent.LaunchOpts, width, height int) error {
 		s.Term = nil
 	}
 
-	o.SessionID = s.ID
+	o.SessionID, o.Dir = s.ID, s.Dir
 	t, err := term.Start(s.Adapter.Command(o), width, height)
 	s.Err = err
 	if err != nil {
@@ -89,9 +97,9 @@ func (s *Session) setStatus(st agent.Status, active bool) {
 	s.Status = st
 }
 
-// Apply records what the agent reported. dir is the project directory and
-// active says whether the session is the one on screen.
-func (s *Session) Apply(u agent.Update, dir string, active bool, now time.Time) {
+// Apply records what the agent reported. active says whether the session is
+// the one on screen.
+func (s *Session) Apply(u agent.Update, active bool, now time.Time) {
 	if u.HasStatus && s.Status != agent.Exited {
 		s.setStatus(u.Status, active)
 	}
@@ -99,7 +107,7 @@ func (s *Session) Apply(u agent.Update, dir string, active bool, now time.Time) 
 		s.ContextTokens = u.ContextTokens
 	}
 	if u.File != "" {
-		if rel, err := filepath.Rel(dir, u.File); err == nil && filepath.IsLocal(rel) {
+		if rel, err := filepath.Rel(s.Dir, u.File); err == nil && filepath.IsLocal(rel) {
 			s.Touched[rel] = now
 		}
 	}
@@ -145,6 +153,57 @@ func (s *Session) Tick(active bool, now time.Time) {
 	case agent.Starting:
 		s.Status = agent.Idle
 	}
+}
+
+// Enqueue adds a message at the end of the queue.
+func (s *Session) Enqueue(text string) {
+	s.Queue = append(s.Queue, text)
+}
+
+// Dequeue takes the first message off the queue.
+func (s *Session) Dequeue() (string, bool) {
+	if len(s.Queue) == 0 {
+		return "", false
+	}
+	text := s.Queue[0]
+	s.Queue = s.Queue[1:]
+	return text, true
+}
+
+// RemoveQueued drops message i from the queue.
+func (s *Session) RemoveQueued(i int) {
+	if i >= 0 && i < len(s.Queue) {
+		s.Queue = append(s.Queue[:i:i], s.Queue[i+1:]...)
+	}
+}
+
+// MoveQueued swaps message i with its neighbour delta places away and
+// returns where the message ended up.
+func (s *Session) MoveQueued(i, delta int) int {
+	j := i + delta
+	if i < 0 || i >= len(s.Queue) || j < 0 || j >= len(s.Queue) {
+		return i
+	}
+	s.Queue[i], s.Queue[j] = s.Queue[j], s.Queue[i]
+	return j
+}
+
+// CanSend reports whether the agent is there to receive a message.
+func (s *Session) CanSend() bool {
+	return s.Term != nil && s.Status != agent.Exited && len(s.Queue) > 0
+}
+
+// CanAutoSend reports whether the next queued message may go out without
+// the user asking: only to an agent that says itself that it is idle.
+func (s *Session) CanAutoSend() bool {
+	return s.CanSend() && !s.Paused && s.Adapter.ReportsStatus() && s.Status == agent.Idle
+}
+
+// Sent records that a message was just handed to the agent, which is now
+// taken to be working on it.
+func (s *Session) Sent(now time.Time) {
+	s.lastOutput = now
+	s.Status = agent.Working
 }
 
 // Exit records that the agent's process ended.

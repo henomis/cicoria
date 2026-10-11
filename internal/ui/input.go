@@ -28,6 +28,18 @@ func (in *Input) Key(k tea.KeyPressMsg) bool {
 	case "ctrl+u":
 		in.value = nil
 		return true
+	case "ctrl+w":
+		// Delete back to the start of the last word or path component.
+		n := len(in.value)
+		for n > 0 && (in.value[n-1] == '/' || in.value[n-1] == ' ') {
+			n--
+		}
+		for n > 0 && in.value[n-1] != '/' && in.value[n-1] != ' ' {
+			n--
+		}
+		changed := n != len(in.value)
+		in.value = in.value[:n]
+		return changed
 	}
 	if k.Text != "" && k.Mod&^tea.ModShift == 0 {
 		in.value = append(in.value, []rune(k.Text)...)

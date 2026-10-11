@@ -28,6 +28,7 @@ while read -r cmd arg; do
     edit) echo "hello from the agent" > "$arg"
           hook "{\"hook_event_name\":\"PostToolUse\",\"tool_input\":{\"file_path\":\"$PWD/$arg\"}}" ;;
     size) echo "size $(stty size)" ;;
+    pwd)  echo "in $PWD" ;;
     *)    echo "got $cmd" ;;
   esac
 done
@@ -69,6 +70,9 @@ func newWorkspace(t *testing.T) *workspace {
 	must(os.MkdirAll(filepath.Join(dir, "api"), 0o755))
 	must(os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644))
 	must(os.WriteFile(filepath.Join(dir, "api", "auth.go"), []byte("package api\n"), 0o644))
+	// A second project, which is not a git repository.
+	must(os.MkdirAll(filepath.Join(home, "other"), 0o755))
+	must(os.WriteFile(filepath.Join(home, "other", "elsewhere.txt"), []byte("hi\n"), 0o644))
 	for _, args := range [][]string{
 		{"init", "-q", "-b", "main"},
 		{"add", "-A"},
@@ -184,7 +188,7 @@ func TestWorkspace(t *testing.T) {
 	w.launch(140, 40)
 
 	// The agent runs in the centre pane, between the side panels.
-	w.see("Sessions", "Files", "working tree clean", "agent ready", "claude-1 · claude · idle")
+	w.see("Sessions", "Files · project", "working tree clean", "agent ready", "claude-1 · claude · idle")
 	w.see("▸ api/", "main.go")
 	w.line("ping")
 	w.see("got ping")
@@ -239,6 +243,8 @@ func TestWorkspace(t *testing.T) {
 	w.prefix('c')
 	w.see("agent ›")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude-2 · claude · idle")
 	w.line("second")
 	w.see("got second")
@@ -266,12 +272,51 @@ func TestWorkspace(t *testing.T) {
 	w.launch(140, 40)
 	w.see("claude-1", "claude-2", "claude-2 · claude · idle")
 
+	// A session can work in another project: the directory is asked for,
+	// with completion, and the side panels follow the session on screen.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("../oth")
+	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	w.see("shell in directory: ../other/")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell-1 · shell", "Files · other", "elsewhere.txt", "not a git repository")
+	w.gone("main.go")
+	w.line("pwd")
+	w.see(filepath.Join(filepath.Dir(w.dir), "other"))
+	w.prefix('1')
+	w.see("Files · project", "main.go", "Changes (1)")
+	w.gone("elsewhere.txt")
+
+	// A directory that does not exist is refused.
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.typeText("/nope")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("does not exist")
+
+	// The directory of each session is remembered too.
+	w.quit()
+	w.launch(140, 40)
+	w.see("claude-1", "claude-2", "shell-1")
+	w.prefix('3')
+	w.see("shell-1 · shell", "Files · other", "elsewhere.txt")
+	w.prefix('2')
+	w.see("claude-2 · claude · idle", "Files · project")
+
 	// Closing a session asks first.
 	w.prefix('x')
 	w.see("close claude-2 and stop its agent?")
 	w.typeText("y")
 	w.gone("claude-2")
-	w.see("claude-1 · claude · idle")
+	// The session that takes its place comes on screen, with its project.
+	w.see("shell-1 · shell", "Files · other")
 	w.quit()
 }
 
@@ -312,4 +357,136 @@ func TestRealAgent(t *testing.T) {
 	w.see("claude-1 · claude · idle", "Claude Code")
 	t.Logf("screen:\n%s", tm.String())
 	w.quit()
+}
+
+// queue adds messages to the queue of the session on screen.
+func (w *workspace) queue(messages ...string) {
+	w.t.Helper()
+	w.prefix('m')
+	for _, msg := range messages {
+		w.see("queue for ")
+		w.typeText(msg)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	}
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("queue for ")
+}
+
+func TestQueue(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	// To an idle agent the message goes at once. It counts as working from
+	// then on, until it says that its turn is over.
+	w.queue("one")
+	w.see("got one", "claude-1 · claude · working")
+	w.gone("Queue (")
+
+	// While the agent works, messages wait; each end of turn sends one.
+	w.queue("two", "three")
+	w.see("Queue (2)", "▸ two", "three", "⋯2", "queue 2")
+	if strings.Contains(w.tm.String(), "got two") {
+		t.Fatal("a message was sent while the agent was working")
+	}
+	w.line("stop")
+	w.see("got two", "Queue (1)", "▸ three")
+	if strings.Contains(w.tm.String(), "got three") {
+		t.Fatal("two messages were sent for one end of turn")
+	}
+	w.line("stop")
+	w.see("got three")
+	w.gone("Queue (")
+
+	// Nothing is sent to an agent that waits for a permission.
+	w.queue("four")
+	w.line("ask")
+	w.see("claude-1 · claude · needs input", "Queue (1)")
+	if strings.Contains(w.tm.String(), "got four") {
+		t.Fatal("a message was sent to an agent that needs input")
+	}
+	w.line("stop")
+	w.see("got four")
+
+	// A paused queue holds its messages through the end of a turn, and
+	// sends when it is released.
+	w.queue("five")
+	w.prefix('u')
+	w.typeText("p")
+	w.see("Queue (1) · paused", "queue 1 paused")
+	w.typeText("q") // leaves the panel
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	if strings.Contains(w.tm.String(), "got five") {
+		t.Fatal("a paused queue sent a message")
+	}
+	w.prefix('u')
+	w.typeText("p")
+	w.see("got five")
+	w.gone("Queue (")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+
+	// Messages can be reordered and deleted before they go.
+	w.line("work")
+	w.see("claude-1 · claude · working")
+	w.queue("six", "seven", "eight")
+	w.see("Queue (3)", "▸ six")
+	w.prefix('u')
+	w.typeText("K") // already first: stays
+	w.typeText("J") // six goes below seven
+	w.see("▸ seven")
+	w.typeText("x") // deletes six, which the cursor followed
+	w.see("Queue (2)", "▸ seven", "eight")
+	w.gone("six")
+	w.typeText("q")
+	w.line("stop")
+	w.see("got seven")
+	w.line("stop")
+	w.see("got eight")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+
+	// An agent that does not report its status gets a message only when
+	// asked to. The message prints 42x when the shell runs it.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell-1 · shell")
+	w.queue("echo $((6*7))x")
+	w.see("Queue (1) · manual")
+	time.Sleep(2 * time.Second) // long enough for the shell to look idle
+	if strings.Contains(w.tm.String(), "42x") {
+		t.Fatal("a message was sent unasked to an agent that does not report its status")
+	}
+	w.prefix('u')
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("42x")
+	w.gone("Queue (")
+
+	// A queue left behind is restored, held back.
+	w.prefix('1')
+	w.line("work")
+	w.see("claude-1 · claude · working")
+	w.queue("later")
+	w.see("Queue (1)")
+	w.prefix('q')
+	w.see("still working")
+	w.typeText("y")
+	select {
+	case <-w.tm.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("did not quit; screen:\n%s", w.tm.String())
+	}
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle", "Queue (1) · paused", "▸ later")
+	if strings.Contains(w.tm.String(), "got later") {
+		t.Fatal("a restored queue sent a message by itself")
+	}
+	w.prefix('u')
+	w.typeText("p")
+	w.see("got later")
 }

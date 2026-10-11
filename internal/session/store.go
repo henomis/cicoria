@@ -15,15 +15,22 @@ type Saved struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Agent string `json:"agent"`
+	// Dir is the session's working directory. Sessions saved before it was
+	// recorded have none, and work in the directory cicoria was opened on.
+	Dir string `json:"dir,omitempty"`
+	// Queue and Paused are the messages waiting to be sent and whether they
+	// are held back.
+	Queue  []string `json:"queue,omitempty"`
+	Paused bool     `json:"paused,omitempty"`
 }
 
-// State is the saved workspace of one project.
+// State is a saved workspace.
 type State struct {
 	Sessions []Saved `json:"sessions"`
 	Active   int     `json:"active"`
 }
 
-// StatePath returns where the workspace of the project in dir is saved.
+// StatePath returns where the workspace opened on dir is saved.
 func StatePath(dir string) string {
 	root := os.Getenv("XDG_STATE_HOME")
 	if root == "" {

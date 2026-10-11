@@ -17,8 +17,10 @@ const maxFile = 2 << 20
 // fullView is the full-screen view of one file or of its diff.
 type fullView struct {
 	pager ui.Pager
-	path  string
-	diff  bool
+	// dir is the project the file belongs to, and path its place in it.
+	dir  string
+	path string
+	diff bool
 	// search is set while the user types a search.
 	search *ui.Input
 }
@@ -28,11 +30,11 @@ func (m *Model) viewHeight() int { return max(m.height-2, 1) }
 
 // openDiff shows the diff of a changed file on the whole screen.
 func (m *Model) openDiff(c git.Change) {
-	m.view.path, m.view.diff = c.Path, true
+	m.view.dir, m.view.path, m.view.diff = m.project(), c.Path, true
 	m.view.pager.Title = c.Path
 	m.mode = modeView
 
-	diff, err := git.Diff(m.dir, c)
+	diff, err := git.Diff(m.view.dir, c)
 	switch {
 	case err != nil:
 		m.view.pager.SetContent([]string{ui.Bad.Render(err.Error())}, nil)
@@ -45,14 +47,14 @@ func (m *Model) openDiff(c git.Change) {
 
 // openFile shows a file on the whole screen.
 func (m *Model) openFile(path string) {
-	m.view.path, m.view.diff = path, false
+	m.view.dir, m.view.path, m.view.diff = m.project(), path, false
 	m.view.pager.Title = path
 	m.mode = modeView
 	m.view.pager.SetContent(m.fileLines(path), nil)
 }
 
 func (m *Model) fileLines(path string) []string {
-	full := filepath.Join(m.dir, path)
+	full := filepath.Join(m.view.dir, path)
 	st, err := os.Stat(full)
 	if err != nil {
 		return []string{ui.Bad.Render(err.Error())}

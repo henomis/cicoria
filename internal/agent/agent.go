@@ -40,7 +40,7 @@ func (s Status) String() string {
 type LaunchOpts struct {
 	// SessionID identifies the session. It is a UUID, stable across restarts.
 	SessionID string
-	// Dir is the project directory the agent runs in.
+	// Dir is the directory the agent works in.
 	Dir string
 	// Self is the path of the cicoria binary, for agents that call it back.
 	Self string
@@ -53,6 +53,9 @@ type Update struct {
 	// Status is the new status, when HasStatus is set.
 	Status    Status
 	HasStatus bool
+	// TurnEnded says the agent finished answering and waits for the next
+	// message.
+	TurnEnded bool
 	// File is a file the agent just changed, if any.
 	File string
 	// ContextTokens is the size of the agent's context, if known.

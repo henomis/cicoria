@@ -25,7 +25,7 @@ func TestClaudeMapEvent(t *testing.T) {
 		{`{"hook_event_name":"Notification","notification_type":"permission_prompt"}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		{`{"hook_event_name":"Notification"}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		{`{"hook_event_name":"Notification","notification_type":"idle_prompt"}`, Update{Status: Idle, HasStatus: true}, true},
-		{`{"hook_event_name":"Stop"}`, Update{Status: Idle, HasStatus: true}, true},
+		{`{"hook_event_name":"Stop"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true}, true},
 		{`{"hook_event_name":"SubagentStop"}`, Update{}, false},
 		{`garbage`, Update{}, false},
 	}

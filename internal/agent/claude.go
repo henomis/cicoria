@@ -132,6 +132,7 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 		return Update{
 			Status:        Idle,
 			HasStatus:     true,
+			TurnEnded:     true,
 			ContextTokens: claudeContextTokens(h.TranscriptPath),
 		}, true
 	}

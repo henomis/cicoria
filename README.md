@@ -28,8 +28,8 @@ Requires Go 1.26+, `git`, and the agents you want to run (`claude` by default).
 ## Use
 
 ```sh
-cicoria            # workspace for the current directory
-cicoria ~/src/app  # or for another project
+cicoria            # workspace opened on the current directory
+cicoria ~/src/app  # or on another one
 ```
 
 Everything you type goes to the agent on screen. `ctrl+a` starts a command:
@@ -41,6 +41,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a command:
 | `a` | Go to the next session that needs input |
 | `,` `r` `x` | Rename, restart, close the session |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
+| `m` | Queue a message for the agent |
+| `u` | Focus the queue panel |
 | `d` | Review changes (full-screen diff) |
 | `o` | Open a file by name |
 | `b` | Show or hide the side panels |
@@ -51,7 +53,17 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a command:
 
 Files and diffs open on the whole screen: `j`/`k`/`space`/`b` scroll, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `e` opens `$EDITOR`, `@` mentions the file to the agent, `q` goes back.
 
-Sessions are remembered per project and reopened the next time. Agents stop when cicoria closes; Claude Code sessions continue their conversation when reopened.
+### Queue
+
+While an agent works you can line up what to tell it next. `ctrl+a m` asks for messages, one per line until an empty line or `esc`. They wait in a queue, shown under the changes, and go to the agent one by one, each when it ends its turn; an idle agent gets the first at once. Nothing is sent while the agent waits for a permission.
+
+In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses and resumes, `e` edits, `x` deletes, `J`/`K` reorder, `a` adds. Pause when a turn ends with a question you want to answer first.
+
+Only Claude Code says when its turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
+
+Each session has its own working directory, so one cicoria can hold sessions from several projects. A new session asks for the agent and then for the directory, offering the one of the session on screen: `tab` completes, `ctrl+w` deletes a path component, `ctrl+u` clears, and `~` and relative paths work. The file and change panels always show the project of the session on screen.
+
+Sessions, with their directories, are remembered for the directory cicoria was opened on and reopened the next time. Agents stop when cicoria closes; Claude Code sessions continue their conversation when reopened.
 
 ## Configure
 

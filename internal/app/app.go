@@ -39,6 +39,7 @@ const (
 	focusSessions
 	focusFiles
 	focusChanges
+	focusQueue
 )
 
 // mode is what is on top of the workspace, if anything.
@@ -53,7 +54,9 @@ const (
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	cfg      config.Config
+	cfg config.Config
+	// dir is the directory cicoria was opened on: where new sessions start
+	// by default, and what the saved workspace is filed under.
 	dir      string
 	self     string
 	adapters []agent.Adapter
@@ -72,13 +75,17 @@ type Model struct {
 	hidePanels    bool
 	ticks         int
 
-	// Left and right panels.
+	// Left and right panels. The files and changes are those of the project
+	// of the session on screen; shown is the directory they were read from.
 	sessionCursor int
-	tree          *ui.Tree
+	trees         map[string]*ui.Tree
+	shown         string
+	loading       bool
 	files         []string
 	changes       []git.Change
 	changeCursor  int
 	changeTop     int
+	queueCursor   int
 	repo          bool
 	refreshing    bool
 
@@ -86,10 +93,19 @@ type Model struct {
 	palette *ui.Palette
 
 	// One-line interactions in the status bar.
-	rename    *ui.Input
+	prompt    *prompt
 	confirm   *confirm
 	message   string
 	messageAt time.Time
+}
+
+// prompt is a line of text being asked for in the status bar.
+type prompt struct {
+	input ui.Input
+	// complete, when set, completes the text on tab.
+	complete func(string) string
+	// done receives the text when the user confirms it.
+	done func(string) tea.Cmd
 }
 
 // confirm is a yes/no question waiting for an answer.
@@ -116,16 +132,22 @@ type (
 	tickMsg time.Time
 	// refreshMsg carries a fresh look at the work tree.
 	refreshMsg struct {
+		dir     string
 		files   []string
 		changes []git.Change
 		repo    bool
+	}
+	// submitMsg is the time to press enter on a message that was pasted to
+	// an agent.
+	submitMsg struct {
+		id   string
+		term *term.Terminal
 	}
 	// editorMsg reports that the external editor was closed.
 	editorMsg struct{ err error }
 )
 
-// New returns a workspace for the project in dir, with the sessions it had
-// last time.
+// New returns a workspace opened on dir, with the sessions it had last time.
 func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 	srv, err := ipc.Listen()
 	if err != nil {
@@ -140,7 +162,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 		adapters: cfg.Adapters(),
 		ipc:      srv,
 		dark:     dark,
-		tree:     ui.NewTree(),
+		trees:    map[string]*ui.Tree{},
 	}
 
 	st, err := session.LoadState(session.StatePath(dir))
@@ -149,7 +171,15 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 	}
 	for _, saved := range st.Sessions {
 		if a := m.adapter(saved.Agent); a != nil {
-			m.sessions = append(m.sessions, session.New(saved.ID, saved.Name, a))
+			sdir := saved.Dir
+			if sdir == "" {
+				sdir = dir
+			}
+			s := session.New(saved.ID, saved.Name, sdir, a)
+			// A queue left from last time waits for a go: opening cicoria
+			// must not send messages by itself.
+			s.Queue, s.Paused = saved.Queue, saved.Paused || len(saved.Queue) > 0
+			m.sessions = append(m.sessions, s)
 		}
 	}
 	if len(m.sessions) == 0 {
@@ -158,7 +188,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 			_ = srv.Close()
 			return nil, fmt.Errorf("default agent %q is not configured", cfg.DefaultAgent)
 		}
-		m.sessions = append(m.sessions, session.New(session.NewID(), m.newName(a), a))
+		m.sessions = append(m.sessions, session.New(session.NewID(), m.newName(a), dir, a))
 	}
 	m.active = max(min(st.Active, len(m.sessions)-1), 0)
 	m.sessionCursor = m.active
@@ -188,6 +218,25 @@ func (m *Model) newName(a agent.Adapter) string {
 			return name
 		}
 	}
+}
+
+// project returns the directory of the session on screen, which is what the
+// file and change panels show.
+func (m *Model) project() string {
+	if s := m.current(); s != nil {
+		return s.Dir
+	}
+	return m.dir
+}
+
+// tree returns the file tree of the project on screen. Each project keeps
+// its own, so that open folders survive switching back and forth.
+func (m *Model) tree() *ui.Tree {
+	dir := m.project()
+	if m.trees[dir] == nil {
+		m.trees[dir] = ui.NewTree()
+	}
+	return m.trees[dir]
 }
 
 // current returns the session on screen, or nil when there is none.
@@ -222,7 +271,9 @@ func (m *Model) say(msg string) {
 func (m *Model) save() {
 	st := session.State{Active: m.active}
 	for _, s := range m.sessions {
-		st.Sessions = append(st.Sessions, session.Saved{ID: s.ID, Name: s.Name, Agent: s.Adapter.Name()})
+		st.Sessions = append(st.Sessions, session.Saved{
+			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Queue: s.Queue, Paused: s.Paused,
+		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {
 		m.say("could not save sessions: " + err.Error())
@@ -271,15 +322,15 @@ func waitHook(srv *ipc.Server) tea.Cmd {
 	}
 }
 
-// refresh looks at the work tree in the background.
+// refresh looks at the project on screen in the background.
 func (m *Model) refresh() tea.Cmd {
 	if m.refreshing {
 		return nil
 	}
 	m.refreshing = true
-	dir := m.dir
+	dir := m.project()
 	return func() tea.Msg {
-		var msg refreshMsg
+		msg := refreshMsg{dir: dir}
 		msg.files, _ = git.Files(dir)
 		if changes, err := git.Status(dir); err == nil {
 			msg.changes, msg.repo = changes, true
@@ -291,7 +342,7 @@ func (m *Model) refresh() tea.Cmd {
 // start launches the agent of a session in the agent pane.
 func (m *Model) start(s *session.Session) tea.Cmd {
 	pane := m.layout().agent
-	err := s.Start(agent.LaunchOpts{Dir: m.dir, Self: m.self, Socket: m.ipc.Path()}, pane.w, pane.h)
+	err := s.Start(agent.LaunchOpts{Self: m.self, Socket: m.ipc.Path()}, pane.w, pane.h)
 	if err != nil {
 		m.say(err.Error())
 		return nil
@@ -311,19 +362,28 @@ func (m *Model) resize() {
 
 // Update implements tea.Model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmd := m.update(msg)
+	// The queue panel goes away with its last message.
+	if s := m.current(); m.focus == focusQueue && (s == nil || len(s.Queue) == 0) {
+		m.focus = focusAgent
+	}
+	return m, cmd
+}
+
+func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		if m.started {
 			m.resize()
-			return m, nil
+			return nil
 		}
 		m.started = true
 		var cmds []tea.Cmd
 		for _, s := range m.sessions {
 			cmds = append(cmds, m.start(s))
 		}
-		return m, tea.Batch(cmds...)
+		return tea.Batch(cmds...)
 
 	case tea.FocusMsg:
 		m.blurred = false
@@ -334,24 +394,34 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case outputMsg:
 		s, i := m.byID(msg.id)
 		if s == nil || s.Term != msg.term {
-			return m, nil
+			return nil
 		}
 		s.NoteOutput(m.watching(i), time.Now())
-		return m, waitOutput(msg.id, msg.term)
+		return waitOutput(msg.id, msg.term)
 
 	case exitMsg:
 		if s, i := m.byID(msg.id); s != nil && s.Term == msg.term {
 			s.Exit(m.watching(i))
 		}
 
+	case submitMsg:
+		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term && s.Status != agent.Exited {
+			s.Term.SendKey(uv.Key{Code: uv.KeyEnter})
+		}
+
 	case hookMsg:
-		return m, tea.Batch(m.handleHook(ipc.Event(msg)), waitHook(m.ipc))
+		return tea.Batch(m.handleHook(ipc.Event(msg)), waitHook(m.ipc))
 
 	case tickMsg:
-		return m, tea.Batch(m.handleTick(time.Time(msg)), tick())
+		return tea.Batch(m.handleTick(time.Time(msg)), tick())
 
 	case refreshMsg:
 		m.refreshing = false
+		// A look at a project that is no longer on screen is of no use, and
+		// the one that is on screen has not been looked at yet.
+		if msg.dir != m.project() {
+			return m.refresh()
+		}
 		m.applyRefresh(msg)
 
 	case editorMsg:
@@ -361,10 +431,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mode == modeView {
 			m.reloadView()
 		}
-		return m, m.refresh()
+		return m.refresh()
 
 	case tea.KeyPressMsg:
-		return m, m.handleKey(msg)
+		return m.handleKey(msg)
 
 	case tea.PasteMsg:
 		if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent {
@@ -373,10 +443,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
-		return m, m.handleMouse(msg)
+		return m.handleMouse(msg)
 	}
 
-	return m, nil
+	return nil
 }
 
 // seen clears the "something happened" flag of the session on screen.
@@ -397,10 +467,13 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 	}
 
 	before := s.Status
-	s.Apply(u, m.dir, m.watching(i), time.Now())
+	s.Apply(u, m.watching(i), time.Now())
 
 	var cmds []tea.Cmd
-	if u.File != "" {
+	if u.TurnEnded {
+		cmds = append(cmds, m.trySend(s))
+	}
+	if u.File != "" && i == m.active {
 		cmds = append(cmds, m.refresh())
 	}
 	if s.Status == agent.NeedsInput && before != agent.NeedsInput && !m.watching(i) && m.cfg.Notify {
@@ -424,13 +497,17 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 }
 
 func (m *Model) applyRefresh(msg refreshMsg) {
+	m.loading = false
 	m.files = msg.files
-	m.tree.SetFiles(msg.files)
+	m.tree().SetFiles(msg.files)
 	m.repo = msg.repo
 
-	// Keep the cursor on the same file while the list changes around it.
+	// Keep the cursor on the same file while the list changes around it,
+	// unless this is another project altogether.
 	var selected string
-	if m.changeCursor < len(m.changes) {
+	if msg.dir != m.shown {
+		m.shown, m.changeCursor, m.changeTop = msg.dir, 0, 0
+	} else if m.changeCursor < len(m.changes) {
 		selected = m.changes[m.changeCursor].Path
 	}
 	m.changes = msg.changes

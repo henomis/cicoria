@@ -24,18 +24,19 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	if in := m.rename; in != nil {
+	if p := m.prompt; p != nil {
 		switch key {
 		case "enter":
-			if name := strings.TrimSpace(in.Value()); name != "" && m.current() != nil {
-				m.current().Name = name
-				m.save()
-			}
-			m.rename = nil
+			m.prompt = nil
+			return p.done(strings.TrimSpace(p.input.Value()))
 		case "esc":
-			m.rename = nil
+			m.prompt = nil
+		case "tab":
+			if p.complete != nil {
+				p.input.Set(p.complete(p.input.Value()))
+			}
 		default:
-			in.Key(k)
+			p.input.Key(k)
 		}
 		return nil
 	}
@@ -73,6 +74,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		return m.filesKey(key)
 	case focusChanges:
 		return m.changesKey(key)
+	case focusQueue:
+		return m.queueKey(key)
 	}
 	m.send(k)
 	return nil
@@ -85,7 +88,11 @@ func (m *Model) panelKey(key string) bool {
 	case "esc", "q":
 		m.focus = focusAgent
 	case "tab":
-		m.focus = map[focus]focus{focusSessions: focusFiles, focusFiles: focusChanges, focusChanges: focusSessions}[m.focus]
+		next := map[focus]focus{focusSessions: focusFiles, focusFiles: focusChanges, focusChanges: focusQueue, focusQueue: focusSessions}[m.focus]
+		if s := m.current(); next == focusQueue && (s == nil || len(s.Queue) == 0) {
+			next = focusSessions
+		}
+		m.focus = next
 	default:
 		return false
 	}
@@ -115,21 +122,21 @@ func (m *Model) filesKey(key string) tea.Cmd {
 	if m.panelKey(key) {
 		return nil
 	}
-	row := m.tree.Selected()
+	row := m.tree().Selected()
 	switch key {
 	case "j", "down":
-		m.tree.Move(1)
+		m.tree().Move(1)
 	case "k", "up":
-		m.tree.Move(-1)
+		m.tree().Move(-1)
 	case "pgdown":
-		m.tree.Move(m.layout().files.h - 2)
+		m.tree().Move(m.layout().files.h - 2)
 	case "pgup":
-		m.tree.Move(-(m.layout().files.h - 2))
+		m.tree().Move(-(m.layout().files.h - 2))
 	case "h", "left":
-		m.tree.SetOpen(false)
+		m.tree().SetOpen(false)
 	case "enter", "l", "right":
 		if row.Dir {
-			m.tree.SetOpen(key != "enter" || !row.Open)
+			m.tree().SetOpen(key != "enter" || !row.Open)
 		} else if row.Path != "" {
 			m.openFile(row.Path)
 		}
@@ -219,11 +226,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case l.panels && l.files.contains(x, y):
 		if isClick {
 			m.focus = focusFiles
-			if row := m.tree.Top + y - l.files.y - 1; row >= 0 && row < len(m.tree.Rows()) && y > l.files.y {
-				m.tree.Cursor = row
+			tree := m.tree()
+			if row := tree.Top + y - l.files.y - 1; row >= 0 && row < len(tree.Rows()) && y > l.files.y {
+				tree.Cursor = row
 			}
 		}
-		m.tree.Move(wheel)
+		m.tree().Move(wheel)
 
 	case l.panels && l.changes.contains(x, y):
 		if isClick {
@@ -233,6 +241,14 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			}
 		}
 		m.changeCursor = max(min(m.changeCursor+wheel, len(m.changes)-1), 0)
+
+	case l.panels && l.queue.contains(x, y):
+		if s := m.current(); isClick && s != nil {
+			m.focus = focusQueue
+			if row := y - l.queue.y - 1; row >= 0 && row < len(s.Queue) {
+				m.queueCursor = row
+			}
+		}
 	}
 	return nil
 }

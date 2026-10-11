@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,8 +26,10 @@ type layout struct {
 	panels bool
 	// body is everything above the status bar.
 	body rect
-	// sessions, files and changes are the side panels, borders included.
-	sessions, files, changes rect
+	// sessions, files, changes and queue are the side panels, borders
+	// included. queue is empty unless the session on screen has messages
+	// waiting.
+	sessions, files, changes, queue rect
 	// agentBox is the agent pane with its border; agent is the terminal
 	// inside it. Without side panels there is no border and they are equal.
 	agentBox, agent rect
@@ -49,6 +52,11 @@ func (m *Model) layout() layout {
 	l.sessions = rect{0, 0, left, sessionsH}
 	l.files = rect{0, sessionsH, left, l.body.h - sessionsH}
 	l.changes = rect{m.width - right, 0, right, l.body.h}
+	if s := m.current(); s != nil && len(s.Queue) > 0 {
+		queueH := max(min(len(s.Queue)+2, l.body.h/3), 3)
+		l.changes.h -= queueH
+		l.queue = rect{l.changes.x, l.changes.h, right, queueH}
+	}
 	l.agentBox = rect{left, 0, m.width - left - right, l.body.h}
 	l.agent = rect{left + 1, 1, l.agentBox.w - 2, l.agentBox.h - 2}
 	return l
@@ -93,7 +101,7 @@ func (m *Model) View() tea.View {
 
 // typing reports whether keys go straight to the agent.
 func (m *Model) typing() bool {
-	return m.confirm == nil && m.rename == nil && !m.prefix
+	return m.confirm == nil && m.prompt == nil && !m.prefix
 }
 
 func (m *Model) renderWorkspace(l layout) []string {
@@ -102,7 +110,11 @@ func (m *Model) renderWorkspace(l layout) []string {
 		return agentRows
 	}
 	left := append(m.renderSessions(l.sessions), m.renderFiles(l.files)...)
-	return ui.JoinColumns(left, agentRows, m.renderChanges(l.changes))
+	right := m.renderChanges(l.changes)
+	if l.queue.h > 0 {
+		right = append(right, m.renderQueue(l.queue)...)
+	}
+	return ui.JoinColumns(left, agentRows, right)
 }
 
 func (m *Model) renderAgent(l layout) []string {
@@ -120,7 +132,7 @@ func (m *Model) renderAgent(l layout) []string {
 			lines = append(lines, ui.Bad.Render("  could not start: "+s.Err.Error()))
 		}
 	default:
-		title = fmt.Sprintf("%s · %s · %s", s.Name, s.Adapter.Name(), s.Status)
+		title = fmt.Sprintf("%s · %s · %s · %s", s.Name, s.Adapter.Name(), s.Status, tilde(s.Dir))
 		lines = strings.Split(s.Term.Render(), "\n")
 	}
 
@@ -156,9 +168,17 @@ func (m *Model) renderSessions(r rect) []string {
 		if i < 9 {
 			num = fmt.Sprint(i + 1)
 		}
-		row := fmt.Sprintf("%s %s %s", ui.Dim.Render(num), badge(s), s.Name)
+		name := s.Name
 		if i == m.active {
-			row = fmt.Sprintf("%s %s %s", ui.Dim.Render(num), badge(s), ui.Bold.Render(s.Name))
+			name = ui.Bold.Render(name)
+		}
+		row := fmt.Sprintf("%s %s %s", ui.Dim.Render(num), badge(s), name)
+		if n := len(s.Queue); n > 0 {
+			row += ui.Dim.Render(fmt.Sprintf(" ⋯%d", n))
+		}
+		// The project goes at the right edge, as far as there is room.
+		if tail := filepath.Base(s.Dir); ansi.StringWidth(row)+ansi.StringWidth(tail)+1 < r.w-2 {
+			row = ui.Fit(row, r.w-2-ansi.StringWidth(tail)) + ui.Dim.Render(tail)
 		}
 		lines = append(lines, ui.Selected(row, r.w-2, focused && i == m.sessionCursor, true))
 	}
@@ -181,8 +201,9 @@ func mark(letter string) string {
 func (m *Model) renderFiles(r rect) []string {
 	focused := m.focus == focusFiles
 	inner, height := r.w-2, r.h-2
-	rows := m.tree.Rows()
-	m.tree.Top = ui.Window(m.tree.Cursor, m.tree.Top, height, len(rows))
+	tree := m.tree()
+	rows := tree.Rows()
+	tree.Top = ui.Window(tree.Cursor, tree.Top, height, len(rows))
 
 	marks := map[string]string{}
 	dirty := map[string]bool{}
@@ -202,7 +223,7 @@ func (m *Model) renderFiles(r rect) []string {
 	}
 
 	var lines []string
-	for i := m.tree.Top; i < min(m.tree.Top+height, len(rows)); i++ {
+	for i := tree.Top; i < min(tree.Top+height, len(rows)); i++ {
 		row := rows[i]
 		name := row.Name
 		tail := ""
@@ -227,12 +248,12 @@ func (m *Model) renderFiles(r rect) []string {
 		if tail != "" {
 			text = ui.Fit(text, inner-2) + " " + tail
 		}
-		lines = append(lines, ui.Selected(text, inner, i == m.tree.Cursor, focused))
+		lines = append(lines, ui.Selected(text, inner, i == tree.Cursor, focused))
 	}
-	if len(rows) == 0 {
+	if len(rows) == 0 && !m.loading {
 		lines = []string{ui.Dim.Render(" no files")}
 	}
-	return ui.Box("Files", lines, r.w, r.h, focused)
+	return ui.Box("Files · "+filepath.Base(m.project()), lines, r.w, r.h, focused)
 }
 
 func (m *Model) renderChanges(r rect) []string {
@@ -261,6 +282,8 @@ func (m *Model) renderChanges(r rect) []string {
 
 	title := "Changes"
 	switch {
+	case m.loading:
+		lines = nil
 	case !m.repo:
 		lines = []string{ui.Dim.Render(" not a git repository")}
 	case len(m.changes) == 0:
@@ -276,7 +299,11 @@ func (m *Model) renderView() []string {
 	if m.view.diff {
 		kind = "diff"
 	}
-	header := ui.Reverse.Render(ui.Fit(fmt.Sprintf(" %s  %s", kind, m.view.path), m.width))
+	header := fmt.Sprintf(" %s  %s", kind, m.view.path)
+	if where := ui.Dim.Render(tilde(m.view.dir)) + " "; ansi.StringWidth(header)+ansi.StringWidth(where) < m.width {
+		header = ui.Fit(header, m.width-ansi.StringWidth(where)) + where
+	}
+	header = ui.Reverse.Render(ansi.Strip(ui.Fit(header, m.width)))
 	return append([]string{header}, m.view.pager.View(m.width, m.viewHeight())...)
 }
 
@@ -293,6 +320,16 @@ func (m *Model) renderHelp() []string {
 	lines = append(lines,
 		fmt.Sprintf("    %s %-6s %s", ui.Accent.Render(p), ui.Accent.Render("1-9"), "Go to session by number"),
 		fmt.Sprintf("    %s %-6s %s", ui.Accent.Render(p), ui.Accent.Render(p), "Send "+p+" to the agent"),
+		"",
+		ui.Bold.Render("  New session"),
+		"    pick the agent, then the directory it works in: tab completes, ctrl+w deletes",
+		"    a path component, ctrl+u clears. The side panels follow the session on screen.",
+		"",
+		ui.Bold.Render("  Queue"),
+		"    messages wait in the queue and go to the agent one by one, each when it ends",
+		"    its turn; to an idle agent the first goes at once. Agents that do not report",
+		"    their status only get a message when you press enter in the queue panel.",
+		"    queue panel: enter send now · p pause · e edit · x delete · J/K reorder · a add",
 		"",
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
@@ -313,8 +350,13 @@ func (m *Model) renderStatus() string {
 	switch {
 	case m.confirm != nil:
 		return ui.Fit(ui.Warn.Render(" "+m.confirm.question)+" [y/N]", m.width)
-	case m.rename != nil:
-		return ui.Fit(" "+m.rename.View(), m.width)
+	case m.prompt != nil:
+		// When the text outgrows the line, keep its end, where the typing is.
+		text := " " + m.prompt.input.View()
+		if over := ansi.StringWidth(text) - m.width; over > 0 {
+			text = ansi.TruncateLeft(text, over+1, "…")
+		}
+		return ui.Fit(text, m.width)
 	case m.mode == modeView && m.view.search != nil:
 		return ui.Fit(" "+m.view.search.View(), m.width)
 	}
@@ -342,8 +384,11 @@ func (m *Model) renderStatus() string {
 			if s.Status == agent.Exited {
 				left = append(left, fmt.Sprintf("%s exited — %s r restarts it, %s x closes it", s.Name, m.cfg.Prefix, m.cfg.Prefix))
 			}
+			if n := len(s.Queue); n > 0 {
+				right = fmt.Sprintf("queue %d%s · ", n, map[bool]string{true: " paused"}[s.Paused])
+			}
 			if s.ContextTokens > 0 {
-				right = fmt.Sprintf("ctx %dk · ", (s.ContextTokens+500)/1000)
+				right += fmt.Sprintf("ctx %dk · ", (s.ContextTokens+500)/1000)
 			}
 		}
 		right += m.cfg.Prefix + " ? help"
