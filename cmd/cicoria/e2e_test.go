@@ -609,14 +609,14 @@ func TestRealAgent(t *testing.T) {
 // queue adds messages to the queue of the session on screen.
 func (w *workspace) queue(messages ...string) {
 	w.t.Helper()
-	w.prefix('m')
 	for _, msg := range messages {
+		w.prefix('m')
 		w.see("queue for ")
 		w.typeText(msg)
 		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		// One message is asked for at a time.
+		w.gone("queue for ")
 	}
-	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
-	w.gone("queue for ")
 }
 
 func TestQueue(t *testing.T) {

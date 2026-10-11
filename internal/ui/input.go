@@ -8,47 +8,106 @@ import (
 type Input struct {
 	Prompt string
 	value  []rune
+	// pos is where the cursor is: before the character of that index.
+	pos int
 }
 
 // Value returns the text typed so far.
 func (in *Input) Value() string { return string(in.value) }
 
-// Set replaces the text.
-func (in *Input) Set(s string) { in.value = []rune(s) }
+// Set replaces the text and puts the cursor at its end.
+func (in *Input) Set(s string) {
+	in.value = []rune(s)
+	in.pos = len(in.value)
+}
+
+// isBreak reports whether a character separates words or path components.
+func isBreak(r rune) bool { return r == '/' || r == ' ' }
+
+// wordLeft returns where the word or path component before the cursor
+// starts, and wordRight where the one after it ends.
+func (in *Input) wordLeft() int {
+	n := in.pos
+	for n > 0 && isBreak(in.value[n-1]) {
+		n--
+	}
+	for n > 0 && !isBreak(in.value[n-1]) {
+		n--
+	}
+	return n
+}
+
+func (in *Input) wordRight() int {
+	n := in.pos
+	for n < len(in.value) && isBreak(in.value[n]) {
+		n++
+	}
+	for n < len(in.value) && !isBreak(in.value[n]) {
+		n++
+	}
+	return n
+}
+
+// cut removes the characters from index a up to b and leaves the cursor
+// where they were. It reports whether there were any.
+func (in *Input) cut(a, b int) bool {
+	if a < 0 || a >= b {
+		return false
+	}
+	in.value = append(in.value[:a:a], in.value[b:]...)
+	in.pos = a
+	return true
+}
 
 // Key applies a key press and reports whether it changed the text.
 func (in *Input) Key(k tea.KeyPressMsg) bool {
+	in.pos = max(min(in.pos, len(in.value)), 0)
 	switch k.String() {
+	case "left", "ctrl+b":
+		in.pos = max(in.pos-1, 0)
+		return false
+	case "right", "ctrl+f":
+		in.pos = min(in.pos+1, len(in.value))
+		return false
+	case "home", "ctrl+a":
+		in.pos = 0
+		return false
+	case "end", "ctrl+e":
+		in.pos = len(in.value)
+		return false
+	case "ctrl+left", "alt+left", "alt+b":
+		in.pos = in.wordLeft()
+		return false
+	case "ctrl+right", "alt+right", "alt+f":
+		in.pos = in.wordRight()
+		return false
 	case "backspace":
-		if len(in.value) == 0 {
-			return false
-		}
-		in.value = in.value[:len(in.value)-1]
-		return true
+		return in.cut(in.pos-1, in.pos)
+	case "delete", "ctrl+d":
+		return in.cut(in.pos, min(in.pos+1, len(in.value)))
 	case "ctrl+u":
-		in.value = nil
-		return true
-	case "ctrl+w":
+		return in.cut(0, in.pos)
+	case "ctrl+k":
+		return in.cut(in.pos, len(in.value))
+	case "ctrl+w", "alt+backspace":
 		// Delete back to the start of the last word or path component.
-		n := len(in.value)
-		for n > 0 && (in.value[n-1] == '/' || in.value[n-1] == ' ') {
-			n--
-		}
-		for n > 0 && in.value[n-1] != '/' && in.value[n-1] != ' ' {
-			n--
-		}
-		changed := n != len(in.value)
-		in.value = in.value[:n]
-		return changed
+		return in.cut(in.wordLeft(), in.pos)
 	}
 	if k.Text != "" && k.Mod&^tea.ModShift == 0 {
-		in.value = append(in.value, []rune(k.Text)...)
+		text := []rune(k.Text)
+		in.value = append(in.value[:in.pos:in.pos], append(text, in.value[in.pos:]...)...)
+		in.pos += len(text)
 		return true
 	}
 	return false
 }
 
-// View renders the field with a block cursor at the end.
+// View renders the field with a block cursor where the next character goes.
 func (in *Input) View() string {
-	return Accent.Render(in.Prompt) + string(in.value) + Reverse.Render(" ")
+	pos := max(min(in.pos, len(in.value)), 0)
+	under, after := " ", ""
+	if pos < len(in.value) {
+		under, after = string(in.value[pos]), string(in.value[pos+1:])
+	}
+	return Accent.Render(in.Prompt) + string(in.value[:pos]) + Reverse.Render(under) + after
 }

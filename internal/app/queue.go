@@ -15,8 +15,7 @@ import (
 // at once, agents take it for part of the paste.
 const submitAfter = 150 * time.Millisecond
 
-// askQueue asks for messages to queue for the session on screen, one after
-// the other until an empty line or esc.
+// askQueue asks for a message to queue for the session on screen.
 func (m *Model) askQueue() tea.Cmd {
 	s := m.current()
 	if s == nil {
@@ -30,8 +29,7 @@ func (m *Model) askQueue() tea.Cmd {
 		if s == nil || text == "" {
 			return nil
 		}
-		cmd := m.enqueue(s, text)
-		return tea.Batch(cmd, m.askQueue())
+		return m.enqueue(s, text)
 	}
 	m.prompt = p
 	return nil

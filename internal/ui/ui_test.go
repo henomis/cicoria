@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -292,5 +293,71 @@ func TestPager(t *testing.T) {
 	view := p.View(30, 20)
 	if len(view) != 20 || ansi.StringWidth(view[0]) != 30 {
 		t.Errorf("view is %d rows of %d cells", len(view), ansi.StringWidth(view[0]))
+	}
+}
+
+func TestInputEditing(t *testing.T) {
+	key := func(code rune, mod tea.KeyMod) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code, Mod: mod} }
+	typed := func(in *Input, text string) {
+		for _, r := range text {
+			in.Key(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+	}
+	var in Input
+	typed(&in, "run the tests")
+
+	// The arrows move the cursor, and typing goes where it is.
+	for range 5 {
+		in.Key(key(tea.KeyLeft, 0))
+	}
+	typed(&in, "all ")
+	if in.Value() != "run the all tests" {
+		t.Errorf("after typing in the middle: %q", in.Value())
+	}
+	if got := ansi.Strip(in.View()); got != "run the all tests" {
+		t.Errorf("view with the cursor on a letter = %q", got)
+	}
+
+	// ctrl+w takes the word before the cursor, backspace and delete one
+	// character on either side of it.
+	in.Key(key('w', tea.ModCtrl))
+	if in.Value() != "run the tests" {
+		t.Errorf("after ctrl+w: %q", in.Value())
+	}
+	in.Key(key(tea.KeyBackspace, 0))
+	in.Key(key(tea.KeyDelete, 0))
+	if in.Value() != "run theests" {
+		t.Errorf("after backspace and delete: %q", in.Value())
+	}
+
+	// Home and end, and the words between them.
+	in.Key(key(tea.KeyHome, 0))
+	typed(&in, "> ")
+	in.Key(key(tea.KeyRight, tea.ModCtrl))
+	typed(&in, "!")
+	in.Key(key(tea.KeyEnd, 0))
+	typed(&in, ".")
+	if in.Value() != "> run! theests." {
+		t.Errorf("after home, a word and end: %q", in.Value())
+	}
+
+	// ctrl+k and ctrl+u cut to the end and to the start.
+	in.Key(key(tea.KeyLeft, tea.ModCtrl))
+	in.Key(key('k', tea.ModCtrl))
+	if in.Value() != "> run! " {
+		t.Errorf("after ctrl+k: %q", in.Value())
+	}
+	in.Key(key(tea.KeyLeft, 0))
+	in.Key(key('u', tea.ModCtrl))
+	if in.Value() != " " {
+		t.Errorf("after ctrl+u: %q", in.Value())
+	}
+
+	// At the edges nothing happens, and nothing breaks.
+	in.Set("")
+	for _, k := range []tea.KeyPressMsg{key(tea.KeyLeft, 0), key(tea.KeyRight, 0), key(tea.KeyBackspace, 0), key(tea.KeyDelete, 0), key('w', tea.ModCtrl)} {
+		if in.Key(k) {
+			t.Errorf("%s changed an empty field", k.String())
+		}
 	}
 }
