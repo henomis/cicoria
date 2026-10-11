@@ -18,7 +18,7 @@ var (
 	Good    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	Bad     = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	Warn    = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	Info    = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	Info    = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
 	Reverse = lipgloss.NewStyle().Reverse(true)
 )
 
