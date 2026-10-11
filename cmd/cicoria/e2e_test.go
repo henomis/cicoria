@@ -340,6 +340,52 @@ func TestWorkspace(t *testing.T) {
 	w.quit()
 }
 
+// The changes of a session are counted from where it started, so that work
+// the agent commits is still there to review.
+func TestReviewSinceTheStart(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("agent ready", "working tree clean")
+
+	w.line("edit notes.txt")
+	w.see("Changes (1)", "? notes.txt")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	for _, args := range [][]string{
+		{"add", "-A"},
+		{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "notes"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	w.see("Changes (1) · 1 commit", "A notes.txt")
+
+	// Its diff is against the start, not against the commit.
+	w.prefix('g')
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("diff  notes.txt", "+hello from the agent")
+	w.typeText("q")
+	w.see("Sessions")
+
+	// What is not committed is one key away, and back.
+	w.typeText("s")
+	w.see("Changes · uncommitted", "working tree clean")
+	w.gone("A notes.txt")
+	w.typeText("s")
+	w.see("Changes (1) · 1 commit")
+
+	// Once it has been looked at, the count starts again, and stays so.
+	w.prefix('h')
+	w.see("counted from here", "working tree clean")
+	w.gone("1 commit")
+	w.quit()
+	w.launch(140, 40)
+	w.see("agent ready", "working tree clean")
+	w.gone("1 commit")
+	w.quit()
+}
+
 func TestNarrowTerminalHidesPanels(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(60, 20)

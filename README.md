@@ -44,6 +44,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a command:
 | `m` | Queue a message for the agent |
 | `u` | Focus the queue panel |
 | `d` | Review changes (full-screen diff) |
+| `h` | Review from here: count changes from the last commit |
 | `o` | Open a file by name |
 | `b` | Show or hide the side panels |
 | `[` `]` | Show or hide the left, right panels |
@@ -63,6 +64,8 @@ In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses 
 Only Claude Code says when its turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
 
 Each session has its own working directory, so one cicoria can hold sessions from several projects. A new session asks for the agent and then for the directory, offering the one of the session on screen: `tab` completes, `ctrl+w` deletes a path component, `ctrl+u` clears, and `~` and relative paths work. Last it asks for a name, offering one that is free. Keep one session to a directory: cicoria warns when a second one opens where another already works, since their changes cannot be told apart. The file and change panels always show the project of the session on screen.
+
+The changes of a session are everything that is different from the commit it started on, so work the agent commits stays there to review; the panel says how many commits were made. `s` in the changes panel switches to what is not committed and back, and `ctrl+a h` starts the count again from the last commit once you have looked.
 
 Sessions, with their directories, are remembered for the directory cicoria was opened on and reopened the next time. Agents stop when cicoria closes; Claude Code sessions continue their conversation when reopened.
 

@@ -321,6 +321,17 @@ func (m *Model) renderChanges(r rect) []string {
 	default:
 		title = fmt.Sprintf("Changes (%d)", len(m.changes))
 	}
+	// What the changes are counted from, when there is a choice.
+	if s := m.current(); !m.loading && m.repo && s != nil && s.Base != "" {
+		switch {
+		case s.Uncommitted:
+			title += " · uncommitted"
+		case m.commits == 1:
+			title += " · 1 commit"
+		case m.commits > 1:
+			title += fmt.Sprintf(" · %d commits", m.commits)
+		}
+	}
 	return ui.Box(title, lines, r.w, r.h, focused)
 }
 
@@ -366,6 +377,7 @@ func (m *Model) renderHelp() []string {
 		"    j/k move · enter open · tab next panel · esc back to the agent",
 		"    files: h/l close/open folder · d diff · e editor · @ mention to the agent",
 		"    changes: enter diff · v file · e editor · @ mention to the agent",
+		"             s everything since the session started ⇄ what is not committed",
 		"",
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",

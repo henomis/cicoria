@@ -198,6 +198,13 @@ func (m *Model) changesKey(key string) tea.Cmd {
 		return m.edit(path)
 	case "@":
 		m.mention(path)
+	case "s":
+		// Everything since the session started, or what is not committed.
+		if s := m.current(); s != nil && s.Base != "" {
+			s.Uncommitted = !s.Uncommitted
+			return m.refresh()
+		}
+		m.say("this session has no commit to count its changes from")
 	}
 	return nil
 }

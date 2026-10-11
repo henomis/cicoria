@@ -84,11 +84,15 @@ type Model struct {
 	loading       bool
 	files         []string
 	changes       []git.Change
-	changeCursor  int
-	changeTop     int
-	queueCursor   int
-	repo          bool
-	refreshing    bool
+	// changesBase is the commit the changes are counted from, or empty when
+	// they are what is not committed; commits is how many were made since.
+	changesBase  string
+	commits      int
+	changeCursor int
+	changeTop    int
+	queueCursor  int
+	repo         bool
+	refreshing   bool
 
 	// anim is the animation playing, if any; animating says its frames are
 	// being asked for.
@@ -138,9 +142,14 @@ type (
 	tickMsg time.Time
 	// refreshMsg carries a fresh look at the work tree.
 	refreshMsg struct {
-		dir     string
+		dir string
+		// base is the commit the changes were to be counted from; lost says
+		// it is no longer there, and they are counted from the last commit.
+		base    string
+		lost    bool
 		files   []string
 		changes []git.Change
+		commits int
 		repo    bool
 	}
 	// submitMsg is the time to press enter on a message that was pasted to
@@ -184,7 +193,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 				sdir = dir
 			}
 			s := session.New(saved.ID, saved.Name, sdir, a)
-			s.Conversation = saved.Conversation
+			s.Conversation, s.Base = saved.Conversation, saved.Base
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
 			s.Queue, s.Paused = saved.Queue, saved.Paused || len(saved.Queue) > 0
@@ -197,7 +206,9 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 			_ = srv.Close()
 			return nil, fmt.Errorf("default agent %q is not configured", cfg.DefaultAgent)
 		}
-		m.sessions = append(m.sessions, session.New(session.NewID(), m.newName(a), dir, a))
+		s := session.New(session.NewID(), m.newName(a), dir, a)
+		s.Base, _ = git.Head(dir)
+		m.sessions = append(m.sessions, s)
 	}
 	m.active = max(min(st.Active, len(m.sessions)-1), 0)
 	m.sessionCursor = m.active
@@ -281,7 +292,7 @@ func (m *Model) save() {
 	st := session.State{Active: m.active}
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
-			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation,
+			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
 			Queue: s.Queue, Paused: s.Paused,
 		})
 	}
@@ -332,17 +343,32 @@ func waitHook(srv *ipc.Server) tea.Cmd {
 	}
 }
 
+// reviewBase returns the commit the changes of the session on screen are
+// counted from, or nothing when they are what is not committed.
+func (m *Model) reviewBase() string {
+	if s := m.current(); s != nil && !s.Uncommitted {
+		return s.Base
+	}
+	return ""
+}
+
 // refresh looks at the project on screen in the background.
 func (m *Model) refresh() tea.Cmd {
 	if m.refreshing {
 		return nil
 	}
 	m.refreshing = true
-	dir := m.project()
+	dir, base := m.project(), m.reviewBase()
 	return func() tea.Msg {
-		msg := refreshMsg{dir: dir}
+		msg := refreshMsg{dir: dir, base: base}
 		msg.files, _ = git.Files(dir)
-		if changes, err := git.Status(dir); err == nil {
+		if base != "" && !git.Exists(dir, base) {
+			base, msg.lost = "", true
+		}
+		if base != "" {
+			msg.commits = git.Commits(dir, base)
+		}
+		if changes, err := git.Status(dir, base); err == nil {
 			msg.changes, msg.repo = changes, true
 		}
 		return msg
@@ -441,8 +467,14 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.refreshing = false
 		// A look at a project that is no longer on screen is of no use, and
 		// the one that is on screen has not been looked at yet.
-		if msg.dir != m.project() {
+		if msg.dir != m.project() || msg.base != m.reviewBase() {
 			return m.refresh()
+		}
+		if s := m.current(); msg.lost && s != nil {
+			// A history that was rewritten took the starting point with it.
+			s.Base = ""
+			m.save()
+			m.say("the commit " + s.Name + " started from is gone: showing what is not committed")
 		}
 		m.applyRefresh(msg)
 
@@ -529,6 +561,10 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 	m.files = msg.files
 	m.tree().SetFiles(msg.files)
 	m.repo = msg.repo
+	m.changesBase, m.commits = msg.base, msg.commits
+	if msg.lost {
+		m.changesBase = ""
+	}
 
 	// Keep the cursor on the same file while the list changes around it,
 	// unless this is another project altogether.

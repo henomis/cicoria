@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/henomis/cicoria/internal/agent"
+	"github.com/henomis/cicoria/internal/git"
 	"github.com/henomis/cicoria/internal/session"
 	"github.com/henomis/cicoria/internal/ui"
 )
@@ -39,6 +40,7 @@ func init() {
 		{"m", "Queue a message for the agent", (*Model).askQueue},
 		{"u", "Focus queue", func(m *Model) tea.Cmd { return m.setFocus(focusQueue) }},
 		{"d", "Review changes", (*Model).review},
+		{"h", "Review from here: count changes from the last commit", (*Model).rebase},
 		{"o", "Open file…", (*Model).askFile},
 		{"b", "Show or hide side panels", (*Model).togglePanels},
 		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }},
@@ -168,6 +170,7 @@ func (m *Model) newSession(a agent.Adapter, name, dir string) tea.Cmd {
 		}
 	}
 	s := session.New(session.NewID(), name, dir, a)
+	s.Base, _ = git.Head(dir)
 	m.sessions = append(m.sessions, s)
 	// The session list grew, which can change the size of the panes.
 	m.resize()
@@ -374,6 +377,25 @@ func (m *Model) review() tea.Cmd {
 	m.changeCursor = max(min(m.changeCursor, len(m.changes)-1), 0)
 	m.openDiff(m.changes[m.changeCursor])
 	return nil
+}
+
+// rebase makes the last commit the one the changes of the session on screen
+// are counted from, once what came before has been looked at.
+func (m *Model) rebase() tea.Cmd {
+	s := m.current()
+	if s == nil {
+		m.say(errNoSession.Error())
+		return nil
+	}
+	head, ok := git.Head(s.Dir)
+	if !ok {
+		m.say("no commit to count from")
+		return nil
+	}
+	s.Base = head
+	m.save()
+	m.say("changes of " + s.Name + " are counted from here")
+	return m.refresh()
 }
 
 // mention types a reference to a file at the prompt of the agent on screen.

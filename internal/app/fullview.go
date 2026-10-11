@@ -34,7 +34,7 @@ func (m *Model) openDiff(c git.Change) {
 	m.view.pager.Title = c.Path
 	m.mode = modeView
 
-	diff, err := git.Diff(m.view.dir, c)
+	diff, err := git.Diff(m.view.dir, c, m.changesBase)
 	switch {
 	case err != nil:
 		m.view.pager.SetContent([]string{ui.Bad.Render(err.Error())}, nil)

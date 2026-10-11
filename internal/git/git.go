@@ -77,8 +77,36 @@ func hasHead(dir string) bool {
 	return err == nil
 }
 
-// Status lists the changed files of the work tree containing dir.
-func Status(dir string) ([]Change, error) {
+// Head returns the commit the work tree containing dir is on, and whether
+// there is one.
+func Head(dir string) (string, bool) {
+	out, err := run(dir, "rev-parse", "--verify", "--quiet", "HEAD")
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(out)), true
+}
+
+// Exists reports whether a commit is still in the repository of dir.
+func Exists(dir, commit string) bool {
+	_, err := run(dir, "cat-file", "-e", commit+"^{commit}")
+	return err == nil
+}
+
+// Commits counts the commits made since base on the branch dir is on.
+func Commits(dir, base string) int {
+	out, err := run(dir, "rev-list", "--count", base+"..HEAD")
+	if err != nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+	return n
+}
+
+// Status lists the changed files of the work tree containing dir: what is
+// not committed or, when base is a commit, everything that is different
+// from it, committed or not.
+func Status(dir, base string) ([]Change, error) {
 	root, ok := Root(dir)
 	if !ok {
 		return nil, errors.New("not a git repository")
@@ -90,13 +118,24 @@ func Status(dir string) ([]Change, error) {
 	}
 	changes := parseStatus(out)
 
-	base := "HEAD"
-	if !hasHead(dir) {
-		base = "--cached"
+	// A rename against a commit is told as a file gone and a file come, so
+	// that every path stands for itself.
+	against := []string{base, "--no-renames"}
+	if base == "" {
+		against = []string{"HEAD"}
+		if !hasHead(dir) {
+			against = []string{"--cached"}
+		}
+	} else {
+		out, err := run(dir, append([]string{"diff", "--name-status", "-z"}, against...)...)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(parseNameStatus(out), slices.DeleteFunc(changes, func(c Change) bool { return !c.Untracked() })...)
 	}
 	// Line counts are a nicety: without them the list is still right.
 	stats := map[string][2]int{}
-	if out, err := run(dir, "diff", "--numstat", "-z", base); err == nil {
+	if out, err := run(dir, append([]string{"diff", "--numstat", "-z"}, against...)...); err == nil {
 		stats = parseNumstat(out)
 	}
 
@@ -131,6 +170,19 @@ func parseStatus(out []byte) []Change {
 		// A rename or copy is followed by the path it came from.
 		if code[0] == 'R' || code[0] == 'C' {
 			i++
+		}
+	}
+	return changes
+}
+
+// parseNameStatus reads the output of "git diff --name-status -z" taken
+// without renames: a letter and a path, in turn.
+func parseNameStatus(out []byte) []Change {
+	var changes []Change
+	fields := strings.Split(string(out), "\x00")
+	for i := 0; i+1 < len(fields); i += 2 {
+		if fields[i] != "" && fields[i+1] != "" {
+			changes = append(changes, Change{Path: fields[i+1], Code: fields[i][:1] + " "})
 		}
 	}
 	return changes
@@ -177,9 +229,9 @@ func countLines(path string) int {
 	return n
 }
 
-// Diff returns the unified diff against HEAD of a change reported by Status
-// for the same dir.
-func Diff(dir string, c Change) (string, error) {
+// Diff returns the unified diff of a change reported by Status for the same
+// dir and base.
+func Diff(dir string, c Change, base string) (string, error) {
 	if c.Untracked() {
 		// Comparing against nothing shows the whole file as added. git exits
 		// with 1 when the two sides differ, which here is always.
@@ -190,9 +242,11 @@ func Diff(dir string, c Change) (string, error) {
 		return "", err
 	}
 
-	base := "HEAD"
-	if !hasHead(dir) {
-		base = "--cached"
+	if base == "" {
+		base = "HEAD"
+		if !hasHead(dir) {
+			base = "--cached"
+		}
 	}
 	out, err := run(dir, "diff", base, "--", c.Path)
 	return string(out), err

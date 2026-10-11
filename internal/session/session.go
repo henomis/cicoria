@@ -32,6 +32,11 @@ type Session struct {
 	// Conversation is the agent's own name for the conversation it is in,
 	// when it is not ID: what to continue the next time.
 	Conversation string
+	// Base is the commit the work tree was on when the session was created:
+	// what its changes are counted from. It is empty outside a repository.
+	Base string
+	// Uncommitted narrows the changes shown to what is not committed.
+	Uncommitted bool
 	// Term is the agent's terminal. It is nil until Start succeeds.
 	Term *term.Terminal
 	// Err is why the agent could not be started, if it could not.

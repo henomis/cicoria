@@ -21,6 +21,8 @@ type Saved struct {
 	// Conversation is the agent's own name for the conversation to continue,
 	// when it is not ID.
 	Conversation string `json:"conversation,omitempty"`
+	// Base is the commit the session's changes are counted from.
+	Base string `json:"base,omitempty"`
 	// Queue and Paused are the messages waiting to be sent and whether they
 	// are held back.
 	Queue  []string `json:"queue,omitempty"`
