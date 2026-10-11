@@ -111,3 +111,28 @@ func TestEncodeKey(t *testing.T) {
 		})
 	}
 }
+
+// A title holding a character with the byte 0x9C in its UTF-8 form must not
+// spill onto the screen, however the output is cut into reads.
+func TestTitleStaysOffScreen(t *testing.T) {
+	tm, err := Start(exec.Command("printf", `> \033]0;✳ Side panel\007\033]2;✳ two\033\\✳ done`), 40, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tm.Close() }()
+
+	waitFor(t, tm, "done")
+	if got := strings.TrimSpace(tm.String()); got != "> ✳ done" {
+		t.Errorf("screen = %q", got)
+	}
+
+	out := []byte("a\x1b]0;\xe2\x9c\xb3 t\x07\xe2\x9c\xb3\x1bP\x9cq\x1b\\\x9c")
+	want := "a\x1b]0;\xe2?\xb3 t\x07\xe2\x9c\xb3\x1bP?q\x1b\\\x9c"
+	var f stringFilter
+	for i := range out {
+		f.filter(out[i : i+1])
+	}
+	if string(out) != want {
+		t.Errorf("filtered = %q, want %q", out, want)
+	}
+}

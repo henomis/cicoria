@@ -70,9 +70,11 @@ func Start(cmd *exec.Cmd, width, height int) (*Terminal, error) {
 // readOutput feeds the command's output to the emulator until the PTY closes.
 func (t *Terminal) readOutput() {
 	buf := make([]byte, 32*1024)
+	var control stringFilter
 	for {
 		n, err := t.pty.Read(buf)
 		if n > 0 {
+			control.filter(buf[:n])
 			t.mu.Lock()
 			_, _ = t.emu.Write(buf[:n])
 			t.mu.Unlock()
