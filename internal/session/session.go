@@ -45,6 +45,8 @@ type Session struct {
 	Err error
 
 	Status agent.Status
+	// Since is when the session got into its status.
+	Since time.Time
 	// Unseen marks a status change that happened while the session was not
 	// the one on screen.
 	Unseen bool
@@ -163,11 +165,11 @@ func (s *Session) Start(o agent.LaunchOpts, width, height int) error {
 	t, err := term.Start(s.Adapter.Command(o), width, height)
 	s.Err = err
 	if err != nil {
-		s.Status = agent.Exited
+		s.become(agent.Exited)
 		return err
 	}
 	s.Term = t
-	s.Status = agent.Starting
+	s.become(agent.Starting)
 	s.Unseen = false
 	return nil
 }
@@ -181,7 +183,14 @@ func (s *Session) setStatus(st agent.Status, active bool) {
 	if !active && st != agent.Working {
 		s.Unseen = true
 	}
-	s.Status = st
+	s.become(st)
+}
+
+// become records a status and when it began.
+func (s *Session) become(st agent.Status) {
+	if st != s.Status {
+		s.Status, s.Since = st, time.Now()
+	}
 }
 
 // Apply records what the agent reported. active says whether the session is
@@ -212,7 +221,7 @@ func (s *Session) Apply(u agent.Update, active bool, now time.Time) {
 func (s *Session) NoteInput(now time.Time) {
 	s.lastInput = now
 	if !s.Adapter.ReportsStatus() && s.Status == agent.NeedsInput {
-		s.Status = agent.Idle
+		s.become(agent.Idle)
 	}
 }
 
@@ -252,7 +261,7 @@ func (s *Session) Tick(active bool, now time.Time) {
 			s.setStatus(agent.Idle, active)
 		}
 	case agent.Starting:
-		s.Status = agent.Idle
+		s.become(agent.Idle)
 	}
 }
 
@@ -311,7 +320,7 @@ func (s *Session) CanAutoSend() bool {
 // taken to be working on it.
 func (s *Session) Sent(now time.Time) {
 	s.lastOutput = now
-	s.Status = agent.Working
+	s.become(agent.Working)
 }
 
 // Exit records that the agent's process ended.

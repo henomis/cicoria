@@ -190,6 +190,21 @@ func badge(s *session.Session) string {
 	return ui.Dim.Render("◌")
 }
 
+// lasting tells for how long a session has been in its status, once that is
+// a minute or more.
+func lasting(s *session.Session) string {
+	d := time.Since(s.Since)
+	switch {
+	case s.Since.IsZero() || d < time.Minute:
+		return ""
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 100*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours())/24)
+}
+
 func (m *Model) renderSessions(r rect) []string {
 	focused := m.focus == focusSessions
 	var lines []string
@@ -206,9 +221,13 @@ func (m *Model) renderSessions(r rect) []string {
 		if n := len(s.Queue); n > 0 {
 			row += ui.Dim.Render(fmt.Sprintf(" ⋯%d", n))
 		}
-		// The project goes at the right edge, as far as there is room.
-		if tail := filepath.Base(s.Dir); ansi.StringWidth(row)+ansi.StringWidth(tail)+1 < r.w-2 {
-			row = ui.Fit(row, r.w-2-ansi.StringWidth(tail)) + ui.Dim.Render(tail)
+		// How long it has been so and its project go at the right edge, as
+		// far as there is room: the time first.
+		for _, tail := range []string{strings.TrimSpace(lasting(s) + " " + filepath.Base(s.Dir)), lasting(s)} {
+			if tail != "" && ansi.StringWidth(row)+ansi.StringWidth(tail)+1 < r.w-2 {
+				row = ui.Fit(row, r.w-2-ansi.StringWidth(tail)) + ui.Dim.Render(tail)
+				break
+			}
 		}
 		lines = append(lines, ui.Selected(row, r.w-2, focused && i == m.sessionCursor, true))
 	}
@@ -259,9 +278,9 @@ func (m *Model) renderFiles(r rect) []string {
 		tail := ""
 		switch {
 		case row.Dir && row.Open:
-			name = "▾ " + name + "/"
+			name = ui.Info.Render("▾ " + name + "/")
 		case row.Dir:
-			name = "▸ " + name + "/"
+			name = ui.Info.Render("▸ " + name + "/")
 		default:
 			name = "  " + name
 		}
@@ -455,6 +474,16 @@ func (m *Model) renderStatus() string {
 			}
 			if s.InputTokens > 0 || s.OutputTokens > 0 {
 				right += fmt.Sprintf("in %s · out %s · ", tokens(s.InputTokens), tokens(s.OutputTokens))
+			}
+			// With several sessions counting, what they add up to.
+			counting, in, out := 0, 0, 0
+			for _, s := range m.sessions {
+				if s.InputTokens > 0 || s.OutputTokens > 0 {
+					counting, in, out = counting+1, in+s.InputTokens, out+s.OutputTokens
+				}
+			}
+			if counting > 1 {
+				right += fmt.Sprintf("all in %s · out %s · ", tokens(in), tokens(out))
 			}
 		}
 		right += m.cfg.Prefix + " ? help"

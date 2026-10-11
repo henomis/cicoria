@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/henomis/cicoria/internal/session"
 )
 
 // tree creates directories (names ending in "/") and files under a new root.
@@ -92,5 +95,23 @@ func TestCompleteDir(t *testing.T) {
 	// With nothing typed, hidden directories are not among the candidates.
 	if got := completeDir(base, ""); got != "" {
 		t.Errorf("completeDir(\"\") = %q, want nothing in common", got)
+	}
+}
+
+func TestLasting(t *testing.T) {
+	for want, ago := range map[string]time.Duration{
+		"":    30 * time.Second,
+		"1m":  90 * time.Second,
+		"59m": 59*time.Minute + 30*time.Second,
+		"2h":  2*time.Hour + time.Minute,
+		"4d":  100 * time.Hour,
+	} {
+		s := &session.Session{Since: time.Now().Add(-ago)}
+		if got := lasting(s); got != want {
+			t.Errorf("lasting after %v = %q, want %q", ago, got, want)
+		}
+	}
+	if got := lasting(&session.Session{}); got != "" {
+		t.Errorf("lasting of a session that never started = %q", got)
 	}
 }
