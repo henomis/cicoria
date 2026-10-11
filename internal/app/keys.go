@@ -154,6 +154,9 @@ func (m *Model) filesKey(key string) tea.Cmd {
 	case "enter", "l", "right":
 		if row.Dir {
 			m.tree().SetOpen(key != "enter" || !row.Open)
+			if row.Ignored {
+				return m.refreshNow()
+			}
 		} else if row.Path != "" {
 			m.openFile(row.Path)
 		}
@@ -169,6 +172,14 @@ func (m *Model) filesKey(key string) tea.Cmd {
 		}
 	case "@":
 		m.mention(row.Path)
+	case "i":
+		m.showIgnored = !m.showIgnored
+		if m.showIgnored {
+			m.say("ignored files shown")
+		} else {
+			m.say("ignored files hidden")
+		}
+		return m.refreshNow()
 	}
 	return nil
 }

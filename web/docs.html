@@ -130,12 +130,12 @@ cicoria -config ./my.toml ~/src/app</pre>
         <thead><tr><th>Panel</th><th>Keys</th></tr></thead>
         <tbody>
           <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>x</kbd> close it, <kbd>c</kbd> new session</td></tr>
-          <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>@</kbd> mention the file to the agent</td></tr>
+          <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>@</kbd> mention the file to the agent, <kbd>i</kbd> show or hide what git ignores</td></tr>
           <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
-      <p>In the file tree, folders are blue, files Claude Code has edited in this run are highlighted, and changed files carry git's letter at the right.</p>
+      <p>In the file tree, folders are blue, files Claude Code has edited in this run are highlighted, and changed files carry git's letter at the right. What git ignores is listed in grey, and an ignored folder is read when you open it; <kbd>i</kbd> in the files panel hides those files and shows them again.</p>
       <p><kbd>ctrl+a</kbd> <kbd>[</kbd> and <kbd>]</kbd> hide one side, <kbd>b</kbd> both. A terminal too narrow for the agent and the panels you asked for shows the agent alone.</p>
     </section>
 
@@ -231,6 +231,7 @@ make this a duration</pre>
           <tr><td>left_panel</td><td><code>true</code></td><td>Open with sessions and files shown</td></tr>
           <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
           <tr><td>changes</td><td><code>"uncommitted"</code></td><td>What the changes panel opens on: what is not committed, or with <code>"session"</code> everything a session changed since it started</td></tr>
+          <tr><td>ignored_files</td><td><code>true</code></td><td>Open with the files git ignores listed in the files panel, in grey. <code>false</code> leaves them out until <kbd>i</kbd> is pressed in the panel</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and when a session is created or closed. Any key ends it</td></tr>
         </tbody>
       </table></div>

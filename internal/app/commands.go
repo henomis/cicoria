@@ -244,6 +244,11 @@ func (m *Model) askFile() tea.Cmd {
 	for _, f := range m.files {
 		items = append(items, ui.Item{Label: f, Value: f})
 	}
+	for _, f := range m.ignored {
+		if !strings.HasSuffix(f, "/") {
+			items = append(items, ui.Item{Label: f, Value: f})
+		}
+	}
 	m.openPalette("file › ", items)
 	return nil
 }

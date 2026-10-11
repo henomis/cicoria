@@ -14,7 +14,8 @@ import (
 	"strings"
 )
 
-// maxWalk bounds how many files are listed outside of a repository.
+// maxWalk bounds how many files are listed outside of a repository, and how
+// many ignored ones in one.
 const maxWalk = 5000
 
 // Change is one changed file in the work tree.
@@ -293,4 +294,47 @@ func Files(dir string) ([]string, error) {
 
 	slices.Sort(files)
 	return slices.Compact(files), nil
+}
+
+// Ignored lists what git ignores under dir, relative to it and sorted. A
+// directory ends in a slash and is not looked into, as it may hold a great
+// many files, unless it is one of open: then what is directly inside it is
+// listed as well.
+func Ignored(dir string, open []string) []string {
+	out, err := run(dir, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
+	if err != nil {
+		return nil
+	}
+	isOpen := map[string]bool{}
+	for _, d := range open {
+		isOpen[d] = true
+	}
+
+	var paths []string
+	var add func(p string)
+	add = func(p string) {
+		if len(paths) >= maxWalk {
+			return
+		}
+		paths = append(paths, p)
+		d := strings.TrimSuffix(p, "/")
+		if d == p || !isOpen[d] {
+			return
+		}
+		entries, _ := os.ReadDir(filepath.Join(dir, filepath.FromSlash(d)))
+		for _, e := range entries {
+			child := d + "/" + e.Name()
+			if e.IsDir() {
+				child += "/"
+			}
+			add(child)
+		}
+	}
+	for p := range strings.SplitSeq(string(out), "\x00") {
+		if p != "" {
+			add(p)
+		}
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths)
 }

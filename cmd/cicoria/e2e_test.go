@@ -382,6 +382,63 @@ func TestChangesAreUncommittedByDefault(t *testing.T) {
 	w.quit()
 }
 
+// ignore makes git ignore a file and a folder of the project.
+func (w *workspace) ignore() {
+	w.t.Helper()
+	for name, content := range map[string]string{
+		".gitignore":    "secret.env\nbuild/\n",
+		"secret.env":    "KEY=1\n",
+		"build/out.bin": "x\n",
+	} {
+		path := filepath.Join(w.dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			w.t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			w.t.Fatal(err)
+		}
+	}
+}
+
+// What git ignores is in the files panel too, an ignored folder with what
+// it holds once it is open, and one key hides it all.
+func TestIgnoredFiles(t *testing.T) {
+	w := newWorkspace(t)
+	w.ignore()
+	w.launch(140, 40)
+	w.see("agent ready", "main.go", "secret.env", "▸ build/")
+
+	// Folders come first: api, then build.
+	w.prefix('f')
+	w.typeText("jl")
+	w.see("▾ build/", "out.bin")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.gone("out.bin")
+
+	w.typeText("i")
+	w.see("ignored files hidden")
+	w.gone("secret.env")
+	w.gone("build/")
+	w.typeText("i")
+	w.see("ignored files shown", "secret.env", "▸ build/")
+	w.quit()
+}
+
+// The settings can leave what git ignores out until it is asked for.
+func TestIgnoredFilesHiddenBySetting(t *testing.T) {
+	w := newWorkspace(t)
+	w.ignore()
+	w.set(`ignored_files = false`)
+	w.launch(140, 40)
+	w.see("agent ready", "main.go", ".gitignore")
+	w.gone("secret.env")
+
+	w.prefix('f')
+	w.typeText("i")
+	w.see("ignored files shown", "secret.env", "▸ build/")
+	w.quit()
+}
+
 // The changes of a session can be counted from where it started, so that
 // work the agent commits is still there to review.
 func TestReviewSinceTheStart(t *testing.T) {

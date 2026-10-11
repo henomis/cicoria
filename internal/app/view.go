@@ -278,11 +278,17 @@ func (m *Model) renderFiles(r rect) []string {
 		tail := ""
 		switch {
 		case row.Dir && row.Open:
-			name = ui.Info.Render("▾ " + name + "/")
+			name = "▾ " + name + "/"
 		case row.Dir:
-			name = ui.Info.Render("▸ " + name + "/")
+			name = "▸ " + name + "/"
 		default:
 			name = "  " + name
+		}
+		switch {
+		case row.Ignored:
+			name = ui.Dim.Render(name)
+		case row.Dir:
+			name = ui.Info.Render(name)
 		}
 		if row.Dir && dirty[row.Path] {
 			tail = ui.Dim.Render("•")
@@ -394,6 +400,7 @@ func (m *Model) renderHelp() []string {
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
 		"    files: h/l close/open folder · d diff · e editor · @ mention to the agent",
+		"           i show ⇄ hide what git ignores, which is grey",
 		"    changes: enter diff · v file · e editor · @ mention to the agent",
 		"             s what is not committed ⇄ everything since the session started",
 		"",

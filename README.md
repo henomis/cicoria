@@ -73,6 +73,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 
 In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
 
+The files panel also lists what git ignores, in grey; an ignored folder is read when you open it. `i` in the panel hides those files and shows them again, and `ignored_files = false` in the settings opens without them.
+
 ## Sessions
 
 A session is one agent working in one directory, so one cicoria can hold sessions from several projects. `ctrl+a c` asks for the agent, then the directory (`tab` completes, `ctrl+w` deletes a path component, `ctrl+u` clears, and `~` and relative paths work), then a name, offering one that is free.
@@ -126,6 +128,7 @@ notify = true            # desktop notification when a background session needs 
 left_panel = true        # false opens with sessions and files hidden; ctrl+a [ shows them
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
 changes = "uncommitted"  # "session" opens on everything a session changed since it started
+ignored_files = true     # false opens with the files git ignores left out of the files panel
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 
 # Any command line can be an agent. Its status is guessed from terminal

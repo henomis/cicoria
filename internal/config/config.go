@@ -30,6 +30,9 @@ type Config struct {
 	// Changes says what the changes of a session are when cicoria opens:
 	// ChangesUncommitted or ChangesSession.
 	Changes string `toml:"changes"`
+	// IgnoredFiles says whether the files panel opens with the files git
+	// ignores shown.
+	IgnoredFiles bool `toml:"ignored_files"`
 	// Animations enables the ASCII art that plays when cicoria opens and
 	// quits and when a session is created or closed.
 	Animations bool `toml:"animations"`
@@ -54,7 +57,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, Animations: true}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, Animations: true}
 }
 
 // Path returns where the config file is looked for.
