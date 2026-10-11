@@ -131,7 +131,7 @@ cicoria -config ./my.toml ~/src/app</pre>
         <tbody>
           <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>x</kbd> close it, <kbd>c</kbd> new session</td></tr>
           <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>@</kbd> mention the file to the agent</td></tr>
-          <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>@</kbd> mention, <kbd>s</kbd> since the start or uncommitted only</td></tr>
+          <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
@@ -141,10 +141,11 @@ cicoria -config ./my.toml ~/src/app</pre>
 
     <section id="review">
       <h2>Review changes</h2>
-      <p>The changes of a session are everything that differs from the commit its work tree was on when the session was created, committed or not. Work the agent commits stays in the panel, and the title says how many commits were made since.</p>
+      <p>The changes panel shows what is not committed. It can also show the changes of the session: everything that differs from the commit its work tree was on when the session was created, committed or not. Work the agent commits then stays in the panel, and the title says how many commits were made since.</p>
       <ul>
-        <li><kbd>s</kbd> in the changes panel switches to what is not committed, and back.</li>
-        <li><kbd>ctrl+a</kbd> <kbd>h</kbd> starts the count again from the last commit, for when you have looked at everything so far.</li>
+        <li><kbd>s</kbd> in the changes panel switches between the two.</li>
+        <li><kbd>ctrl+a</kbd> <kbd>h</kbd> starts the count of the session again from the last commit, for when you have looked at everything so far.</li>
+        <li><code>changes = "session"</code> in the settings opens sessions on their own changes.</li>
       </ul>
       <p>Outside a git repository the panel says so and the file tree lists the directory as it is.</p>
       <h3>The full-screen view</h3>
@@ -229,6 +230,7 @@ make this a duration</pre>
           <tr><td>notify</td><td><code>true</code></td><td>Desktop notification when a background session needs input</td></tr>
           <tr><td>left_panel</td><td><code>true</code></td><td>Open with sessions and files shown</td></tr>
           <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
+          <tr><td>changes</td><td><code>"uncommitted"</code></td><td>What the changes panel opens on: what is not committed, or with <code>"session"</code> everything a session changed since it started</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and when a session is created or closed. Any key ends it</td></tr>
         </tbody>
       </table></div>

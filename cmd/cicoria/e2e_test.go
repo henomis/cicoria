@@ -104,6 +104,20 @@ func newWorkspace(t *testing.T) *workspace {
 	}
 }
 
+// set adds a line to the settings cicoria is launched with.
+func (w *workspace) set(line string) {
+	w.t.Helper()
+	path := filepath.Join(filepath.Dir(w.dir), "config.toml")
+	old, err := os.ReadFile(path)
+	if err == nil {
+		// Before the tables at the end of the file.
+		err = os.WriteFile(path, append([]byte(line+"\n"), old...), 0o644)
+	}
+	if err != nil {
+		w.t.Fatal(err)
+	}
+}
+
 // launch starts cicoria on the project.
 func (w *workspace) launch(width, height int) {
 	w.t.Helper()
@@ -340,10 +354,39 @@ func TestWorkspace(t *testing.T) {
 	w.quit()
 }
 
-// The changes of a session are counted from where it started, so that work
-// the agent commits is still there to review.
+// Unless the settings say otherwise, the changes are what is not committed,
+// and what a session did since it started is one key away.
+func TestChangesAreUncommittedByDefault(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("agent ready", "working tree clean")
+
+	w.line("edit notes.txt")
+	w.see("Changes (1)", "? notes.txt")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	for _, args := range [][]string{
+		{"add", "-A"},
+		{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "notes"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	w.see("working tree clean")
+	w.gone("? notes.txt")
+
+	w.prefix('g')
+	w.typeText("s")
+	w.see("everything since it started", "Changes (1) · 1 commit", "A notes.txt")
+	w.quit()
+}
+
+// The changes of a session can be counted from where it started, so that
+// work the agent commits is still there to review.
 func TestReviewSinceTheStart(t *testing.T) {
 	w := newWorkspace(t)
+	w.set(`changes = "session"`)
 	w.launch(140, 40)
 	w.see("agent ready", "working tree clean")
 
@@ -370,10 +413,10 @@ func TestReviewSinceTheStart(t *testing.T) {
 
 	// What is not committed is one key away, and back.
 	w.typeText("s")
-	w.see("Changes · uncommitted", "working tree clean")
+	w.see("what is not committed", "working tree clean")
 	w.gone("A notes.txt")
 	w.typeText("s")
-	w.see("Changes (1) · 1 commit")
+	w.see("everything since it started", "Changes (1) · 1 commit")
 
 	// Once it has been looked at, the count starts again, and stays so.
 	w.prefix('h')

@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/henomis/cicoria/internal/agent"
+	"github.com/henomis/cicoria/internal/config"
 	"github.com/henomis/cicoria/internal/git"
 	"github.com/henomis/cicoria/internal/session"
 	"github.com/henomis/cicoria/internal/ui"
@@ -172,6 +173,7 @@ func (m *Model) newSession(a agent.Adapter, name, dir string) tea.Cmd {
 	}
 	s := session.New(session.NewID(), name, dir, a)
 	s.Base, _ = git.Head(dir)
+	s.Uncommitted = m.cfg.Changes != config.ChangesSession
 	m.sessions = append(m.sessions, s)
 	// The session list grew, which can change the size of the panes.
 	m.resize()

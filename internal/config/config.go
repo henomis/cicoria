@@ -27,6 +27,9 @@ type Config struct {
 	// on the right.
 	LeftPanel  bool `toml:"left_panel"`
 	RightPanel bool `toml:"right_panel"`
+	// Changes says what the changes of a session are when cicoria opens:
+	// ChangesUncommitted or ChangesSession.
+	Changes string `toml:"changes"`
 	// Animations enables the ASCII art that plays when cicoria opens and
 	// quits and when a session is created or closed.
 	Animations bool `toml:"animations"`
@@ -35,6 +38,15 @@ type Config struct {
 	Agents map[string]AgentConfig `toml:"agents"`
 }
 
+// What the changes panel can show.
+const (
+	// ChangesUncommitted is what is not committed.
+	ChangesUncommitted = "uncommitted"
+	// ChangesSession is everything since the session started, committed
+	// or not.
+	ChangesSession = "session"
+)
+
 // AgentConfig describes one agent.
 type AgentConfig struct {
 	Command []string `toml:"command"`
@@ -42,7 +54,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Animations: true}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, Animations: true}
 }
 
 // Path returns where the config file is looked for.
@@ -70,6 +82,9 @@ func Load(path string) (Config, error) {
 	}
 	if u := md.Undecoded(); len(u) > 0 {
 		return cfg, fmt.Errorf("%s: unknown setting %q", path, u[0].String())
+	}
+	if cfg.Changes != ChangesUncommitted && cfg.Changes != ChangesSession {
+		return cfg, fmt.Errorf("%s: changes is %q: it can be %q or %q", path, cfg.Changes, ChangesUncommitted, ChangesSession)
 	}
 	for name, a := range cfg.Agents {
 		if len(a.Command) == 0 {

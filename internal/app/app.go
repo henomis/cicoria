@@ -196,6 +196,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 			}
 			s := session.New(saved.ID, saved.Name, sdir, a)
 			s.Conversation, s.Base, s.Notes = saved.Conversation, saved.Base, saved.Notes
+			s.Uncommitted = cfg.Changes != config.ChangesSession
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
 			s.Queue, s.Paused = saved.Queue, saved.Paused || len(saved.Queue) > 0
@@ -210,6 +211,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 		}
 		s := session.New(session.NewID(), m.newName(a), dir, a)
 		s.Base, _ = git.Head(dir)
+		s.Uncommitted = cfg.Changes != config.ChangesSession
 		m.sessions = append(m.sessions, s)
 	}
 	m.active = max(min(st.Active, len(m.sessions)-1), 0)

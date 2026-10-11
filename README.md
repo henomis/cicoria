@@ -21,7 +21,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 
 - **Runs any agent, untouched.** Each agent is its own command-line program in a real terminal pane, so nothing of its interface is lost.
 - **Shows a status for every session**: working, needs input, or finished while you were elsewhere. One key jumps to the next session that needs you, and a desktop notification tells you when one starts waiting.
-- **Keeps the changes of a session reviewable**, counted from the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
+- **Keeps the changes of a session reviewable**: what is not committed or, one key away, everything since the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
 - **Lets you write notes on lines of code** and send them to the agent as one message.
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Counts tokens** for Claude Code sessions.
@@ -93,7 +93,7 @@ Each row also shows for how long the session has been in its status. A Claude Co
 
 ## Review
 
-The changes of a session are everything that differs from the commit it started on, committed or not; the panel says how many commits were made since. In the changes panel, `s` switches to what is not committed and back. `ctrl+a h` starts the count again from the last commit, once you have looked.
+The changes panel shows what is not committed. In it, `s` switches to everything the session changed since the commit it started on, committed or not, and back; the panel then says how many commits were made since, and `ctrl+a h` starts the count again from the last commit, once you have looked. With `changes = "session"` in the settings, sessions open on that view.
 
 Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `e` opens `$EDITOR`, `@` mentions the file to the agent, `q` goes back.
 
@@ -125,6 +125,7 @@ default_agent = "claude"
 notify = true            # desktop notification when a background session needs input
 left_panel = true        # false opens with sessions and files hidden; ctrl+a [ shows them
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
+changes = "uncommitted"  # "session" opens on everything a session changed since it started
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 
 # Any command line can be an agent. Its status is guessed from terminal

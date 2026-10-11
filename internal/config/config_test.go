@@ -20,7 +20,7 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Prefix != "ctrl+a" || cfg.DefaultAgent != "claude" || !cfg.Notify || !cfg.LeftPanel || !cfg.RightPanel || !cfg.Animations {
+	if cfg.Prefix != "ctrl+a" || cfg.DefaultAgent != "claude" || !cfg.Notify || !cfg.LeftPanel || !cfg.RightPanel || !cfg.Animations || cfg.Changes != ChangesUncommitted {
 		t.Errorf("defaults = %+v", cfg)
 	}
 }
@@ -68,5 +68,15 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		if _, err := Load(write(t, content)); err == nil {
 			t.Errorf("%s: Load accepted it", name)
 		}
+	}
+}
+
+func TestLoadChanges(t *testing.T) {
+	cfg, err := Load(write(t, `changes = "session"`))
+	if err != nil || cfg.Changes != ChangesSession {
+		t.Errorf("changes = %q, %v", cfg.Changes, err)
+	}
+	if _, err := Load(write(t, `changes = "all"`)); err == nil {
+		t.Error("an unknown kind of changes was accepted")
 	}
 }

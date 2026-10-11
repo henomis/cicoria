@@ -202,6 +202,11 @@ func (m *Model) changesKey(key string) tea.Cmd {
 		// Everything since the session started, or what is not committed.
 		if s := m.current(); s != nil && s.Base != "" {
 			s.Uncommitted = !s.Uncommitted
+			if s.Uncommitted {
+				m.say("changes of " + s.Name + ": what is not committed")
+			} else {
+				m.say("changes of " + s.Name + ": everything since it started")
+			}
 			return m.refresh()
 		}
 		m.say("this session has no commit to count its changes from")
