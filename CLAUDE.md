@@ -27,7 +27,7 @@ env -u CICORIA_SOCK -u CICORIA_SESSION go test . -run TestReviewSinceTheStart -v
 
 The `env -u` matters when working from inside a cicoria session: the tests start cicoria themselves, and those two variables would point their hooks at the instance that is already running. The Makefile targets do this already.
 
-CI (`.github/workflows/checks.yml`) runs `golangci-lint` and `make check` on pushes and pull requests, skipping changes that only touch `*.md` or `web/`. `web.yml` publishes `web/` to GitHub Pages on every push to `main`.
+CI (`.github/workflows/checks.yml`) runs `golangci-lint` and `make check` on pushes and pull requests, skipping changes that only touch `*.md` or `web/`. `web.yml` publishes `web/` to GitHub Pages on every push to `main`. `release.yml` runs GoReleaser (`.goreleaser.yaml`) on a `v*.*.*` tag and publishes the binaries for Linux and macOS; `goreleaser release --snapshot --clean` builds them locally into `dist/`.
 
 ## Architecture
 

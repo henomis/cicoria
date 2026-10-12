@@ -54,9 +54,16 @@ func main() {
 	}
 }
 
-// version returns the version cicoria was built from, as the Go toolchain
-// recorded it: a tag when installed with "go install", a commit otherwise.
+// released is the version of a released binary, set when it is built.
+var released string
+
+// version returns the version cicoria was built from: the tag of a release,
+// or what the Go toolchain recorded, a tag when installed with "go install"
+// and a commit otherwise.
 func version() string {
+	if released != "" {
+		return released
+	}
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
 		return info.Main.Version
 	}

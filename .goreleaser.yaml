@@ -1,0 +1,38 @@
+# How a release is built: see https://goreleaser.com
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+
+version: 2
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    # cicoria needs a pseudo-terminal and unix sockets: no Windows.
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.released={{ .Tag }}
+
+archives:
+  - formats: [tar.gz]
+    # The names of the system and the processor are those "uname" gives.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+
+changelog:
+  sort: asc
+
+release:
+  # A tag such as v0.0.3-rc.1 is published as a pre-release.
+  prerelease: auto
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

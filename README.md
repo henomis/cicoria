@@ -33,13 +33,15 @@ Claude Code gets the full integration: its status comes from hooks, and the file
 
 ## Install
 
+Download the archive for your system from the [releases](https://github.com/henomis/cicoria/releases) (Linux and macOS, x86_64 and arm64) and put the `cicoria` in it on your `PATH`, or build it with Go:
+
 ```sh
 go install github.com/henomis/cicoria@latest
 ```
 
 Requirements:
 
-- Go 1.26 or later
+- Go 1.26 or later, only to build it
 - `git`
 - the agents you want to run (`claude` by default)
 - a Unix-like system; cicoria is developed and tested on Linux. Desktop notifications use `notify-send`, or `osascript` on macOS.
