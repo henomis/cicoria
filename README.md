@@ -1,5 +1,7 @@
 # cicoria
 
+![cicoria: a robot made of chicory leaves and flowers at a keyboard, with terminal windows around it](assets/cover.jpg)
+
 A terminal workspace for the AI-first engineer: run several coding agents side by side, see which one needs you, and review what they changed, without leaving the terminal.
 
 ```
