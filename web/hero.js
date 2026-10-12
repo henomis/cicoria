@@ -214,13 +214,18 @@
     intro = 1;
     draw();
   } else {
-    const start = performance.now(), length = 1400;
+    // Until the browser animates, which a tab in the background or a preview
+    // of the page never does, the chicory stands in full flower.
+    const length = 1400, grown = 0.99;
+    let start;
     const frame = (now) => {
       if (intro >= 1) return;
+      start ??= now;
       intro = Math.min((now - start) / length, 1);
       draw();
       if (intro < 1) requestAnimationFrame(frame);
     };
+    intro = grown;
     draw();
     requestAnimationFrame(frame);
   }
