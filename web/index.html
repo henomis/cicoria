@@ -88,7 +88,7 @@
 ~/src/infra      <span class="d">1 session(s)</span></pre>
         <div>
           <h3>Close the terminal, pick up where you left off</h3>
-          <p>Sessions come back with their names, directories, notes and queues, and Claude Code and Copilot CLI resume their conversation. Queues return paused, so opening cicoria never sends anything by itself, and <kbd>ctrl+a</kbd> <kbd>w</kbd> opens another saved workspace.</p>
+          <p>Sessions come back with their names, directories, notes and queues, and Claude Code, Copilot CLI and Codex CLI resume their conversation. Queues return paused, so opening cicoria never sends anything by itself, and <kbd>ctrl+a</kbd> <kbd>w</kbd> opens another saved workspace.</p>
         </div>
       </li>
       <li>
@@ -111,7 +111,7 @@ command = ["aider"]
 command = ["claude", "--model", "opus"]</pre>
         <div>
           <h3>Any agent, with nothing of its interface lost</h3>
-          <p>An agent is a command line in a real terminal, so its own interface works as it does alone, and the wheel scrolls back through what left the screen. Claude Code and GitHub Copilot CLI report their status, the end of their turn and their tokens through hooks. For other agents the status is guessed from the terminal, and queued messages are sent by hand.</p>
+          <p>An agent is a command line in a real terminal, so its own interface works as it does alone, and the wheel scrolls back through what left the screen. Claude Code, GitHub Copilot CLI and Codex CLI report their status, the end of their turn and their tokens through hooks. For other agents the status is guessed from the terminal, and queued messages are sent by hand.</p>
         </div>
       </li>
     </ul>
@@ -121,7 +121,7 @@ command = ["claude", "--model", "opus"]</pre>
     <h2>The first minute</h2>
     <ol class="steps">
       <li><div>
-        <p>Install it. You need Go 1.26 or later, git, and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI is known too.</p>
+        <p>Install it. You need Go 1.26 or later, git, and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too.</p>
         <pre>go install github.com/henomis/cicoria@latest</pre>
       </div></li>
       <li><div>

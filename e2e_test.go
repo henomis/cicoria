@@ -70,6 +70,24 @@ while read -r cmd arg; do
 done
 `
 
+// fakeCodex stands in for Codex CLI: its payloads say which hook they are
+// from, and none runs before the first message.
+const fakeCodex = `
+hook() { printf '{"hook_event_name":"%s","cwd":"%s",%s}' "$1" "$PWD" "$2" | "$CICORIA_BIN" hook; }
+echo "codex ready"
+while read -r cmd arg; do
+  case "$cmd" in
+    work) hook SessionStart '"source":"startup"'
+          hook UserPromptSubmit '"prompt":"work"' ;;
+    ask)  hook PermissionRequest '"tool_name":"Bash"' ;;
+    stop) hook Stop '"last_assistant_message":"done"' ;;
+    edit) echo "hello from codex" > "$arg"
+          hook PostToolUse "\"tool_name\":\"apply_patch\",\"tool_input\":{\"command\":\"*** Begin Patch\\n*** Add File: $arg\\n+hello\\n*** End Patch\"}" ;;
+    *)    echo "got $cmd" ;;
+  esac
+done
+`
+
 // workspace is a cicoria instance running in a PTY against a scratch project.
 type workspace struct {
 	t   *testing.T
@@ -122,6 +140,7 @@ func newWorkspace(t *testing.T) *workspace {
 
 	config := fmt.Sprintf("notify = false\nanimations = false\n\n[agents.claude]\ncommand = [\"sh\", \"-c\", %q, \"fake-claude\"]\n", fakeAgent)
 	config += fmt.Sprintf("\n[agents.copilot]\ncommand = [\"sh\", \"-c\", %q, \"fake-copilot\"]\n", fakeCopilot)
+	config += fmt.Sprintf("\n[agents.codex]\ncommand = [\"sh\", \"-c\", %q, \"fake-codex\"]\n", fakeCodex)
 	must(os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0o644))
 	must(os.MkdirAll(filepath.Join(home, "run"), 0o700))
 
@@ -135,6 +154,7 @@ func newWorkspace(t *testing.T) *workspace {
 			"XDG_RUNTIME_DIR="+filepath.Join(home, "run"),
 			"CLAUDE_CONFIG_DIR="+filepath.Join(home, "claude"),
 			"COPILOT_HOME="+filepath.Join(home, "copilot"),
+			"CODEX_HOME="+filepath.Join(home, "codex"),
 			"XDG_CACHE_HOME="+filepath.Join(home, "cache"),
 			"SHELL=/bin/sh",
 		),
@@ -948,6 +968,42 @@ func TestCopilot(t *testing.T) {
 	w.see("got next", "copilot-1 · copilot · working")
 	w.line("stop")
 	w.see("copilot-1 · copilot · idle")
+	w.quit()
+}
+
+// TestCodex runs a Codex CLI session: the first of its hooks comes with the
+// first message, and a patch names the file it wrote.
+func TestCodex(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("codex")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("codex in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: codex-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+
+	// It says nothing when it starts: it is ready once its screen is quiet.
+	w.see("codex ready", "codex-1 · codex · idle")
+
+	w.line("work")
+	w.see("codex-1 · codex · working")
+	w.line("ask")
+	w.see("codex-1 · codex · needs input")
+	w.line("edit notes.txt")
+	w.see("codex-1 · codex · working", "? notes.txt")
+
+	// The end of a turn sends what waits in the queue.
+	w.queue("next")
+	w.see("Queue (1)")
+	w.line("stop")
+	w.see("got next", "codex-1 · codex · working")
+	w.line("stop")
+	w.see("codex-1 · codex · idle")
 	w.quit()
 }
 

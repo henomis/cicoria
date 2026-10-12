@@ -50,7 +50,7 @@
       <ul>
         <li>Go 1.26 or later, only to build it.</li>
         <li><code>git</code>, for the changes panel and the diffs.</li>
-        <li>The agents you want to run. Claude Code (<code>claude</code>) is the default; GitHub Copilot CLI (<code>copilot</code>) is known too.</li>
+        <li>The agents you want to run. Claude Code (<code>claude</code>) is the default; GitHub Copilot CLI (<code>copilot</code>) and Codex CLI (<code>codex</code>) are known too.</li>
         <li>A Unix-like system. cicoria is developed and tested on Linux. Desktop notifications use <code>notify-send</code>, or <code>osascript</code> on macOS, and are skipped where neither is there.</li>
       </ul>
     </section>
@@ -107,7 +107,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
         <li>A name. A free one, such as <code>claude-2</code>, is offered; <kbd>enter</kbd> accepts it.</li>
       </ul>
       <p>Keep one session to a directory. The files and changes panels show the project of the session on screen, so two sessions in the same directory cannot be told apart by their changes. cicoria lets you do it and warns you.</p>
-      <p>Closing a session whose agent is still running, or that has queued messages, asks first. Quitting asks when a Claude Code or Copilot CLI session is still working.</p>
+      <p>Closing a session whose agent is still running, or that has queued messages, asks first. Quitting asks when a Claude Code, Copilot CLI or Codex CLI session is still working.</p>
     </section>
 
     <section id="status">
@@ -125,7 +125,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
         </tbody>
       </table></div>
       <p>A session that needs input and is not on screen is also named in the status bar, and raises a desktop notification when <code>notify</code> is on.</p>
-      <p>Claude Code and Copilot CLI tell cicoria what they are doing. When one says it is working but has shown no sign of life for 30 seconds, its status reads <code>working?</code> and its mark is dimmed. This happens after you interrupt a turn, and with Copilot CLI when a turn ends on an error. For other agents the status is guessed: output means working, quiet means idle, the terminal bell means it needs input.</p>
+      <p>Claude Code, Copilot CLI and Codex CLI tell cicoria what they are doing. When one says it is working but has shown no sign of life for 30 seconds, its status reads <code>working?</code> and its mark is dimmed. This happens after you interrupt a turn, and with Copilot CLI when a turn ends on an error. For other agents the status is guessed: output means working, quiet means idle, the terminal bell means it needs input.</p>
       <p>A session closes when its agent or shell exits. It is kept, marked <span class="mark-r">✕</span>, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. <code>close_on_exit = false</code> in the settings keeps every session.</p>
     </section>
 
@@ -141,7 +141,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
-      <p>In the file tree, folders are blue, files Claude Code or Copilot CLI has edited in this run are highlighted, and changed files carry git's letter at the right. What git ignores is listed in grey, and an ignored folder is read when you open it; <kbd>i</kbd> in the files panel hides those files and shows them again.</p>
+      <p>In the file tree, folders are blue, files Claude Code, Copilot CLI or Codex CLI has edited in this run are highlighted, and changed files carry git's letter at the right. What git ignores is listed in grey, and an ignored folder is read when you open it; <kbd>i</kbd> in the files panel hides those files and shows them again.</p>
       <p><kbd>ctrl+a</kbd> <kbd>[</kbd> and <kbd>]</kbd> hide one side, <kbd>b</kbd> both. A terminal too narrow for the agent and the panels you asked for shows the agent alone.</p>
     </section>
 
@@ -211,20 +211,21 @@ make this a duration</pre>
           <tr><td>J, K</td><td>Move a message down, up</td></tr>
         </tbody>
       </table></div>
-      <p>Only Claude Code and Copilot CLI say when their turn ends. Other agents keep a queue too, marked manual: each message is sent when you press <kbd>enter</kbd> in the panel.</p>
+      <p>Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, marked manual: each message is sent when you press <kbd>enter</kbd> in the panel.</p>
     </section>
 
     <section id="agents">
       <h2>Agents</h2>
-      <p>An agent is a command line that cicoria runs in a terminal of its own. Four kinds are offered when you create a session:</p>
+      <p>An agent is a command line that cicoria runs in a terminal of its own. Five kinds are offered when you create a session:</p>
       <ul>
         <li>Claude Code, always. It reports its status through hooks that cicoria registers for the process it launches, without touching your Claude Code settings. Its conversation continues when the session is reopened. The files it edits are highlighted in the tree.</li>
         <li>GitHub Copilot CLI, always. It reports its status through the hooks of a plugin that cicoria loads for the process it launches, without touching your Copilot settings. It says nothing until the first message, so a new session reads idle once its screen is drawn. Its conversation continues when the session is reopened, and the files it edits are highlighted in the tree.</li>
+        <li>Codex CLI, always. It reports its status through hooks that cicoria passes on the command line of the process it launches, without touching your Codex settings. Codex asks you to trust them the first time: pick <q>Trust all and continue</q>, or it works but reports nothing. Like Copilot CLI it says nothing until the first message. Its conversation continues when the session is reopened, and the files it patches are highlighted in the tree.</li>
         <li>Any command you add to the configuration. Its status is guessed from terminal activity.</li>
         <li>A plain shell, always.</li>
       </ul>
       <h3>Tokens</h3>
-      <p>For Claude Code and Copilot CLI sessions the status bar shows <code>ctx</code>, the size of the context at the last reply, and <code>in</code> and <code>out</code>, what the model has read and written over the whole conversation. Cached input is counted in <code>in</code>, which is why it grows fast. With several sessions counting, <code>all</code> is their sum.</p>
+      <p>For Claude Code, Copilot CLI and Codex CLI sessions the status bar shows <code>ctx</code>, the size of the context at the last reply, and <code>in</code> and <code>out</code>, what the model has read and written over the whole conversation. Cached input is counted in <code>in</code>, which is why it grows fast. With several sessions counting, <code>all</code> is their sum.</p>
     </section>
 
     <section id="configure">
@@ -251,21 +252,25 @@ right_panel = false
 [agents.aider]
 command = ["aider"]
 
-<span class="c"># An entry named "claude" or "copilot" changes how Claude Code or</span>
-<span class="c"># Copilot CLI is started, and one named "shell" which shell is run.</span>
+<span class="c"># An entry named "claude", "copilot" or "codex" changes how Claude</span>
+<span class="c"># Code, Copilot CLI or Codex CLI is started, and one named "shell"</span>
+<span class="c"># which shell is run.</span>
 [agents.claude]
 command = ["claude", "--model", "opus"]
 
 <span class="c"># cicoria adds its own options at the end, so a launcher that</span>
 <span class="c"># passes the rest on ends with "--".</span>
 [agents.copilot]
-command = ["ollama", "launch", "copilot", "--model", "gemma4:cloud", "--"]</pre>
+command = ["ollama", "launch", "copilot", "--model", "gemma4:cloud", "--"]
+
+[agents.codex]
+command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]</pre>
     </section>
 
     <section id="remembered">
       <h2>What is remembered</h2>
       <p>For each directory you open cicoria on, it keeps the sessions with their names, directories, starting commits, notes and queues. They are stored under <code>$XDG_STATE_HOME/cicoria</code>, or <code>~/.local/state/cicoria</code>.</p>
-      <p>Agents stop when cicoria closes. The next time, every session is started again; Claude Code and Copilot CLI pick up their conversation. Queues come back paused, so that opening cicoria never sends a message by itself.</p>
+      <p>Agents stop when cicoria closes. The next time, every session is started again; Claude Code, Copilot CLI and Codex CLI pick up their conversation. Queues come back paused, so that opening cicoria never sends a message by itself.</p>
       <p>A session belongs to the workspace it was created in, wherever it works: one created from <code>~/src/app</code> to work in <code>~/src/lib</code> comes back when cicoria is opened on <code>~/src/app</code>, not on <code>~/src/lib</code>. <kbd>ctrl+a</kbd> <kbd>w</kbd> lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.</p>
     </section>
 

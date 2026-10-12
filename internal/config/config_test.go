@@ -66,7 +66,7 @@ command = ["aider"]
 	for _, a := range cfg.Adapters() {
 		names = append(names, a.Name())
 	}
-	want := []string{"claude", "copilot", "aider", "shell"}
+	want := []string{"claude", "copilot", "codex", "aider", "shell"}
 	if len(names) != len(want) {
 		t.Fatalf("adapters = %v, want %v", names, want)
 	}
