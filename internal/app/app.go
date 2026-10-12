@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -680,11 +681,30 @@ func (m *Model) change(path string) (git.Change, bool) {
 // notify raises a desktop notification, where the system has a way to.
 func notify(text string) tea.Cmd {
 	return func() tea.Msg {
-		if path, err := exec.LookPath("notify-send"); err == nil {
-			_ = exec.Command(path, "--app-name=cicoria", "cicoria", text).Run()
+		if argv := notifier(runtime.GOOS, text); argv != nil {
+			if path, err := exec.LookPath(argv[0]); err == nil {
+				_ = exec.Command(path, argv[1:]...).Run()
+			}
 		}
 		return nil
 	}
+}
+
+// notifier returns the command line that raises a desktop notification on
+// the given system.
+func notifier(goos, text string) []string {
+	if goos == "darwin" {
+		// The text is handed over as an argument, not written into the
+		// script, so that nothing in a session's name is run.
+		return []string{
+			"osascript",
+			"-e", "on run argv",
+			"-e", `display notification (item 1 of argv) with title "cicoria"`,
+			"-e", "end run",
+			"--", text,
+		}
+	}
+	return []string{"notify-send", "--app-name=cicoria", "cicoria", text}
 }
 
 // send passes a key to the agent on screen.

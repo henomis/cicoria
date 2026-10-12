@@ -42,7 +42,7 @@ Requirements:
 - Go 1.26 or later
 - `git`
 - the agents you want to run (`claude` by default)
-- a Unix-like system; cicoria is developed and tested on Linux. Desktop notifications use `notify-send`.
+- a Unix-like system; cicoria is developed and tested on Linux. Desktop notifications use `notify-send`, or `osascript` on macOS.
 
 ## Quick start
 
