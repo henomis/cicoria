@@ -79,6 +79,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 
 In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
 
+The title of the agent pane names the session, its agent, its status, its directory and the git branch that directory is on, or the commit when it is on no branch. It follows a branch the agent switches to.
+
 The mouse wheel and `pgup`/`pgdn` scroll back through what has left the agent's screen, and the title of the pane says how many lines back you are; typing goes back to the end. An agent that reads the mouse itself, or takes the whole screen as an editor does, gets the wheel and the keys instead.
 
 `o` on a file, in the files and changes panels and in the full-screen view, hands it to the program the system opens it with (`xdg-open`, or `open` on macOS): an image goes to the image viewer, a web page to the browser. A folder opens in the file manager.

@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/henomis/cicoria/internal/session"
 )
 
@@ -109,6 +111,35 @@ func TestCompleteDir(t *testing.T) {
 	// With nothing typed, hidden directories are not among the candidates.
 	if got := completeDir(base, ""); got != "" {
 		t.Errorf("completeDir(\"\") = %q, want nothing in common", got)
+	}
+}
+
+func TestPaneTitle(t *testing.T) {
+	const head = "s · claude · idle"
+	for _, tt := range []struct {
+		dir, branch string
+		room        int
+		want        string
+	}{
+		{"~/app", "main", 60, "s · claude · idle · ~/app · main"},
+		// Outside a repository there is no branch to name.
+		{"~/app", "", 60, "s · claude · idle · ~/app"},
+		// The directory gives way first, and keeps its end.
+		{"~/work/projects/app", "feature/login", 50, "s · claude · idle · …/projects/app · feature/login"},
+		{"~/work/projects/app", "feature/login", 48, "s · claude · idle · …rojects/app · feature/login"},
+		// Then a long branch is cut in the middle.
+		{"~/work/projects/app", "feature/a-very-long-branch-name", 50, "s · claude · idle · …rojects/app · feature…ch-name"},
+		{"~/app", "feature/a-very-long-branch-name", 46, "s · claude · idle · ~/app · feature/a…nch-name"},
+		// With no room for both, the branch is what stays.
+		{"~/work/projects/app", "feature/a-very-long-branch-name", 40, "s · claude · idle · featur…-name"},
+	} {
+		got := paneTitle(head, tt.dir, tt.branch, tt.room)
+		if got != tt.want {
+			t.Errorf("paneTitle(%q, %q, %d) = %q, want %q", tt.dir, tt.branch, tt.room, got, tt.want)
+		}
+		if ansi.StringWidth(got) > tt.room {
+			t.Errorf("paneTitle(%q, %q, %d) = %q is %d wide", tt.dir, tt.branch, tt.room, got, ansi.StringWidth(got))
+		}
 	}
 }
 

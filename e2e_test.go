@@ -43,6 +43,7 @@ while read -r cmd arg; do
     news) hook '{"hook_event_name":"Notification","notification_type":"auth_success"}' ;;
     edit) echo "hello from the agent" > "$arg"
           hook "{\"hook_event_name\":\"PostToolUse\",\"tool_input\":{\"file_path\":\"$PWD/$arg\"}}" ;;
+    branch) git switch -q -c "$arg" ;;
     size) echo "size $(stty size)" ;;
     pwd)  echo "in $PWD" ;;
     many) seq 1 100 ;;
@@ -251,6 +252,8 @@ func TestWorkspace(t *testing.T) {
 
 	// The agent runs in the centre pane, between the side panels.
 	w.see("Sessions", "Files · project", "working tree clean", "agent ready", "claude-1 · claude · idle")
+	// The pane is headed by the directory and the branch it is on.
+	w.see("project · main ─")
 	w.see("▸ api/", "main.go")
 	w.line("ping")
 	w.see("got ping")
@@ -282,6 +285,10 @@ func TestWorkspace(t *testing.T) {
 	w.see("Changes (1)", "? notes.txt", "+1")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
+
+	// A branch the agent moves to is shown without asking.
+	w.line("branch feature/login")
+	w.see("project · feature/login ─")
 
 	// Its diff opens on the whole screen and closes back to the workspace.
 	w.prefix('g')
@@ -365,6 +372,8 @@ func TestWorkspace(t *testing.T) {
 	w.typeText("scratch")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("scratch · shell", "Files · other", "elsewhere.txt", "not a git repository")
+	// Outside a repository the pane is headed by the directory alone.
+	w.see("/other ─")
 	w.gone("main.go")
 	w.line("pwd")
 	w.see(filepath.Join(filepath.Dir(w.dir), "other"))

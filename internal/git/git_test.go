@@ -217,6 +217,32 @@ func TestStatusBeforeFirstCommit(t *testing.T) {
 	}
 }
 
+func TestBranch(t *testing.T) {
+	// A branch has its name before its first commit.
+	dir := t.TempDir()
+	gitCmd(t, dir, "init", "-q", "-b", "trunk")
+	if got := Branch(dir); got != "trunk" {
+		t.Errorf("branch before the first commit = %q", got)
+	}
+
+	dir = repo(t)
+	gitCmd(t, dir, "switch", "-q", "-c", "feature/login")
+	if got := Branch(dir); got != "feature/login" {
+		t.Errorf("branch = %q", got)
+	}
+
+	// On no branch, the commit is what there is to say.
+	gitCmd(t, dir, "switch", "-q", "--detach")
+	head, _ := Head(dir)
+	if got := Branch(dir); len(got) < 4 || !strings.HasPrefix(head, got) {
+		t.Errorf("detached = %q, head %s", got, head)
+	}
+
+	if got := Branch(t.TempDir()); got != "" {
+		t.Errorf("branch outside a repository = %q", got)
+	}
+}
+
 func TestStatusOutsideRepository(t *testing.T) {
 	if _, err := Status(t.TempDir(), ""); err == nil {
 		t.Error("Status succeeded outside a repository")

@@ -114,6 +114,7 @@ func (m *Model) showProject() tea.Cmd {
 	if m.project() != m.shown {
 		m.shown = m.project()
 		m.files, m.changes, m.repo, m.loading = nil, nil, false, true
+		m.branch = ""
 		m.changeCursor, m.changeTop = 0, 0
 	}
 	return m.refresh()

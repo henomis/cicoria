@@ -102,6 +102,19 @@ func Head(dir string) (string, bool) {
 	return strings.TrimSpace(string(out)), true
 }
 
+// Branch returns the branch the work tree containing dir is on, or the short
+// name of its commit when it is on none. It is empty outside a repository.
+func Branch(dir string) string {
+	out, err := run(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		out, err = run(dir, "rev-parse", "--verify", "--quiet", "--short", "HEAD")
+	}
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // Exists reports whether a commit is still in the repository of dir.
 func Exists(dir, commit string) bool {
 	_, err := run(dir, "cat-file", "-e", commit+"^{commit}")

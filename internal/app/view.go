@@ -177,7 +177,8 @@ func (m *Model) renderAgent(l layout) []string {
 		if back := s.Term.Scrolled(); back > 0 {
 			status = fmt.Sprintf("%s · %d lines back", status, back)
 		}
-		title = fmt.Sprintf("%s · %s · %s · %s", s.Name, s.Adapter.Name(), status, tilde(s.Dir))
+		head := fmt.Sprintf("%s · %s · %s", s.Name, s.Adapter.Name(), status)
+		title = paneTitle(head, tilde(s.Dir), m.branch, l.agentBox.w-6)
 		lines = strings.Split(s.Term.Render(), "\n")
 	}
 
@@ -185,6 +186,43 @@ func (m *Model) renderAgent(l layout) []string {
 		return ui.Block(lines, l.agent.w, l.agent.h)
 	}
 	return ui.Box(title, lines, l.agentBox.w, l.agentBox.h, m.focus == focusAgent)
+}
+
+// paneTitle heads the agent pane with the session, its directory and the
+// branch that directory is on, in the room there is. The directory gives way
+// first, keeping its end, then the branch, and what is left of the directory
+// last.
+func paneTitle(head, dir, branch string, room int) string {
+	if branch == "" {
+		return head + " · " + dir
+	}
+	free := room - ansi.StringWidth(head+" ·  · ")
+	if w := ansi.StringWidth(dir); w+ansi.StringWidth(branch) > free {
+		// The end of a path says more than its start.
+		if keep := max(free-ansi.StringWidth(branch), min(w, minPart)); keep < w {
+			dir = "…" + ansi.TruncateLeft(dir, w-keep+1, "")
+		}
+		branch = middle(branch, max(free-ansi.StringWidth(dir), minPart))
+	}
+	if ansi.StringWidth(dir)+ansi.StringWidth(branch) > free {
+		return head + " · " + branch
+	}
+	return head + " · " + dir + " · " + branch
+}
+
+// minPart is how much of a directory and of a branch's name is shown before
+// the other gives way.
+const minPart = 12
+
+// middle cuts a text that is wider than width in the middle, so that both
+// its start and its end can be read.
+func middle(s string, width int) string {
+	w := ansi.StringWidth(s)
+	if w <= width {
+		return s
+	}
+	tail := (width - 1) / 2
+	return ansi.Truncate(s, width-tail, "…") + ansi.TruncateLeft(s, w-tail, "")
 }
 
 // badge is the status mark shown next to a session.
