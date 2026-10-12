@@ -54,7 +54,7 @@ The agent process stops with cicoria. A Claude session is started with `--sessio
 
 ### Changes of a session
 
-The changes panel shows either what is not committed or everything since `Session.Base`, the commit the work tree was on when the session was created. `Session.Uncommitted` picks between them; it starts from the `changes` setting, is toggled with `s` in the panel, and is not saved. `app.refresh` re-reads the directory of the session on screen in the background every two seconds. The comparison is of the directory, not of the agent, so two sessions on one directory see each other's changes.
+The changes panel shows either what is not committed or everything since `Session.Base`, the commit the work tree was on when the session was created. `Session.Uncommitted` picks between them; it starts from the `changes` setting, is toggled with `s` in the panel, and is not saved. `app.refresh` re-reads the directory of the session on screen in the background every two seconds, except while the terminal is not focused: it is read again when the focus comes back. The comparison is of the directory, not of the agent, so two sessions on one directory see each other's changes.
 
 ### The pager
 

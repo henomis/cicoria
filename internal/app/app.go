@@ -506,6 +506,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case tea.FocusMsg:
 		m.blurred = false
 		m.seen()
+		// The work tree was not looked at while the terminal was away.
+		return m.refresh()
 	case tea.BlurMsg:
 		m.blurred = true
 
@@ -630,7 +632,9 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 		m.message = ""
 	}
 	m.ticks++
-	if m.ticks%refreshTicks == 0 {
+	// Nobody sees the panels of a terminal that is not in front: the work
+	// tree is looked at again when it comes back.
+	if m.ticks%refreshTicks == 0 && !m.blurred {
 		return m.refresh()
 	}
 	return nil

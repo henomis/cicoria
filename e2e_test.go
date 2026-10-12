@@ -394,6 +394,27 @@ func (w *workspace) newShell() {
 }
 
 // A file is handed to the system's opener from the files panel.
+func TestWorkTreeLeftAloneWhileAway(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("working tree clean", "agent ready")
+
+	// A terminal that is not in front has nobody looking at its panels.
+	w.tm.Type("\x1b[O")
+	time.Sleep(200 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(w.dir, "away.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(3 * time.Second)
+	if strings.Contains(w.tm.String(), "away.txt") {
+		t.Fatalf("the work tree was looked at while away:\n%s", w.tm.String())
+	}
+
+	// Coming back looks at once.
+	w.tm.Type("\x1b[I")
+	w.see("Changes (1)", "? away.txt")
+}
+
 func TestOpenWithTheSystem(t *testing.T) {
 	w := newWorkspace(t)
 	// A stand-in for the opener, which records what it was asked for.
