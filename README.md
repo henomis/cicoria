@@ -90,9 +90,11 @@ Keep one session to a directory. The files and changes panels show the project o
 | `▲` | Needs input: the agent asks a question or a permission |
 | `✓` | Finished its turn while you were looking elsewhere |
 | `○` | Idle |
-| `✕` | The agent's process has exited; `ctrl+a r` restarts it |
+| `✕` | The agent's process has exited and the session was kept; `ctrl+a r` restarts it |
 
 Each row also shows for how long the session has been in its status. A Claude Code session that says it is working but has given no sign of life for 30 seconds reads `working?`, as after an interrupted turn.
+
+A session closes when its agent or shell exits. It is kept, marked `✕`, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. `close_on_exit = false` in the settings keeps every session.
 
 ## Review
 
@@ -130,6 +132,7 @@ left_panel = true        # false opens with sessions and files hidden; ctrl+a [ 
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
 changes = "uncommitted"  # "session" opens on everything a session changed since it started
 ignored_files = true     # false opens with the files git ignores left out of the files panel
+close_on_exit = true     # false keeps a session whose agent has exited, to restart or close by hand
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 
 # Any command line can be an agent. Its status is guessed from terminal

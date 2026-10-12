@@ -20,7 +20,7 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Prefix != "ctrl+a" || cfg.DefaultAgent != "claude" || !cfg.Notify || !cfg.LeftPanel || !cfg.RightPanel || !cfg.Animations || !cfg.IgnoredFiles || cfg.Changes != ChangesUncommitted {
+	if cfg.Prefix != "ctrl+a" || cfg.DefaultAgent != "claude" || !cfg.Notify || !cfg.LeftPanel || !cfg.RightPanel || !cfg.Animations || !cfg.IgnoredFiles || !cfg.CloseOnExit || cfg.Changes != ChangesUncommitted {
 		t.Errorf("defaults = %+v", cfg)
 	}
 }
@@ -31,6 +31,7 @@ prefix = "ctrl+b"
 notify = false
 right_panel = false
 ignored_files = false
+close_on_exit = false
 
 [agents.copilot]
 command = ["copilot", "--banner"]
@@ -41,7 +42,7 @@ command = ["aider"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Prefix != "ctrl+b" || cfg.Notify || !cfg.LeftPanel || cfg.RightPanel || cfg.IgnoredFiles || cfg.DefaultAgent != "claude" {
+	if cfg.Prefix != "ctrl+b" || cfg.Notify || !cfg.LeftPanel || cfg.RightPanel || cfg.IgnoredFiles || cfg.CloseOnExit || cfg.DefaultAgent != "claude" {
 		t.Errorf("cfg = %+v", cfg)
 	}
 

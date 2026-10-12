@@ -116,12 +116,13 @@ cicoria -config ./my.toml ~/src/app</pre>
           <tr><td class="mark-w">▲</td><td>Needs input: the agent asks a question or a permission</td></tr>
           <tr><td class="mark-g">✓</td><td>Finished its turn while you were looking elsewhere</td></tr>
           <tr><td class="mark-d">○</td><td>Idle</td></tr>
-          <tr><td class="mark-r">✕</td><td>The agent's process has exited; <kbd>ctrl+a</kbd> <kbd>r</kbd> restarts it</td></tr>
+          <tr><td class="mark-r">✕</td><td>The agent's process has exited and the session was kept; <kbd>ctrl+a</kbd> <kbd>r</kbd> restarts it</td></tr>
           <tr><td class="mark-d">◌</td><td>Starting</td></tr>
         </tbody>
       </table></div>
       <p>A session that needs input and is not on screen is also named in the status bar, and raises a desktop notification when <code>notify</code> is on.</p>
       <p>Claude Code tells cicoria what it is doing. When it says it is working but has shown no sign of life for 30 seconds, its status reads <code>working?</code> and its mark is dimmed. This happens after you interrupt a turn. For other agents the status is guessed: output means working, quiet means idle, the terminal bell means it needs input.</p>
+      <p>A session closes when its agent or shell exits. It is kept, marked <span class="mark-r">✕</span>, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. <code>close_on_exit = false</code> in the settings keeps every session.</p>
     </section>
 
     <section id="panels">
@@ -233,6 +234,7 @@ make this a duration</pre>
           <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
           <tr><td>changes</td><td><code>"uncommitted"</code></td><td>What the changes panel opens on: what is not committed, or with <code>"session"</code> everything a session changed since it started</td></tr>
           <tr><td>ignored_files</td><td><code>true</code></td><td>Open with the files git ignores listed in the files panel, in grey. <code>false</code> leaves them out until <kbd>i</kbd> is pressed in the panel</td></tr>
+          <tr><td>close_on_exit</td><td><code>true</code></td><td>Close a session when its agent or shell exits. <code>false</code> keeps it, marked <span class="mark-r">✕</span>, to restart or close by hand</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and when a session is created or closed. Any key ends it</td></tr>
         </tbody>
       </table></div>

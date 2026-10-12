@@ -23,6 +23,9 @@ import (
 const (
 	// coalesce is how long output is gathered before the screen is redrawn.
 	coalesce = 8 * time.Millisecond
+	// startupGrace is how long an agent has to run for its end to close its
+	// session: one that ends sooner could not start, and says why.
+	startupGrace = 3 * time.Second
 	// tickEvery is how often time-based state is looked at.
 	tickEvery = 500 * time.Millisecond
 	// refreshTicks is how many ticks pass between looks at the work tree.
@@ -333,6 +336,18 @@ func (m *Model) Close() error {
 	return m.ipc.Close()
 }
 
+// closesOnExit reports whether a session whose agent just ended is closed
+// rather than left to be restarted. It is left when closing it would lose
+// something: an agent that ended as soon as it started has an error to
+// read, a queue has messages, and what is open on top of the workspace may
+// be about this session.
+func (m *Model) closesOnExit(s *session.Session) bool {
+	return m.cfg.CloseOnExit &&
+		time.Since(s.Started) >= startupGrace &&
+		len(s.Queue) == 0 &&
+		m.mode == modeWorkspace && m.prompt == nil && m.confirm == nil
+}
+
 // Next returns the directory of the workspace the user asked to open in
 // place of this one, if any.
 func (m *Model) Next() string { return m.next }
@@ -487,9 +502,15 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return waitOutput(msg.id, msg.term)
 
 	case exitMsg:
-		if s, i := m.byID(msg.id); s != nil && s.Term == msg.term {
-			s.Exit(m.watching(i))
+		s, i := m.byID(msg.id)
+		if s == nil || s.Term != msg.term {
+			return nil
 		}
+		if m.closesOnExit(s) {
+			m.say(s.Name + " exited")
+			return m.closeSession(i)
+		}
+		s.Exit(m.watching(i))
 
 	case submitMsg:
 		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term && s.Status != agent.Exited {

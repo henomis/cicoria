@@ -354,6 +354,55 @@ func TestWorkspace(t *testing.T) {
 	w.quit()
 }
 
+// newShell opens a shell session with the name it is offered.
+func (w *workspace) newShell() {
+	w.t.Helper()
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: shell-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell-1 · shell")
+}
+
+// A session goes with its agent, unless the agent ends as soon as it starts.
+func TestSessionClosesWithItsAgent(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+
+	// A shell that ends at once stays, and can be restarted.
+	w.newShell()
+	w.line("exit")
+	w.see("shell-1 exited — ctrl+a r restarts it")
+	w.prefix('r')
+	w.gone("shell-1 exited")
+
+	// One that has been running takes its session with it.
+	time.Sleep(4 * time.Second)
+	w.line("exit")
+	w.gone("shell-1")
+	w.see("claude-1 · claude")
+	w.quit()
+}
+
+// The settings can keep a session whose agent has exited.
+func TestSessionKeptAfterItsAgent(t *testing.T) {
+	w := newWorkspace(t)
+	w.set("close_on_exit = false")
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+
+	w.newShell()
+	time.Sleep(4 * time.Second)
+	w.line("exit")
+	w.see("shell-1 exited — ctrl+a r restarts it")
+	w.quit()
+}
+
 // Sessions belong to the directory cicoria was opened on. Opened on another
 // one, it says where they are and goes there when asked.
 func TestOtherWorkspaces(t *testing.T) {
