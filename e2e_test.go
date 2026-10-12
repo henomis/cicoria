@@ -31,6 +31,7 @@ while read -r cmd arg; do
           hook "{\"hook_event_name\":\"PostToolUse\",\"tool_input\":{\"file_path\":\"$PWD/$arg\"}}" ;;
     size) echo "size $(stty size)" ;;
     pwd)  echo "in $PWD" ;;
+    many) seq 1 100 ;;
     *)    echo "got $cmd" ;;
   esac
 done
@@ -386,6 +387,36 @@ func TestSessionClosesWithItsAgent(t *testing.T) {
 	w.line("exit")
 	w.gone("shell-1")
 	w.see("claude-1 · claude")
+	w.quit()
+}
+
+// What has left the agent's screen comes back with page up and the wheel.
+func TestScrollBack(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+	w.line("many")
+	w.see("100")
+	w.gone("agent ready")
+
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgUp})
+	w.see("lines back")
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgUp})
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgUp})
+	w.see("agent ready")
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgDown})
+	w.gone("agent ready")
+
+	// Typing goes back to the end.
+	w.line("pwd")
+	w.gone("lines back")
+
+	// The wheel does the same over the agent's pane.
+	w.tm.SendMouse(uv.MouseWheelEvent{X: 70, Y: 10, Button: uv.MouseWheelUp})
+	w.see("3 lines back")
+	w.tm.SendMouse(uv.MouseWheelEvent{X: 70, Y: 10, Button: uv.MouseWheelDown})
+	w.gone("lines back")
+	w.see("in " + w.dir)
 	w.quit()
 }
 

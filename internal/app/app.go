@@ -670,8 +670,33 @@ func (m *Model) send(k tea.KeyPressMsg) {
 	if s == nil || s.Term == nil || s.Status == agent.Exited {
 		return
 	}
+	if m.scrollKey(s, k.String()) {
+		return
+	}
 	s.NoteInput(time.Now())
 	s.Term.SendKey(uv.Key(k))
+}
+
+// scrollKey scrolls the agent's screen through what has left it, a page at
+// a time, unless the agent scrolls by itself. It reports whether the key
+// was used for that; page down at the end is the agent's.
+func (m *Model) scrollKey(s *session.Session, key string) bool {
+	if s.Term.OwnsScrolling() {
+		return false
+	}
+	page := max(m.layout().agent.h-1, 1)
+	switch key {
+	case "pgup", "shift+pgup":
+		s.Term.Scroll(page)
+		return true
+	case "pgdown", "shift+pgdown":
+		if s.Term.Scrolled() == 0 {
+			return false
+		}
+		s.Term.Scroll(-page)
+		return true
+	}
+	return false
 }
 
 // errNoSession is shown when a command needs a session and there is none.

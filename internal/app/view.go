@@ -159,6 +159,10 @@ func (m *Model) renderAgent(l layout) []string {
 		if s.Stalled(time.Now()) {
 			status += "?"
 		}
+		// Before the directory, which is what a narrow pane cuts off.
+		if back := s.Term.Scrolled(); back > 0 {
+			status = fmt.Sprintf("%s · %d lines back", status, back)
+		}
 		title = fmt.Sprintf("%s · %s · %s · %s", s.Name, s.Adapter.Name(), status, tilde(s.Dir))
 		lines = strings.Split(s.Term.Render(), "\n")
 	}
@@ -395,6 +399,11 @@ func (m *Model) renderHelp() []string {
 		"    sessions are saved for the directory cicoria was opened on, wherever they",
 		"    work, and only come back when it is opened on that directory again.",
 		"    "+p+" w lists the other saved workspaces and opens one in place of this.",
+		"",
+		ui.Bold.Render("  Scrolling back"),
+		"    the mouse wheel and pgup/pgdn scroll through what has left the agent's",
+		"    screen; typing goes back to the end. An agent that reads the mouse or",
+		"    takes the whole screen, like an editor, scrolls by itself.",
 		"",
 		ui.Bold.Render("  Queue"),
 		"    messages wait in the queue and go to the agent one by one, each when it ends",

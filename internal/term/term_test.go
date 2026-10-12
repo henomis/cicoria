@@ -73,6 +73,67 @@ func TestKeysReachCommand(t *testing.T) {
 	}
 }
 
+func TestScrollBack(t *testing.T) {
+	tm, err := Start(exec.Command("sh", "-c", `seq 1 50; echo end; cat`), 40, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tm.Close() }()
+	waitFor(t, tm, "end")
+
+	// The screen holds 48, 49, 50, end and the line of the cursor.
+	tm.Scroll(3)
+	if got := tm.Scrolled(); got != 3 {
+		t.Fatalf("Scrolled = %d, want 3", got)
+	}
+	if r := tm.Render(); !strings.Contains(r, "45") || !strings.Contains(r, "49") || strings.Contains(r, "50") || strings.Contains(r, "end") {
+		t.Errorf("three lines back shows %q", r)
+	}
+	if _, _, visible := tm.Cursor(); visible {
+		t.Error("the cursor shows while scrolled back")
+	}
+
+	// There is no going past either end.
+	tm.Scroll(1000)
+	if r := tm.Render(); !strings.Contains(r, "1") || strings.Contains(r, "6") {
+		t.Errorf("the start shows %q", r)
+	}
+	tm.Scroll(-2000)
+	if got := tm.Scrolled(); got != 0 {
+		t.Errorf("Scrolled = %d at the end", got)
+	}
+
+	// A key goes to the end.
+	tm.Scroll(3)
+	tm.SendKey(uv.Key{Code: 'x', Text: "x"})
+	if r := tm.Render(); tm.Scrolled() != 0 || !strings.Contains(r, "end") {
+		t.Errorf("after a key, %d back: %q", tm.Scrolled(), r)
+	}
+}
+
+func TestCommandThatReadsTheMouseOwnsScrolling(t *testing.T) {
+	tm, err := Start(exec.Command("sh", "-c", `echo plain; read x; printf '\033[?1000hmouse\n'; read x; printf '\033[?1000lnone\n'; cat`), 40, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tm.Close() }()
+
+	waitFor(t, tm, "plain")
+	if tm.OwnsScrolling() {
+		t.Error("a plain command owns scrolling")
+	}
+	tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	waitFor(t, tm, "mouse")
+	if !tm.OwnsScrolling() {
+		t.Error("a command that reads the mouse does not own scrolling")
+	}
+	tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	waitFor(t, tm, "none")
+	if tm.OwnsScrolling() {
+		t.Error("a command that stopped reading the mouse still owns scrolling")
+	}
+}
+
 func TestResizeReachesCommand(t *testing.T) {
 	tm, err := Start(exec.Command("sh", "-c", `trap 'stty size' WINCH; echo ready; while :; do sleep 0.05; done`), 40, 5)
 	if err != nil {

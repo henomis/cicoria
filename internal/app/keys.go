@@ -304,6 +304,16 @@ func (m *Model) forwardMouse(msg tea.MouseMsg, pane rect) {
 	if s == nil || s.Term == nil || s.Status == agent.Exited {
 		return
 	}
+	// An agent that does not read the mouse has its screen scrolled for it.
+	if _, isWheel := msg.(tea.MouseWheelMsg); isWheel && !s.Term.OwnsScrolling() {
+		switch msg.Mouse().Button {
+		case tea.MouseWheelUp:
+			s.Term.Scroll(wheelStep)
+		case tea.MouseWheelDown:
+			s.Term.Scroll(-wheelStep)
+		}
+		return
+	}
 	mouse := uv.Mouse(msg.Mouse())
 	mouse.X -= pane.x
 	mouse.Y -= pane.y
