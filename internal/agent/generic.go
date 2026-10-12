@@ -41,6 +41,9 @@ func (g *Generic) Command(o LaunchOpts) *exec.Cmd { return baseCommand(o, g.argv
 // ReportsStatus implements Adapter.
 func (g *Generic) ReportsStatus() bool { return false }
 
+// ReportsReady implements Adapter.
+func (g *Generic) ReportsReady() bool { return false }
+
 // MapEvent implements Adapter.
 func (g *Generic) MapEvent(ipc.Event) (Update, bool) { return Update{}, false }
 

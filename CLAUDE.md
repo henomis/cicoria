@@ -35,7 +35,7 @@ Dependencies point one way: `main.go` → `internal/app` → everything else. `i
 
 - **`main.go`** is two programs in one binary. `cicoria [dir]` opens the workspace. `cicoria hook` is what an agent's hooks call: it reads the hook payload on stdin and forwards it to the running workspace, and it must always succeed so that it never gets in the agent's way.
 - **`internal/app`** is the single Bubble Tea model (`Model` in `app.go`). It owns all state: the sessions, which pane has the keys (`focus`), what is on top of the workspace (`mode`: full-screen view, palette, help), and the one-line prompt/confirm in the status bar. `keys.go` routes input, `commands.go` holds the table of prefix commands, `view.go` draws, `fullview.go` is the full-screen file/diff view with notes, `queue.go` the message queue.
-- **`internal/agent`** hides everything specific to one agent behind `Adapter`: how to build its command line, whether it reports its status, how to mention a file, and how to turn a hook event into an `Update`. `claude.go` is the full integration; `generic.go` is any other command line.
+- **`internal/agent`** hides everything specific to one agent behind `Adapter`: how to build its command line, whether it reports its status, how to mention a file, and how to turn a hook event into an `Update`. `claude.go` and `copilot.go` are the full integrations; `generic.go` is any other command line.
 - **`internal/session`** is one agent plus its terminal: status, queue, notes, tokens, and the commit its changes are counted from. `store.go` saves the workspace as JSON under `$XDG_STATE_HOME/cicoria/<hash of the directory>/`. The file records its directory, so that the other workspaces can be listed, and a `lock` file next to it is held while the workspace is open.
 - **`internal/term`** runs a command in a PTY and keeps an emulated screen of its output (`charmbracelet/x/vt`), so the agent's own interface can be drawn inside a pane.
 - **`internal/ipc`** is the unix socket hook events arrive on.
@@ -46,11 +46,13 @@ Dependencies point one way: `main.go` → `internal/app` → everything else. `i
 
 For Claude Code, cicoria starts `claude` with `--settings` carrying hooks that run `cicoria hook`. The child process gets `CICORIA_SOCK` and `CICORIA_SESSION` in its environment; the hook sends `{session, payload}` to that socket; `app` hands the event to the adapter's `MapEvent`, and the resulting `Update` changes the session (status, turn ended, file touched, tokens, conversation ID). Adapters that do not report status (`ReportsStatus() == false`) have it guessed in `session` from terminal activity: output means working, quiet means idle, the bell means it needs input.
 
-Queued messages depend on this: a message goes out when an `Update` says the turn ended, which only Claude Code reports.
+GitHub Copilot CLI is started with `--plugin-dir` pointing at a plugin, written under the user's cache directory, whose hooks run `"$CICORIA_BIN" hook <name>`: its payloads do not say which hook they are from, so the name travels on the command line and in `ipc.Event.Name`. It runs no hook before the first message (`ReportsReady() == false`), so a starting session becomes idle once its screen goes quiet, and none when a turn fails for good, which shows as `working?`.
+
+Queued messages depend on this: a message goes out when an `Update` says the turn ended, which only Claude Code and Copilot CLI report.
 
 ### How a conversation survives a restart
 
-The agent process stops with cicoria. A Claude session is started with `--session-id <id>` and, when a transcript for that ID exists under Claude Code's config directory, restarted with `--resume`. After `/clear` Claude Code reports a new conversation ID through the hooks, which is saved as the session's `Conversation` and resumed in preference.
+The agent process stops with cicoria. A Claude session is started with `--session-id <id>` and, when a transcript for that ID exists under Claude Code's config directory, restarted with `--resume`. After `/clear` Claude Code reports a new conversation ID through the hooks, which is saved as the session's `Conversation` and resumed in preference. Copilot CLI works the same way with `--session-id` alone, which both names a new session and continues an existing one; its transcripts are under `$COPILOT_HOME/session-state`.
 
 ### Changes of a session
 

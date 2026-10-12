@@ -97,6 +97,10 @@ type Adapter interface {
 	// ReportsStatus says whether the agent reports its status through events.
 	// When it does not, status is guessed from terminal activity.
 	ReportsStatus() bool
+	// ReportsReady says whether the agent reports that it has started and
+	// waits for a message. When it does not, it is taken to be ready once
+	// its screen goes quiet.
+	ReportsReady() bool
 	// Mention returns the text to type at the agent's prompt to refer to a
 	// file of the project.
 	Mention(path string) string
@@ -112,6 +116,7 @@ func baseCommand(o LaunchOpts, argv []string) *exec.Cmd {
 	cmd.Env = append(cmd.Environ(),
 		ipc.EnvSocket+"="+o.Socket,
 		ipc.EnvSession+"="+o.SessionID,
+		ipc.EnvSelf+"="+o.Self,
 	)
 	return cmd
 }

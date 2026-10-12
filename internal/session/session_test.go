@@ -205,6 +205,40 @@ func TestQueue(t *testing.T) {
 	}
 }
 
+func TestReadyWhenQuiet(t *testing.T) {
+	start := time.Now()
+	starting := func(a agent.Adapter) *Session {
+		s := New("1", "s", "/p", a)
+		s.Status, s.Started = agent.Starting, start
+		return s
+	}
+
+	// Copilot CLI does not say when it is ready: it is once its screen has
+	// been drawn and has gone quiet.
+	s := starting(agent.NewCopilot(nil))
+	s.Tick(true, start.Add(time.Minute))
+	if s.Status != agent.Starting {
+		t.Errorf("status before any output = %v", s.Status)
+	}
+	s.lastOutput = start.Add(time.Second)
+	s.Tick(true, start.Add(time.Second+quietAfter/2))
+	if s.Status != agent.Starting {
+		t.Errorf("status while drawing = %v", s.Status)
+	}
+	s.Tick(true, start.Add(time.Second+2*quietAfter))
+	if s.Status != agent.Idle {
+		t.Errorf("status once quiet = %v", s.Status)
+	}
+
+	// Claude Code says so itself.
+	c := starting(agent.NewClaude(nil))
+	c.lastOutput = start.Add(time.Second)
+	c.Tick(true, start.Add(time.Minute))
+	if c.Status != agent.Starting {
+		t.Errorf("claude's status = %v", c.Status)
+	}
+}
+
 func TestCanAutoSend(t *testing.T) {
 	// The agent's terminal: any running command will do.
 	running := func(a agent.Adapter) *Session {

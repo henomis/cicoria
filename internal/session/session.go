@@ -271,6 +271,11 @@ func (s *Session) NoteOutput(active bool, now time.Time) {
 // Tick lets time pass: a guessed "working" ends when the output goes quiet.
 func (s *Session) Tick(active bool, now time.Time) {
 	if s.Adapter.ReportsStatus() {
+		// An agent that does not say when it is ready is taken to be once
+		// it has drawn its screen.
+		if s.Status == agent.Starting && !s.Adapter.ReportsReady() && s.lastOutput.After(s.Started) && now.Sub(s.lastOutput) > quietAfter {
+			s.become(agent.Idle)
+		}
 		return
 	}
 	switch s.Status {

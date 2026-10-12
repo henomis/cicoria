@@ -51,6 +51,24 @@ while read -r cmd arg; do
 done
 `
 
+// fakeCopilot stands in for Copilot CLI: its hooks say their name on the
+// command line, and none runs before the first message.
+const fakeCopilot = `
+hook() { printf '%s' "$2" | "$CICORIA_BIN" hook "$1"; }
+echo "copilot ready"
+while read -r cmd arg; do
+  case "$cmd" in
+    work) hook userPromptSubmitted '{"prompt":"work"}'
+          hook sessionStart '{"source":"new"}' ;;
+    ask)  hook notification '{"notification_type":"permission_prompt"}' ;;
+    stop) hook agentStop '{"stopReason":"end_turn"}' ;;
+    edit) echo "hello from copilot" > "$arg"
+          hook postToolUse "{\"toolName\":\"create\",\"toolArgs\":{\"path\":\"$PWD/$arg\"}}" ;;
+    *)    echo "got $cmd" ;;
+  esac
+done
+`
+
 // workspace is a cicoria instance running in a PTY against a scratch project.
 type workspace struct {
 	t   *testing.T
@@ -102,6 +120,7 @@ func newWorkspace(t *testing.T) *workspace {
 	}
 
 	config := fmt.Sprintf("notify = false\nanimations = false\n\n[agents.claude]\ncommand = [\"sh\", \"-c\", %q, \"fake-claude\"]\n", fakeAgent)
+	config += fmt.Sprintf("\n[agents.copilot]\ncommand = [\"sh\", \"-c\", %q, \"fake-copilot\"]\n", fakeCopilot)
 	must(os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0o644))
 	must(os.MkdirAll(filepath.Join(home, "run"), 0o700))
 
@@ -114,6 +133,8 @@ func newWorkspace(t *testing.T) *workspace {
 			"XDG_STATE_HOME="+filepath.Join(home, "state"),
 			"XDG_RUNTIME_DIR="+filepath.Join(home, "run"),
 			"CLAUDE_CONFIG_DIR="+filepath.Join(home, "claude"),
+			"COPILOT_HOME="+filepath.Join(home, "copilot"),
+			"XDG_CACHE_HOME="+filepath.Join(home, "cache"),
 			"SHELL=/bin/sh",
 		),
 	}
@@ -882,6 +903,42 @@ func TestNarrowTerminalKeepsTheSideOnScreen(t *testing.T) {
 	// The agent still has the keys, and its size.
 	w.line("size")
 	w.see("size 17 40")
+	w.quit()
+}
+
+// TestCopilot runs a Copilot CLI session: its hooks name themselves, and
+// the first of them comes with the first message.
+func TestCopilot(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("copilot")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("copilot in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: copilot-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+
+	// It says nothing when it starts: it is ready once its screen is quiet.
+	w.see("copilot ready", "copilot-1 · copilot · idle")
+
+	w.line("work")
+	w.see("copilot-1 · copilot · working")
+	w.line("ask")
+	w.see("copilot-1 · copilot · needs input")
+	w.line("edit notes.txt")
+	w.see("copilot-1 · copilot · working", "? notes.txt")
+
+	// The end of a turn sends what waits in the queue.
+	w.queue("next")
+	w.see("Queue (1)")
+	w.line("stop")
+	w.see("got next", "copilot-1 · copilot · working")
+	w.line("stop")
+	w.see("copilot-1 · copilot · idle")
 	w.quit()
 }
 
