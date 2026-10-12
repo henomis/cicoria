@@ -6,7 +6,8 @@ version: 2
 builds:
   - env:
       - CGO_ENABLED=0
-    # cicoria needs a pseudo-terminal and unix sockets: no Windows.
+    # cicoria needs a pseudo-terminal and unix sockets: Windows runs the
+    # Linux build in WSL2.
     goos:
       - linux
       - darwin

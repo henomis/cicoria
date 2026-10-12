@@ -53,6 +53,7 @@
         <li>The agents you want to run. Claude Code (<code>claude</code>) is the default; GitHub Copilot CLI (<code>copilot</code>) and Codex CLI (<code>codex</code>) are known too.</li>
         <li>A Unix-like system. cicoria is developed and tested on Linux. Desktop notifications use <code>notify-send</code>, or <code>osascript</code> on macOS, and are skipped where neither is there.</li>
       </ul>
+      <p>On Windows cicoria runs in <a href="https://learn.microsoft.com/windows/wsl/">WSL2</a>, with the archive for Linux. Install it, <code>git</code> and the agents inside the distribution, and keep the project in its file system rather than under <code>/mnt/c</code>, where git is slow. <kbd>o</kbd> opens a file with its Windows program. Desktop notifications need <code>notify-send</code> and a notification service in the distribution, and are skipped without them.</p>
     </section>
 
     <section id="open">
