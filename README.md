@@ -129,7 +129,7 @@ For Claude Code sessions the status bar shows `ctx`, the size of the context, an
 
 ## Configure
 
-`~/.config/cicoria/config.toml` (all optional):
+`~/.config/cicoria/config.toml`, or under `$XDG_CONFIG_HOME` when that is set (all optional):
 
 ```toml
 prefix = "ctrl+a"

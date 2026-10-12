@@ -96,3 +96,18 @@ func TestLoadChanges(t *testing.T) {
 		t.Error("an unknown kind of changes was accepted")
 	}
 }
+
+func TestPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if got, want := Path(), filepath.Join(home, ".config", "cicoria", "config.toml"); got != want {
+		t.Errorf("Path() = %q, want %q", got, want)
+	}
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	if got, want := Path(), filepath.Join(xdg, "cicoria", "config.toml"); got != want {
+		t.Errorf("Path() with XDG_CONFIG_HOME = %q, want %q", got, want)
+	}
+}
