@@ -1,7 +1,7 @@
 # cicoria — common tasks. Run "make help" for the list.
 
 BIN := cicoria
-PKG := ./cmd/cicoria
+PKG := .
 
 # Tests start cicoria themselves; inside a cicoria session these two would
 # point them at the one that is running.

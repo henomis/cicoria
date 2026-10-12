@@ -32,7 +32,7 @@ Claude Code gets the full integration: its status comes from hooks, and the file
 ## Install
 
 ```sh
-go install github.com/henomis/cicoria/cmd/cicoria@latest
+go install github.com/henomis/cicoria@latest
 ```
 
 Requirements:

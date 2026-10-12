@@ -44,7 +44,7 @@
 
     <section id="install">
       <h2>Install</h2>
-      <pre>go install github.com/henomis/cicoria/cmd/cicoria@latest</pre>
+      <pre>go install github.com/henomis/cicoria@latest</pre>
       <p>You need:</p>
       <ul>
         <li>Go 1.26 or later, to build it.</li>
@@ -263,8 +263,8 @@ cd cicoria
 go test ./...
 
 <span class="c"># drives the real Claude Code; needs a folder it already trusts</span>
-CICORIA_E2E_REAL=$PWD go test -run TestRealAgent -v ./cmd/cicoria</pre>
-      <p>The end-to-end tests in <code>cmd/cicoria</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
+CICORIA_E2E_REAL=$PWD go test -run TestRealAgent -v .</pre>
+      <p>The end-to-end tests in <code>e2e_test.go</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
     </section>
   </main>
 </div>
