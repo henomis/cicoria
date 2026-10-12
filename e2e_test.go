@@ -214,6 +214,16 @@ func (w *workspace) quit() {
 	}
 }
 
+func TestVersion(t *testing.T) {
+	out, err := exec.Command(buildBinary(t), "-version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if got := string(out); !strings.HasPrefix(got, "cicoria ") || len(strings.Fields(got)) != 2 {
+		t.Errorf("cicoria -version printed %q", got)
+	}
+}
+
 func TestWorkspace(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(140, 40)

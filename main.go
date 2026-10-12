@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -53,14 +54,28 @@ func main() {
 	}
 }
 
+// version returns the version cicoria was built from, as the Go toolchain
+// recorded it: a tag when installed with "go install", a commit otherwise.
+func version() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
+	}
+	return "(unknown)"
+}
+
 func run(args []string) error {
 	flags := flag.NewFlagSet("cicoria", flag.ExitOnError)
 	configPath := flags.String("config", config.Path(), "path of the config file")
+	showVersion := flags.Bool("version", false, "print the version and exit")
 	flags.Usage = func() {
 		_, _ = fmt.Fprint(flags.Output(), usage)
 		flags.PrintDefaults()
 	}
 	_ = flags.Parse(args)
+	if *showVersion {
+		fmt.Println("cicoria", version())
+		return nil
+	}
 
 	dir := "."
 	switch flags.NArg() {

@@ -49,6 +49,7 @@ Requirements:
 ```sh
 cicoria            # workspace opened on the current directory
 cicoria ~/src/app  # or on another one
+cicoria -version   # which version this is
 ```
 
 Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all.
