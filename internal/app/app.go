@@ -1,3 +1,17 @@
+// Copyright 2026 Simone Vellei
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package app is the root model of the cicoria terminal UI.
 package app
 
@@ -6,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -492,6 +507,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case tea.FocusMsg:
 		m.blurred = false
 		m.seen()
+		// The work tree was not looked at while the terminal was away.
+		return m.refresh()
 	case tea.BlurMsg:
 		m.blurred = true
 
@@ -616,7 +633,9 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 		m.message = ""
 	}
 	m.ticks++
-	if m.ticks%refreshTicks == 0 {
+	// Nobody sees the panels of a terminal that is not in front: the work
+	// tree is looked at again when it comes back.
+	if m.ticks%refreshTicks == 0 && !m.blurred {
 		return m.refresh()
 	}
 	return nil
@@ -662,11 +681,30 @@ func (m *Model) change(path string) (git.Change, bool) {
 // notify raises a desktop notification, where the system has a way to.
 func notify(text string) tea.Cmd {
 	return func() tea.Msg {
-		if path, err := exec.LookPath("notify-send"); err == nil {
-			_ = exec.Command(path, "--app-name=cicoria", "cicoria", text).Run()
+		if argv := notifier(runtime.GOOS, text); argv != nil {
+			if path, err := exec.LookPath(argv[0]); err == nil {
+				_ = exec.Command(path, argv[1:]...).Run()
+			}
 		}
 		return nil
 	}
+}
+
+// notifier returns the command line that raises a desktop notification on
+// the given system.
+func notifier(goos, text string) []string {
+	if goos == "darwin" {
+		// The text is handed over as an argument, not written into the
+		// script, so that nothing in a session's name is run.
+		return []string{
+			"osascript",
+			"-e", "on run argv",
+			"-e", `display notification (item 1 of argv) with title "cicoria"`,
+			"-e", "end run",
+			"--", text,
+		}
+	}
+	return []string{"notify-send", "--app-name=cicoria", "cicoria", text}
 }
 
 // send passes a key to the agent on screen.

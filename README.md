@@ -33,22 +33,25 @@ Claude Code gets the full integration: its status comes from hooks, and the file
 
 ## Install
 
+Download the archive for your system from the [releases](https://github.com/henomis/cicoria/releases) (Linux and macOS, x86_64 and arm64) and put the `cicoria` in it on your `PATH`, or build it with Go:
+
 ```sh
 go install github.com/henomis/cicoria@latest
 ```
 
 Requirements:
 
-- Go 1.26 or later
+- Go 1.26 or later, only to build it
 - `git`
 - the agents you want to run (`claude` by default)
-- a Unix-like system; cicoria is developed and tested on Linux. Desktop notifications use `notify-send`.
+- a Unix-like system; cicoria is developed and tested on Linux. Desktop notifications use `notify-send`, or `osascript` on macOS.
 
 ## Quick start
 
 ```sh
 cicoria            # workspace opened on the current directory
 cicoria ~/src/app  # or on another one
+cicoria -version   # which version this is
 ```
 
 Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all.
@@ -128,7 +131,7 @@ For Claude Code sessions the status bar shows `ctx`, the size of the context, an
 
 ## Configure
 
-`~/.config/cicoria/config.toml` (all optional):
+`~/.config/cicoria/config.toml`, or under `$XDG_CONFIG_HOME` when that is set (all optional):
 
 ```toml
 prefix = "ctrl+a"

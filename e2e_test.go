@@ -1,3 +1,17 @@
+// Copyright 2026 Simone Vellei
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -200,6 +214,16 @@ func (w *workspace) quit() {
 	}
 }
 
+func TestVersion(t *testing.T) {
+	out, err := exec.Command(buildBinary(t), "-version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if got := string(out); !strings.HasPrefix(got, "cicoria ") || len(strings.Fields(got)) != 2 {
+		t.Errorf("cicoria -version printed %q", got)
+	}
+}
+
 func TestWorkspace(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(140, 40)
@@ -370,6 +394,27 @@ func (w *workspace) newShell() {
 }
 
 // A file is handed to the system's opener from the files panel.
+func TestWorkTreeLeftAloneWhileAway(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("working tree clean", "agent ready")
+
+	// A terminal that is not in front has nobody looking at its panels.
+	w.tm.Type("\x1b[O")
+	time.Sleep(200 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(w.dir, "away.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(3 * time.Second)
+	if strings.Contains(w.tm.String(), "away.txt") {
+		t.Fatalf("the work tree was looked at while away:\n%s", w.tm.String())
+	}
+
+	// Coming back looks at once.
+	w.tm.Type("\x1b[I")
+	w.see("Changes (1)", "? away.txt")
+}
+
 func TestOpenWithTheSystem(t *testing.T) {
 	w := newWorkspace(t)
 	// A stand-in for the opener, which records what it was asked for.

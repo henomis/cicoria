@@ -27,7 +27,7 @@ env -u CICORIA_SOCK -u CICORIA_SESSION go test . -run TestReviewSinceTheStart -v
 
 The `env -u` matters when working from inside a cicoria session: the tests start cicoria themselves, and those two variables would point their hooks at the instance that is already running. The Makefile targets do this already.
 
-CI (`.github/workflows/checks.yml`) runs `golangci-lint` and `make check` on pushes and pull requests, skipping changes that only touch `*.md` or `web/`. `web.yml` publishes `web/` to GitHub Pages on every push to `main`.
+CI (`.github/workflows/checks.yml`) runs `golangci-lint` and `make check` on pushes and pull requests, skipping changes that only touch `*.md` or `web/`. `web.yml` publishes `web/` to GitHub Pages on every push to `main`. `release.yml` runs GoReleaser (`.goreleaser.yaml`) on a `v*.*.*` tag and publishes the binaries for Linux and macOS; `goreleaser release --snapshot --clean` builds them locally into `dist/`.
 
 ## Architecture
 
@@ -54,7 +54,7 @@ The agent process stops with cicoria. A Claude session is started with `--sessio
 
 ### Changes of a session
 
-The changes panel shows either what is not committed or everything since `Session.Base`, the commit the work tree was on when the session was created. `Session.Uncommitted` picks between them; it starts from the `changes` setting, is toggled with `s` in the panel, and is not saved. `app.refresh` re-reads the directory of the session on screen in the background every two seconds. The comparison is of the directory, not of the agent, so two sessions on one directory see each other's changes.
+The changes panel shows either what is not committed or everything since `Session.Base`, the commit the work tree was on when the session was created. `Session.Uncommitted` picks between them; it starts from the `changes` setting, is toggled with `s` in the panel, and is not saved. `app.refresh` re-reads the directory of the session on screen in the background every two seconds, except while the terminal is not focused: it is read again when the focus comes back. The comparison is of the directory, not of the agent, so two sessions on one directory see each other's changes.
 
 ### The pager
 

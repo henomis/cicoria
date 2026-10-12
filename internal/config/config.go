@@ -1,3 +1,17 @@
+// Copyright 2026 Simone Vellei
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package config loads the user's settings and builds the list of agents.
 package config
 
@@ -63,13 +77,30 @@ func Default() Config {
 	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true}
 }
 
-// Path returns where the config file is looked for.
+// Path returns where the config file is looked for: under $XDG_CONFIG_HOME
+// or ~/.config, on every system.
 func Path() string {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return ""
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "cicoria", "config.toml")
+	path := filepath.Join(dir, "cicoria", "config.toml")
+
+	// It used to be looked for where the system keeps settings, which on
+	// macOS is another place: a file left there is still read.
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		if dir, err := os.UserConfigDir(); err == nil {
+			old := filepath.Join(dir, "cicoria", "config.toml")
+			if _, err := os.Stat(old); err == nil {
+				return old
+			}
+		}
+	}
+	return path
 }
 
 // Load reads the config file at path. A missing file gives the defaults.

@@ -44,13 +44,14 @@
 
     <section id="install">
       <h2>Install</h2>
+      <p>Download the archive for your system from the <a href="https://github.com/henomis/cicoria/releases">releases</a> (Linux and macOS, x86_64 and arm64) and put the <code>cicoria</code> in it on your <code>PATH</code>, or build it with Go:</p>
       <pre>go install github.com/henomis/cicoria@latest</pre>
       <p>You need:</p>
       <ul>
-        <li>Go 1.26 or later, to build it.</li>
+        <li>Go 1.26 or later, only to build it.</li>
         <li><code>git</code>, for the changes panel and the diffs.</li>
         <li>The agents you want to run. Claude Code (<code>claude</code>) is the default.</li>
-        <li>A Unix-like system. cicoria is developed and tested on Linux. Desktop notifications use <code>notify-send</code> and are skipped where it is missing.</li>
+        <li>A Unix-like system. cicoria is developed and tested on Linux. Desktop notifications use <code>notify-send</code>, or <code>osascript</code> on macOS, and are skipped where neither is there.</li>
       </ul>
     </section>
 
@@ -58,7 +59,8 @@
       <h2>Open a workspace</h2>
       <pre>cicoria            <span class="c"># on the current directory</span>
 cicoria ~/src/app  <span class="c"># or on another one</span>
-cicoria -config ./my.toml ~/src/app</pre>
+cicoria -config ./my.toml ~/src/app
+cicoria -version   <span class="c"># which version this is</span></pre>
       <p>The directory you open is the workspace: its sessions are saved under it and come back the next time. The first time, one session starts with the default agent.</p>
       <p>Everything you type goes to the agent on screen. To talk to cicoria instead, press the prefix key, <kbd>ctrl+a</kbd>, and then a command key. The mouse works too: click a panel or a session, scroll with the wheel, and clicks inside the agent pane go to the agent.</p>
       <p>The mouse wheel and <kbd>pgup</kbd>/<kbd>pgdn</kbd> scroll back through what has left the agent's screen, and the title of the pane says how many lines back you are; typing goes back to the end. An agent that reads the mouse itself, or takes the whole screen as an editor does, gets the wheel and the keys instead.</p>
@@ -225,7 +227,7 @@ make this a duration</pre>
 
     <section id="configure">
       <h2>Configure</h2>
-      <p>Settings live in <code>~/.config/cicoria/config.toml</code>. All are optional, and an unknown one is reported as an error.</p>
+      <p>Settings live in <code>~/.config/cicoria/config.toml</code>, or under <code>$XDG_CONFIG_HOME</code> when that is set. All are optional, and an unknown one is reported as an error.</p>
       <div class="table"><table>
         <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
         <tbody>
