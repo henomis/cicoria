@@ -170,6 +170,8 @@ func (m *Model) filesKey(key string) tea.Cmd {
 		if !row.Dir {
 			return m.edit(row.Path)
 		}
+	case "o":
+		return m.open(row.Path)
 	case "@":
 		m.mention(row.Path)
 	case "i":
@@ -207,6 +209,8 @@ func (m *Model) changesKey(key string) tea.Cmd {
 		}
 	case "e":
 		return m.edit(path)
+	case "o":
+		return m.open(path)
 	case "@":
 		m.mention(path)
 	case "s":

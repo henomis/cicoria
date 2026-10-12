@@ -178,6 +178,8 @@ type (
 	}
 	// editorMsg reports that the external editor was closed.
 	editorMsg struct{ err error }
+	// openedMsg reports that a file could not be opened outside cicoria.
+	openedMsg struct{ err error }
 )
 
 // New returns a workspace opened on dir, with the sessions it had last time.
@@ -538,6 +540,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			m.say("the commit " + s.Name + " started from is gone: showing what is not committed")
 		}
 		m.applyRefresh(msg)
+
+	case openedMsg:
+		m.say(msg.err.Error())
 
 	case editorMsg:
 		if msg.err != nil {

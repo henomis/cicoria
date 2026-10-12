@@ -369,6 +369,42 @@ func (w *workspace) newShell() {
 	w.see("shell-1 · shell")
 }
 
+// A file is handed to the system's opener from the files panel.
+func TestOpenWithTheSystem(t *testing.T) {
+	w := newWorkspace(t)
+	// A stand-in for the opener, which records what it was asked for.
+	bin := t.TempDir()
+	log := filepath.Join(bin, "opened")
+	script := fmt.Sprintf("#!/bin/sh\necho \"$PWD $1\" >> %q\n", log)
+	for _, name := range []string{"xdg-open", "open"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.env = append(w.env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	w.launch(140, 40)
+	w.see("▸ api/", "main.go")
+
+	w.prefix('f')
+	w.typeText("j") // api/, then main.go
+	w.typeText("o")
+	w.see("opening main.go")
+
+	want := w.dir + " main.go\n"
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, _ := os.ReadFile(log)
+		if string(got) == want {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the opener was asked for %q, not %q", got, want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	w.quit()
+}
+
 // A session goes with its agent, unless the agent ends as soon as it starts.
 func TestSessionClosesWithItsAgent(t *testing.T) {
 	w := newWorkspace(t)
