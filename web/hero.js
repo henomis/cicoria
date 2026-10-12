@@ -1,6 +1,26 @@
 // A drawing of the cicoria workspace, 100 columns by 21 rows, that answers
 // to the keys and clicks the real one does for switching sessions.
 (() => {
+  // The web font has only letters: borders and symbols come from whatever
+  // font the device has, which on a phone is rarely as wide. Each of them
+  // gets a cell of its own, so that the columns stay in line.
+  const wide = /[^\x00-\x7f]/, wideAll = new RegExp(wide, "g");
+  for (const pre of document.querySelectorAll(".abilities pre")) {
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    while (walker.nextNode()) texts.push(walker.currentNode);
+    for (const text of texts) {
+      if (!wide.test(text.data)) continue;
+      const cells = document.createDocumentFragment();
+      for (const c of text.data) {
+        const cell = wide.test(c) ? document.createElement("i") : document.createTextNode(c);
+        cell.textContent = c;
+        cells.append(cell);
+      }
+      text.replaceWith(cells);
+    }
+  }
+
   const screen = document.getElementById("screen");
   if (!screen) return;
   const out = screen.querySelector("pre");
@@ -148,8 +168,7 @@
     const status = [t(note, "w"), t(" ".repeat(Math.max(COLS - [...note].length - [...hint].length, 1))), t(hint, "d")];
 
     const esc = (text) => text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
-    // Symbols that a fallback font might draw wider each get a cell of their own.
-    const cells = (text) => esc(text).replace(/[●▲✓○▸▾•█]/g, "<i>$&</i>");
+    const cells = (text) => esc(text).replace(wideAll, "<i>$&</i>");
     const html = (row) => row.map(([text, cls]) => (cls ? `<span class="${cls}">${cells(text)}</span>` : cells(text))).join("");
 
     const lines = [];
