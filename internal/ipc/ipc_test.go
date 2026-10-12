@@ -30,13 +30,13 @@ func TestForwardReachesServer(t *testing.T) {
 
 	t.Setenv(EnvSocket, srv.Path())
 	t.Setenv(EnvSession, "s1")
-	if err := Forward(strings.NewReader(`{"hook_event_name":"Stop"}`)); err != nil {
+	if err := Forward("stop", strings.NewReader(`{"hook_event_name":"Stop"}`)); err != nil {
 		t.Fatal(err)
 	}
 
 	select {
 	case ev := <-srv.Events():
-		if ev.Session != "s1" || string(ev.Payload) != `{"hook_event_name":"Stop"}` {
+		if ev.Session != "s1" || ev.Name != "stop" || string(ev.Payload) != `{"hook_event_name":"Stop"}` {
 			t.Errorf("got %+v", ev)
 		}
 	case <-time.After(2 * time.Second):
@@ -47,7 +47,7 @@ func TestForwardReachesServer(t *testing.T) {
 func TestForwardOutsideSessionIsNoop(t *testing.T) {
 	t.Setenv(EnvSocket, "")
 	t.Setenv(EnvSession, "")
-	if err := Forward(strings.NewReader(`{}`)); err != nil {
+	if err := Forward("", strings.NewReader(`{}`)); err != nil {
 		t.Errorf("Forward = %v, want nil", err)
 	}
 }
@@ -55,7 +55,7 @@ func TestForwardOutsideSessionIsNoop(t *testing.T) {
 func TestForwardRejectsNonJSON(t *testing.T) {
 	t.Setenv(EnvSocket, "/nonexistent.sock")
 	t.Setenv(EnvSession, "s1")
-	if err := Forward(strings.NewReader(`not json`)); err == nil {
+	if err := Forward("", strings.NewReader(`not json`)); err == nil {
 		t.Error("Forward accepted a non-JSON payload")
 	}
 }

@@ -113,8 +113,10 @@ type Model struct {
 	changes     []git.Change
 	// changesBase is the commit the changes are counted from, or empty when
 	// they are what is not committed; commits is how many were made since.
-	changesBase  string
-	commits      int
+	changesBase string
+	commits     int
+	// branch is the branch the project is on, or its commit when on none.
+	branch       string
 	changeCursor int
 	changeTop    int
 	queueCursor  int
@@ -183,6 +185,7 @@ type (
 		ignored []string
 		changes []git.Change
 		commits int
+		branch  string
 		repo    bool
 	}
 	// submitMsg is the time to press enter on a message that was pasted to
@@ -441,6 +444,7 @@ func (m *Model) refresh() tea.Cmd {
 		}
 		if changes, err := git.Status(dir, base); err == nil {
 			msg.changes, msg.repo = changes, true
+			msg.branch = git.Branch(dir)
 		}
 		return msg
 	}
@@ -646,7 +650,7 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 	m.files, m.ignored = msg.files, msg.ignored
 	m.tree().SetFiles(msg.files, msg.ignored)
 	m.repo = msg.repo
-	m.changesBase, m.commits = msg.base, msg.commits
+	m.changesBase, m.commits, m.branch = msg.base, msg.commits, msg.branch
 	if msg.lost {
 		m.changesBase = ""
 	}

@@ -32,6 +32,8 @@ import (
 const (
 	EnvSocket  = "CICORIA_SOCK"
 	EnvSession = "CICORIA_SESSION"
+	// EnvSelf is the path of the cicoria binary, for hooks to call.
+	EnvSelf = "CICORIA_BIN"
 )
 
 // maxEvent bounds the size of a single event.
@@ -41,6 +43,8 @@ const maxEvent = 4 << 20
 type Event struct {
 	// Session is the cicoria session the agent belongs to.
 	Session string `json:"session"`
+	// Name is the name of the hook, for agents whose payload does not say.
+	Name string `json:"name,omitempty"`
 	// Payload is the agent's own hook data, passed through untouched.
 	Payload json.RawMessage `json:"payload"`
 }
@@ -125,8 +129,9 @@ func Send(path string, ev Event) error {
 }
 
 // Forward reads an agent's hook payload from r and reports it to the app
-// named by the environment. Outside of a cicoria session it does nothing.
-func Forward(r io.Reader) error {
+// named by the environment. name is the name of the hook, when the agent
+// gives it on the command line. Outside of a cicoria session it does nothing.
+func Forward(name string, r io.Reader) error {
 	path, session := os.Getenv(EnvSocket), os.Getenv(EnvSession)
 	if path == "" || session == "" {
 		return nil
@@ -139,5 +144,5 @@ func Forward(r io.Reader) error {
 	if !json.Valid(payload) {
 		return errors.New("hook payload is not JSON")
 	}
-	return Send(path, Event{Session: session, Payload: payload})
+	return Send(path, Event{Session: session, Name: name, Payload: payload})
 }

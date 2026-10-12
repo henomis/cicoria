@@ -26,10 +26,12 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Keeps the changes of a session reviewable**: what is not committed or, one key away, everything since the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
 - **Lets you write notes on lines of code** and send them to the agent as one message.
 - **Queues messages** and sends each one when the agent ends its turn.
-- **Counts tokens** for Claude Code sessions.
-- **Remembers** sessions, their directories, notes and queues between runs. Claude Code sessions continue their conversation.
+- **Counts tokens** for Claude Code, Copilot CLI and Codex CLI sessions.
+- **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
-Claude Code gets the full integration: its status comes from hooks, and the files it edits are highlighted. For any other agent, status is guessed from terminal activity.
+Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
+
+Codex CLI asks you to trust the hooks cicoria gives it, the first time it runs with them: pick "Trust all and continue". Until then it works, but reports nothing.
 
 ## Install
 
@@ -43,8 +45,10 @@ Requirements:
 
 - Go 1.26 or later, only to build it
 - `git`
-- the agents you want to run (`claude` by default)
+- the agents you want to run (`claude` by default, `copilot` for GitHub Copilot CLI, `codex` for Codex CLI)
 - a Unix-like system; cicoria is developed and tested on Linux. Desktop notifications use `notify-send`, or `osascript` on macOS.
+
+On Windows cicoria runs in [WSL2](https://learn.microsoft.com/windows/wsl/), with the archive for Linux. Install it, `git` and the agents inside the distribution, and keep the project in its file system rather than under `/mnt/c`, where git is slow. Desktop notifications need `notify-send` and a notification service in the distribution, and are skipped without them.
 
 ## Quick start
 
@@ -79,9 +83,11 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 
 In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
 
+The title of the agent pane names the session, its agent, its status, its directory and the git branch that directory is on, or the commit when it is on no branch. It follows a branch the agent switches to.
+
 The mouse wheel and `pgup`/`pgdn` scroll back through what has left the agent's screen, and the title of the pane says how many lines back you are; typing goes back to the end. An agent that reads the mouse itself, or takes the whole screen as an editor does, gets the wheel and the keys instead.
 
-`o` on a file, in the files and changes panels and in the full-screen view, hands it to the program the system opens it with (`xdg-open`, or `open` on macOS): an image goes to the image viewer, a web page to the browser. A folder opens in the file manager.
+`o` on a file, in the files and changes panels and in the full-screen view, hands it to the program the system opens it with (`xdg-open`, `open` on macOS, or `explorer.exe` in WSL): an image goes to the image viewer, a web page to the browser. A folder opens in the file manager.
 
 The files panel also lists what git ignores, in grey; an ignored folder is read when you open it. `i` in the panel hides those files and shows them again, and `ignored_files = false` in the settings opens without them.
 
@@ -101,7 +107,7 @@ Keep one session to a directory. The files and changes panels show the project o
 | `○` | Idle |
 | `✕` | The agent's process has exited and the session was kept; `ctrl+a r` restarts it |
 
-Each row also shows for how long the session has been in its status. A Claude Code session that says it is working but has given no sign of life for 30 seconds reads `working?`, as after an interrupted turn.
+Each row also shows for how long the session has been in its status. A Claude Code, Copilot CLI or Codex CLI session that says it is working but has given no sign of life for 30 seconds reads `working?`, as after an interrupted turn.
 
 A session closes when its agent or shell exits. It is kept, marked `✕`, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. `close_on_exit = false` in the settings keeps every session.
 
@@ -123,11 +129,11 @@ While an agent works you can line up what to tell it next. `ctrl+a m` asks for a
 
 In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses and resumes, `e` edits, `x` deletes, `J`/`K` reorder, `a` adds. Pause when a turn ends with a question you want to answer first.
 
-Only Claude Code says when its turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
+Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
 
 ## Tokens
 
-For Claude Code sessions the status bar shows `ctx`, the size of the context, and `in` and `out`, what the model has read and written over the whole conversation, cached input included. With several sessions counting, `all` is what they add up to.
+For Claude Code, Copilot CLI and Codex CLI sessions the status bar shows `ctx`, the size of the context, and `in` and `out`, what the model has read and written over the whole conversation, cached input included. With several sessions counting, `all` is what they add up to.
 
 ## Configure
 
@@ -146,12 +152,20 @@ animations = true        # ASCII art when cicoria opens and quits, and a session
 
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.
-[agents.copilot]
-command = ["copilot"]
+[agents.aider]
+command = ["aider"]
 
-# An entry named "claude" changes how Claude Code is started.
+# An entry named "claude", "copilot" or "codex" changes how Claude Code,
+# Copilot CLI or Codex CLI is started. cicoria adds its own options at the end, so a launcher
+# that passes the rest on ends with "--".
 [agents.claude]
 command = ["claude", "--model", "opus"]
+
+[agents.copilot]
+command = ["ollama", "launch", "copilot", "--model", "gemma4:cloud", "--"]
+
+[agents.codex]
+command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]
 ```
 
 A plain `shell` is always available as a session type.
@@ -160,7 +174,7 @@ With `animations` on, a second of ASCII art plays in the agent pane when cicoria
 
 ## What is remembered
 
-Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes; Claude Code sessions continue their conversation when reopened.
+Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes; Claude Code, Copilot CLI and Codex CLI sessions continue their conversation when reopened.
 
 A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
 

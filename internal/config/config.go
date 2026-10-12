@@ -54,7 +54,8 @@ type Config struct {
 	// quits and when a session is created or closed.
 	Animations bool `toml:"animations"`
 	// Agents are command lines to offer as agents, by name. An entry named
-	// "claude" changes how Claude Code is started.
+	// "claude", "copilot" or "codex" changes how Claude Code, Copilot CLI
+	// or Codex CLI is started.
 	Agents map[string]AgentConfig `toml:"agents"`
 }
 
@@ -131,18 +132,19 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-// Adapters returns the agents to offer: Claude Code first, then the
-// configured ones by name, then a plain shell.
+// Adapters returns the agents to offer: Claude Code, Copilot CLI and Codex
+// CLI first, then the configured ones by name, then a plain shell.
 func (c Config) Adapters() []agent.Adapter {
-	var claude []string
-	if a, ok := c.Agents["claude"]; ok {
-		claude = a.Command
+	// A nil command line is the agent's own.
+	adapters := []agent.Adapter{
+		agent.NewClaude(c.Agents["claude"].Command),
+		agent.NewCopilot(c.Agents["copilot"].Command),
+		agent.NewCodex(c.Agents["codex"].Command),
 	}
-	adapters := []agent.Adapter{agent.NewClaude(claude)}
 
 	names := make([]string, 0, len(c.Agents))
 	for name := range c.Agents {
-		if name != "claude" && name != "shell" {
+		if name != "claude" && name != "copilot" && name != "codex" && name != "shell" {
 			names = append(names, name)
 		}
 	}

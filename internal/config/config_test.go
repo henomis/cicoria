@@ -18,6 +18,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/henomis/cicoria/internal/agent"
 )
 
 func write(t *testing.T, content string) string {
@@ -64,7 +66,7 @@ command = ["aider"]
 	for _, a := range cfg.Adapters() {
 		names = append(names, a.Name())
 	}
-	want := []string{"claude", "aider", "copilot", "shell"}
+	want := []string{"claude", "copilot", "codex", "aider", "shell"}
 	if len(names) != len(want) {
 		t.Fatalf("adapters = %v, want %v", names, want)
 	}
@@ -72,6 +74,24 @@ command = ["aider"]
 		if names[i] != want[i] {
 			t.Fatalf("adapters = %v, want %v", names, want)
 		}
+	}
+}
+
+func TestAdaptersCommands(t *testing.T) {
+	cfg, err := Load(write(t, "[agents.copilot]\ncommand = [\"copilot\", \"--banner\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An entry named after an agent cicoria knows changes its command line.
+	adapters := cfg.Adapters()
+	if got := adapters[0].Command(agent.LaunchOpts{}).Args[0]; got != "claude" {
+		t.Errorf("claude runs %q", got)
+	}
+	if got := adapters[1].Command(agent.LaunchOpts{}).Args[:2]; got[0] != "copilot" || got[1] != "--banner" {
+		t.Errorf("copilot runs %q", got)
+	}
+	if !adapters[1].ReportsStatus() {
+		t.Error("the configured copilot does not report its status")
 	}
 }
 

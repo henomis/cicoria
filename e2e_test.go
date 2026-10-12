@@ -43,9 +43,46 @@ while read -r cmd arg; do
     news) hook '{"hook_event_name":"Notification","notification_type":"auth_success"}' ;;
     edit) echo "hello from the agent" > "$arg"
           hook "{\"hook_event_name\":\"PostToolUse\",\"tool_input\":{\"file_path\":\"$PWD/$arg\"}}" ;;
+    branch) git switch -q -c "$arg" ;;
     size) echo "size $(stty size)" ;;
     pwd)  echo "in $PWD" ;;
     many) seq 1 100 ;;
+    *)    echo "got $cmd" ;;
+  esac
+done
+`
+
+// fakeCopilot stands in for Copilot CLI: its hooks say their name on the
+// command line, and none runs before the first message.
+const fakeCopilot = `
+hook() { printf '%s' "$2" | "$CICORIA_BIN" hook "$1"; }
+echo "copilot ready"
+while read -r cmd arg; do
+  case "$cmd" in
+    work) hook userPromptSubmitted '{"prompt":"work"}'
+          hook sessionStart '{"source":"new"}' ;;
+    ask)  hook notification '{"notification_type":"permission_prompt"}' ;;
+    stop) hook agentStop '{"stopReason":"end_turn"}' ;;
+    edit) echo "hello from copilot" > "$arg"
+          hook postToolUse "{\"toolName\":\"create\",\"toolArgs\":{\"path\":\"$PWD/$arg\"}}" ;;
+    *)    echo "got $cmd" ;;
+  esac
+done
+`
+
+// fakeCodex stands in for Codex CLI: its payloads say which hook they are
+// from, and none runs before the first message.
+const fakeCodex = `
+hook() { printf '{"hook_event_name":"%s","cwd":"%s",%s}' "$1" "$PWD" "$2" | "$CICORIA_BIN" hook; }
+echo "codex ready"
+while read -r cmd arg; do
+  case "$cmd" in
+    work) hook SessionStart '"source":"startup"'
+          hook UserPromptSubmit '"prompt":"work"' ;;
+    ask)  hook PermissionRequest '"tool_name":"Bash"' ;;
+    stop) hook Stop '"last_assistant_message":"done"' ;;
+    edit) echo "hello from codex" > "$arg"
+          hook PostToolUse "\"tool_name\":\"apply_patch\",\"tool_input\":{\"command\":\"*** Begin Patch\\n*** Add File: $arg\\n+hello\\n*** End Patch\"}" ;;
     *)    echo "got $cmd" ;;
   esac
 done
@@ -102,6 +139,8 @@ func newWorkspace(t *testing.T) *workspace {
 	}
 
 	config := fmt.Sprintf("notify = false\nanimations = false\n\n[agents.claude]\ncommand = [\"sh\", \"-c\", %q, \"fake-claude\"]\n", fakeAgent)
+	config += fmt.Sprintf("\n[agents.copilot]\ncommand = [\"sh\", \"-c\", %q, \"fake-copilot\"]\n", fakeCopilot)
+	config += fmt.Sprintf("\n[agents.codex]\ncommand = [\"sh\", \"-c\", %q, \"fake-codex\"]\n", fakeCodex)
 	must(os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0o644))
 	must(os.MkdirAll(filepath.Join(home, "run"), 0o700))
 
@@ -114,6 +153,9 @@ func newWorkspace(t *testing.T) *workspace {
 			"XDG_STATE_HOME="+filepath.Join(home, "state"),
 			"XDG_RUNTIME_DIR="+filepath.Join(home, "run"),
 			"CLAUDE_CONFIG_DIR="+filepath.Join(home, "claude"),
+			"COPILOT_HOME="+filepath.Join(home, "copilot"),
+			"CODEX_HOME="+filepath.Join(home, "codex"),
+			"XDG_CACHE_HOME="+filepath.Join(home, "cache"),
 			"SHELL=/bin/sh",
 		),
 	}
@@ -230,6 +272,8 @@ func TestWorkspace(t *testing.T) {
 
 	// The agent runs in the centre pane, between the side panels.
 	w.see("Sessions", "Files · project", "working tree clean", "agent ready", "claude-1 · claude · idle")
+	// The pane is headed by the directory and the branch it is on.
+	w.see("project · main ─")
 	w.see("▸ api/", "main.go")
 	w.line("ping")
 	w.see("got ping")
@@ -261,6 +305,10 @@ func TestWorkspace(t *testing.T) {
 	w.see("Changes (1)", "? notes.txt", "+1")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
+
+	// A branch the agent moves to is shown without asking.
+	w.line("branch feature/login")
+	w.see("project · feature/login ─")
 
 	// Its diff opens on the whole screen and closes back to the workspace.
 	w.prefix('g')
@@ -344,6 +392,8 @@ func TestWorkspace(t *testing.T) {
 	w.typeText("scratch")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("scratch · shell", "Files · other", "elsewhere.txt", "not a git repository")
+	// Outside a repository the pane is headed by the directory alone.
+	w.see("/other ─")
 	w.gone("main.go")
 	w.line("pwd")
 	w.see(filepath.Join(filepath.Dir(w.dir), "other"))
@@ -882,6 +932,78 @@ func TestNarrowTerminalKeepsTheSideOnScreen(t *testing.T) {
 	// The agent still has the keys, and its size.
 	w.line("size")
 	w.see("size 17 40")
+	w.quit()
+}
+
+// TestCopilot runs a Copilot CLI session: its hooks name themselves, and
+// the first of them comes with the first message.
+func TestCopilot(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("copilot")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("copilot in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: copilot-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+
+	// It says nothing when it starts: it is ready once its screen is quiet.
+	w.see("copilot ready", "copilot-1 · copilot · idle")
+
+	w.line("work")
+	w.see("copilot-1 · copilot · working")
+	w.line("ask")
+	w.see("copilot-1 · copilot · needs input")
+	w.line("edit notes.txt")
+	w.see("copilot-1 · copilot · working", "? notes.txt")
+
+	// The end of a turn sends what waits in the queue.
+	w.queue("next")
+	w.see("Queue (1)")
+	w.line("stop")
+	w.see("got next", "copilot-1 · copilot · working")
+	w.line("stop")
+	w.see("copilot-1 · copilot · idle")
+	w.quit()
+}
+
+// TestCodex runs a Codex CLI session: the first of its hooks comes with the
+// first message, and a patch names the file it wrote.
+func TestCodex(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("codex")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("codex in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: codex-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+
+	// It says nothing when it starts: it is ready once its screen is quiet.
+	w.see("codex ready", "codex-1 · codex · idle")
+
+	w.line("work")
+	w.see("codex-1 · codex · working")
+	w.line("ask")
+	w.see("codex-1 · codex · needs input")
+	w.line("edit notes.txt")
+	w.see("codex-1 · codex · working", "? notes.txt")
+
+	// The end of a turn sends what waits in the queue.
+	w.queue("next")
+	w.see("Queue (1)")
+	w.line("stop")
+	w.see("got next", "codex-1 · codex · working")
+	w.line("stop")
+	w.see("codex-1 · codex · idle")
 	w.quit()
 }
 

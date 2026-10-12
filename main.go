@@ -35,7 +35,7 @@ const usage = `cicoria — a terminal workspace for supervising coding agents
 
 Usage:
   cicoria [flags] [directory]   open the workspace of a project (default: .)
-  cicoria hook                  report an agent hook event (used by agents)
+  cicoria hook [name]           report an agent hook event (used by agents)
 
 Flags:
 `
@@ -44,7 +44,11 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "hook" {
 		// A hook must never get in the agent's way: report what can be
 		// reported and always succeed.
-		_ = ipc.Forward(os.Stdin)
+		name := ""
+		if len(os.Args) > 2 {
+			name = os.Args[2]
+		}
+		_ = ipc.Forward(name, os.Stdin)
 		return
 	}
 

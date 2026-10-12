@@ -15,11 +15,11 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -114,6 +114,7 @@ func (m *Model) showProject() tea.Cmd {
 	if m.project() != m.shown {
 		m.shown = m.project()
 		m.files, m.changes, m.repo, m.loading = nil, nil, false, true
+		m.branch = ""
 		m.changeCursor, m.changeTop = 0, 0
 	}
 	return m.refresh()
@@ -474,16 +475,38 @@ func (m *Model) open(path string) tea.Cmd {
 	if path == "" {
 		return nil
 	}
-	opener := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		opener = "open"
+	sys := system()
+	if _, err := exec.LookPath(opener(sys)); err != nil && sys == "wsl" {
+		// Windows programs cannot be run from here: open it as Linux does.
+		sys = "linux"
 	}
-	cmd := exec.Command(opener, path)
-	cmd.Dir = m.project()
+	program, dir := opener(sys), m.project()
 	m.say("opening " + path)
 	return func() tea.Msg {
-		if err := cmd.Run(); err != nil {
-			return openedMsg{fmt.Errorf("%s %s: %w", opener, path, err)}
+		target := path
+		if sys == "wsl" {
+			// explorer.exe takes the path as Windows writes it.
+			if !filepath.IsAbs(target) {
+				target = "./" + target
+			}
+			convert := exec.Command("wslpath", "-w", target)
+			convert.Dir = dir
+			out, err := convert.Output()
+			if err != nil {
+				return openedMsg{fmt.Errorf("wslpath %s: %w", path, err)}
+			}
+			target = strings.TrimSpace(string(out))
+		}
+		cmd := exec.Command(program, target)
+		cmd.Dir = dir
+		err := cmd.Run()
+		// explorer.exe fails even when it has opened the file.
+		var exit *exec.ExitError
+		if sys == "wsl" && errors.As(err, &exit) {
+			err = nil
+		}
+		if err != nil {
+			return openedMsg{fmt.Errorf("%s %s: %w", program, path, err)}
 		}
 		return nil
 	}
