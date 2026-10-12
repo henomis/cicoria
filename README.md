@@ -1,5 +1,7 @@
 # cicoria
 
+![cicoria: a robot made of chicory leaves and flowers at a keyboard, with terminal windows around it](assets/cover.jpg)
+
 A terminal workspace for the AI-first engineer: run several coding agents side by side, see which one needs you, and review what they changed, without leaving the terminal.
 
 ```
@@ -32,7 +34,7 @@ Claude Code gets the full integration: its status comes from hooks, and the file
 ## Install
 
 ```sh
-go install github.com/henomis/cicoria/cmd/cicoria@latest
+go install github.com/henomis/cicoria@latest
 ```
 
 Requirements:
@@ -74,6 +76,10 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 
 In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
 
+The mouse wheel and `pgup`/`pgdn` scroll back through what has left the agent's screen, and the title of the pane says how many lines back you are; typing goes back to the end. An agent that reads the mouse itself, or takes the whole screen as an editor does, gets the wheel and the keys instead.
+
+`o` on a file, in the files and changes panels and in the full-screen view, hands it to the program the system opens it with (`xdg-open`, or `open` on macOS): an image goes to the image viewer, a web page to the browser. A folder opens in the file manager.
+
 The files panel also lists what git ignores, in grey; an ignored folder is read when you open it. `i` in the panel hides those files and shows them again, and `ignored_files = false` in the settings opens without them.
 
 ## Sessions
@@ -90,15 +96,17 @@ Keep one session to a directory. The files and changes panels show the project o
 | `▲` | Needs input: the agent asks a question or a permission |
 | `✓` | Finished its turn while you were looking elsewhere |
 | `○` | Idle |
-| `✕` | The agent's process has exited; `ctrl+a r` restarts it |
+| `✕` | The agent's process has exited and the session was kept; `ctrl+a r` restarts it |
 
 Each row also shows for how long the session has been in its status. A Claude Code session that says it is working but has given no sign of life for 30 seconds reads `working?`, as after an interrupted turn.
+
+A session closes when its agent or shell exits. It is kept, marked `✕`, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. `close_on_exit = false` in the settings keeps every session.
 
 ## Review
 
 The changes panel shows what is not committed. In it, `s` switches to everything the session changed since the commit it started on, committed or not, and back; the panel then says how many commits were made since, and `ctrl+a h` starts the count again from the last commit, once you have looked. With `changes = "session"` in the settings, sessions open on that view.
 
-Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `e` opens `$EDITOR`, `@` mentions the file to the agent, `q` goes back.
+Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back.
 
 ### Notes
 
@@ -130,6 +138,7 @@ left_panel = true        # false opens with sessions and files hidden; ctrl+a [ 
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
 changes = "uncommitted"  # "session" opens on everything a session changed since it started
 ignored_files = true     # false opens with the files git ignores left out of the files panel
+close_on_exit = true     # false keeps a session whose agent has exited, to restart or close by hand
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 
 # Any command line can be an agent. Its status is guessed from terminal

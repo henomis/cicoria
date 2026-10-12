@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
 )
@@ -25,6 +27,10 @@ type Terminal struct {
 	// not take one: the emulator writes to that pipe while mu is held.
 	mu  sync.Mutex
 	emu *vt.Emulator
+	// back is how many lines of history are shown above the screen, and
+	// mouse the mouse modes the command has asked for. Both are guarded by mu.
+	back  int
+	mouse map[ansi.Mode]bool
 
 	updates chan struct{}
 	done    chan struct{}
@@ -53,12 +59,16 @@ func Start(cmd *exec.Cmd, width, height int) (*Terminal, error) {
 		cmd:     cmd,
 		pty:     f,
 		emu:     vt.NewEmulator(width, height),
+		mouse:   map[ansi.Mode]bool{},
 		updates: make(chan struct{}, 1),
 		done:    make(chan struct{}),
 	}
 	t.emu.SetCallbacks(vt.Callbacks{
 		Bell:             func() { t.bell.Store(true) },
 		CursorVisibility: func(visible bool) { t.cursorHidden.Store(!visible) },
+		// The emulator calls these while it is written to, with mu held.
+		EnableMode:  func(mode ansi.Mode) { t.setMouse(mode, true) },
+		DisableMode: func(mode ansi.Mode) { t.setMouse(mode, false) },
 	})
 
 	go t.readOutput()
@@ -76,7 +86,12 @@ func (t *Terminal) readOutput() {
 		if n > 0 {
 			control.filter(buf[:n])
 			t.mu.Lock()
+			before := t.emu.ScrollbackLen()
 			_, _ = t.emu.Write(buf[:n])
+			// What is being read stays where it is while more is written.
+			if t.back > 0 {
+				t.back = min(t.back+max(t.emu.ScrollbackLen()-before, 0), t.emu.ScrollbackLen())
+			}
 			t.mu.Unlock()
 			t.notify()
 		}
@@ -115,11 +130,69 @@ func (t *Terminal) Done() <-chan struct{} { return t.done }
 // Err returns the command's exit error. It is only valid after Done is closed.
 func (t *Terminal) Err() error { return t.exitErr }
 
-// Render returns the screen as text styled with ANSI escape codes.
+// Render returns the screen as text styled with ANSI escape codes. Scrolled
+// back, the lines that left the screen take the place of its last ones.
 func (t *Terminal) Render() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.emu.Render()
+	back := t.scrolled()
+	if back == 0 {
+		return t.emu.Render()
+	}
+
+	history, height := t.emu.Scrollback(), t.emu.Height()
+	lines := make([]string, 0, height)
+	for i := history.Len() - back; i < history.Len() && len(lines) < height; i++ {
+		lines = append(lines, history.Line(i).Render())
+	}
+	screen := strings.Split(t.emu.Render(), "\n")
+	lines = append(lines, screen[:min(height-len(lines), len(screen))]...)
+	return strings.Join(lines, "\n")
+}
+
+// setMouse records that the command turned a mouse mode on or off.
+func (t *Terminal) setMouse(mode ansi.Mode, on bool) {
+	switch mode {
+	case ansi.ModeMouseX10, ansi.ModeMouseNormal, ansi.ModeMouseHighlight, ansi.ModeMouseButtonEvent, ansi.ModeMouseAnyEvent:
+		if on {
+			t.mouse[mode] = true
+		} else {
+			delete(t.mouse, mode)
+		}
+	}
+}
+
+// scrolled returns how far back the screen is scrolled. A command on the
+// alternate screen has no history. The caller holds mu.
+func (t *Terminal) scrolled() int {
+	if t.emu.IsAltScreen() {
+		return 0
+	}
+	return min(t.back, t.emu.ScrollbackLen())
+}
+
+// OwnsScrolling reports whether scrolling is left to the command: it reads
+// the mouse itself, or draws on the alternate screen as an editor does.
+// Otherwise the terminal scrolls through what has left the screen.
+func (t *Terminal) OwnsScrolling() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.mouse) > 0 || t.emu.IsAltScreen()
+}
+
+// Scroll moves the screen back through its history by lines, or forward
+// when lines is negative.
+func (t *Terminal) Scroll(lines int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.back = max(min(t.scrolled()+lines, t.emu.ScrollbackLen()), 0)
+}
+
+// Scrolled returns how many lines back the screen is scrolled.
+func (t *Terminal) Scrolled() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.scrolled()
 }
 
 // String returns the screen as plain text.
@@ -129,12 +202,13 @@ func (t *Terminal) String() string {
 	return t.emu.String()
 }
 
-// Cursor returns the cursor position and whether it should be shown.
+// Cursor returns the cursor position and whether it should be shown. It is
+// not shown while the screen is scrolled back.
 func (t *Terminal) Cursor() (x, y int, visible bool) {
 	t.mu.Lock()
-	p := t.emu.CursorPosition()
+	p, back := t.emu.CursorPosition(), t.scrolled()
 	t.mu.Unlock()
-	return p.X, p.Y, !t.cursorHidden.Load()
+	return p.X, p.Y, back == 0 && !t.cursorHidden.Load()
 }
 
 // TakeBell reports whether the command rang the bell since the last call.
@@ -153,10 +227,12 @@ func (t *Terminal) Resize(width, height int) {
 	_ = pty.Setsize(t.pty, &pty.Winsize{Cols: uint16(width), Rows: uint16(height)})
 }
 
-// SendKey sends a key press to the command.
+// SendKey sends a key press to the command. What is typed is typed at the
+// end, so the screen leaves its history.
 func (t *Terminal) SendKey(k uv.Key) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.back = 0
 	if seq, ok := encodeKey(k); ok {
 		t.emu.SendText(seq)
 		return
@@ -184,6 +260,7 @@ func (t *Terminal) Type(text string) {
 func (t *Terminal) Paste(text string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.back = 0
 	t.emu.Paste(text)
 }
 

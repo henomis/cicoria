@@ -44,6 +44,8 @@ type Session struct {
 	Term *term.Terminal
 	// Err is why the agent could not be started, if it could not.
 	Err error
+	// Started is when the agent was last started.
+	Started time.Time
 
 	Status agent.Status
 	// Since is when the session got into its status.
@@ -170,6 +172,7 @@ func (s *Session) Start(o agent.LaunchOpts, width, height int) error {
 		return err
 	}
 	s.Term = t
+	s.Started = time.Now()
 	s.become(agent.Starting)
 	s.Unseen = false
 	return nil

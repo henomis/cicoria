@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -451,4 +452,25 @@ func (m *Model) edit(path string) tea.Cmd {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = m.project()
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return editorMsg{err} })
+}
+
+// open hands a file to the program the system opens it with, such as the
+// image viewer or the browser, and leaves it running next to cicoria.
+func (m *Model) open(path string) tea.Cmd {
+	if path == "" {
+		return nil
+	}
+	opener := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		opener = "open"
+	}
+	cmd := exec.Command(opener, path)
+	cmd.Dir = m.project()
+	m.say("opening " + path)
+	return func() tea.Msg {
+		if err := cmd.Run(); err != nil {
+			return openedMsg{fmt.Errorf("%s %s: %w", opener, path, err)}
+		}
+		return nil
+	}
 }

@@ -31,6 +31,7 @@ while read -r cmd arg; do
           hook "{\"hook_event_name\":\"PostToolUse\",\"tool_input\":{\"file_path\":\"$PWD/$arg\"}}" ;;
     size) echo "size $(stty size)" ;;
     pwd)  echo "in $PWD" ;;
+    many) seq 1 100 ;;
     *)    echo "got $cmd" ;;
   esac
 done
@@ -351,6 +352,121 @@ func TestWorkspace(t *testing.T) {
 	w.gone("claude-2")
 	// The session that takes its place comes on screen, with its project.
 	w.see("scratch · shell", "Files · other")
+	w.quit()
+}
+
+// newShell opens a shell session with the name it is offered.
+func (w *workspace) newShell() {
+	w.t.Helper()
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: shell-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell-1 · shell")
+}
+
+// A file is handed to the system's opener from the files panel.
+func TestOpenWithTheSystem(t *testing.T) {
+	w := newWorkspace(t)
+	// A stand-in for the opener, which records what it was asked for.
+	bin := t.TempDir()
+	log := filepath.Join(bin, "opened")
+	script := fmt.Sprintf("#!/bin/sh\necho \"$PWD $1\" >> %q\n", log)
+	for _, name := range []string{"xdg-open", "open"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.env = append(w.env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	w.launch(140, 40)
+	w.see("▸ api/", "main.go")
+
+	w.prefix('f')
+	w.typeText("j") // api/, then main.go
+	w.typeText("o")
+	w.see("opening main.go")
+
+	want := w.dir + " main.go\n"
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, _ := os.ReadFile(log)
+		if string(got) == want {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the opener was asked for %q, not %q", got, want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	w.quit()
+}
+
+// A session goes with its agent, unless the agent ends as soon as it starts.
+func TestSessionClosesWithItsAgent(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+
+	// A shell that ends at once stays, and can be restarted.
+	w.newShell()
+	w.line("exit")
+	w.see("shell-1 exited — ctrl+a r restarts it")
+	w.prefix('r')
+	w.gone("shell-1 exited")
+
+	// One that has been running takes its session with it.
+	time.Sleep(4 * time.Second)
+	w.line("exit")
+	w.gone("shell-1")
+	w.see("claude-1 · claude")
+	w.quit()
+}
+
+// What has left the agent's screen comes back with page up and the wheel.
+func TestScrollBack(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+	w.line("many")
+	w.see("100")
+	w.gone("agent ready")
+
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgUp})
+	w.see("lines back")
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgUp})
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgUp})
+	w.see("agent ready")
+	w.tm.SendKey(uv.Key{Code: uv.KeyPgDown})
+	w.gone("agent ready")
+
+	// Typing goes back to the end.
+	w.line("pwd")
+	w.gone("lines back")
+
+	// The wheel does the same over the agent's pane.
+	w.tm.SendMouse(uv.MouseWheelEvent{X: 70, Y: 10, Button: uv.MouseWheelUp})
+	w.see("3 lines back")
+	w.tm.SendMouse(uv.MouseWheelEvent{X: 70, Y: 10, Button: uv.MouseWheelDown})
+	w.gone("lines back")
+	w.see("in " + w.dir)
+	w.quit()
+}
+
+// The settings can keep a session whose agent has exited.
+func TestSessionKeptAfterItsAgent(t *testing.T) {
+	w := newWorkspace(t)
+	w.set("close_on_exit = false")
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+
+	w.newShell()
+	time.Sleep(4 * time.Second)
+	w.line("exit")
+	w.see("shell-1 exited — ctrl+a r restarts it")
 	w.quit()
 }
 

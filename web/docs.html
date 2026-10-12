@@ -44,7 +44,7 @@
 
     <section id="install">
       <h2>Install</h2>
-      <pre>go install github.com/henomis/cicoria/cmd/cicoria@latest</pre>
+      <pre>go install github.com/henomis/cicoria@latest</pre>
       <p>You need:</p>
       <ul>
         <li>Go 1.26 or later, to build it.</li>
@@ -61,6 +61,7 @@ cicoria ~/src/app  <span class="c"># or on another one</span>
 cicoria -config ./my.toml ~/src/app</pre>
       <p>The directory you open is the workspace: its sessions are saved under it and come back the next time. The first time, one session starts with the default agent.</p>
       <p>Everything you type goes to the agent on screen. To talk to cicoria instead, press the prefix key, <kbd>ctrl+a</kbd>, and then a command key. The mouse works too: click a panel or a session, scroll with the wheel, and clicks inside the agent pane go to the agent.</p>
+      <p>The mouse wheel and <kbd>pgup</kbd>/<kbd>pgdn</kbd> scroll back through what has left the agent's screen, and the title of the pane says how many lines back you are; typing goes back to the end. An agent that reads the mouse itself, or takes the whole screen as an editor does, gets the wheel and the keys instead.</p>
     </section>
 
     <section id="commands">
@@ -116,12 +117,13 @@ cicoria -config ./my.toml ~/src/app</pre>
           <tr><td class="mark-w">▲</td><td>Needs input: the agent asks a question or a permission</td></tr>
           <tr><td class="mark-g">✓</td><td>Finished its turn while you were looking elsewhere</td></tr>
           <tr><td class="mark-d">○</td><td>Idle</td></tr>
-          <tr><td class="mark-r">✕</td><td>The agent's process has exited; <kbd>ctrl+a</kbd> <kbd>r</kbd> restarts it</td></tr>
+          <tr><td class="mark-r">✕</td><td>The agent's process has exited and the session was kept; <kbd>ctrl+a</kbd> <kbd>r</kbd> restarts it</td></tr>
           <tr><td class="mark-d">◌</td><td>Starting</td></tr>
         </tbody>
       </table></div>
       <p>A session that needs input and is not on screen is also named in the status bar, and raises a desktop notification when <code>notify</code> is on.</p>
       <p>Claude Code tells cicoria what it is doing. When it says it is working but has shown no sign of life for 30 seconds, its status reads <code>working?</code> and its mark is dimmed. This happens after you interrupt a turn. For other agents the status is guessed: output means working, quiet means idle, the terminal bell means it needs input.</p>
+      <p>A session closes when its agent or shell exits. It is kept, marked <span class="mark-r">✕</span>, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. <code>close_on_exit = false</code> in the settings keeps every session.</p>
     </section>
 
     <section id="panels">
@@ -131,8 +133,8 @@ cicoria -config ./my.toml ~/src/app</pre>
         <thead><tr><th>Panel</th><th>Keys</th></tr></thead>
         <tbody>
           <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>x</kbd> close it, <kbd>c</kbd> new session</td></tr>
-          <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>@</kbd> mention the file to the agent, <kbd>i</kbd> show or hide what git ignores</td></tr>
-          <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
+          <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention the file to the agent, <kbd>i</kbd> show or hide what git ignores</td></tr>
+          <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
@@ -163,6 +165,7 @@ cicoria -config ./my.toml ~/src/app</pre>
           <tr><td>d</td><td>Switch between the file and its diff</td></tr>
           <tr><td>w</td><td>Wrap long lines, or cut them again</td></tr>
           <tr><td>e</td><td>Open the file in <code>$VISUAL</code> or <code>$EDITOR</code></td></tr>
+          <tr><td>o</td><td>Open the file with the system: an image in the viewer, a web page in the browser</td></tr>
           <tr><td>@</td><td>Mention the file to the agent</td></tr>
           <tr><td>v, c, x, s</td><td>Select lines, write a note, delete it, send the notes</td></tr>
           <tr><td>q</td><td>Back to the workspace</td></tr>
@@ -233,6 +236,7 @@ make this a duration</pre>
           <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
           <tr><td>changes</td><td><code>"uncommitted"</code></td><td>What the changes panel opens on: what is not committed, or with <code>"session"</code> everything a session changed since it started</td></tr>
           <tr><td>ignored_files</td><td><code>true</code></td><td>Open with the files git ignores listed in the files panel, in grey. <code>false</code> leaves them out until <kbd>i</kbd> is pressed in the panel</td></tr>
+          <tr><td>close_on_exit</td><td><code>true</code></td><td>Close a session when its agent or shell exits. <code>false</code> keeps it, marked <span class="mark-r">✕</span>, to restart or close by hand</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and when a session is created or closed. Any key ends it</td></tr>
         </tbody>
       </table></div>
@@ -263,8 +267,8 @@ cd cicoria
 go test ./...
 
 <span class="c"># drives the real Claude Code; needs a folder it already trusts</span>
-CICORIA_E2E_REAL=$PWD go test -run TestRealAgent -v ./cmd/cicoria</pre>
-      <p>The end-to-end tests in <code>cmd/cicoria</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
+CICORIA_E2E_REAL=$PWD go test -run TestRealAgent -v .</pre>
+      <p>The end-to-end tests in <code>e2e_test.go</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
     </section>
   </main>
 </div>

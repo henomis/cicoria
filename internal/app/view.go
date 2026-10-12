@@ -159,6 +159,10 @@ func (m *Model) renderAgent(l layout) []string {
 		if s.Stalled(time.Now()) {
 			status += "?"
 		}
+		// Before the directory, which is what a narrow pane cuts off.
+		if back := s.Term.Scrolled(); back > 0 {
+			status = fmt.Sprintf("%s · %d lines back", status, back)
+		}
 		title = fmt.Sprintf("%s · %s · %s · %s", s.Name, s.Adapter.Name(), status, tilde(s.Dir))
 		lines = strings.Split(s.Term.Render(), "\n")
 	}
@@ -396,6 +400,11 @@ func (m *Model) renderHelp() []string {
 		"    work, and only come back when it is opened on that directory again.",
 		"    "+p+" w lists the other saved workspaces and opens one in place of this.",
 		"",
+		ui.Bold.Render("  Scrolling back"),
+		"    the mouse wheel and pgup/pgdn scroll through what has left the agent's",
+		"    screen; typing goes back to the end. An agent that reads the mouse or",
+		"    takes the whole screen, like an editor, scrolls by itself.",
+		"",
 		ui.Bold.Render("  Queue"),
 		"    messages wait in the queue and go to the agent one by one, each when it ends",
 		"    its turn; to an idle agent the first goes at once. Agents that do not report",
@@ -405,14 +414,15 @@ func (m *Model) renderHelp() []string {
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
 		"    files: h/l close/open folder · d diff · e editor · @ mention to the agent",
+		"           o open with the system, as an image or a web page wants",
 		"           i show ⇄ hide what git ignores, which is grey",
-		"    changes: enter diff · v file · e editor · @ mention to the agent",
+		"    changes: enter diff · v file · e editor · o open · @ mention to the agent",
 		"             s what is not committed ⇄ everything since the session started",
 		"",
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
 		"    tab/shift+tab next/previous changed file · d file ⇄ diff · e editor · q back",
-		"    w wrap long lines ⇄ cut them",
+		"    w wrap long lines ⇄ cut them · o open with the system",
 		"    v select lines · c write a note on them · x delete it · s send the notes",
 		"",
 		ui.Bold.Render("  Notes"),

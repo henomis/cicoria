@@ -95,7 +95,7 @@ func (m *Model) fileLines(path string) (lines, source []string) {
 	data = data[:n]
 
 	if ui.IsBinary(data) {
-		return []string{ui.Dim.Render(fmt.Sprintf("binary file, %d bytes", st.Size()))}, nil
+		return []string{ui.Dim.Render(fmt.Sprintf("binary file, %d bytes: o opens it outside cicoria", st.Size()))}, nil
 	}
 	lines = ui.FileLines(path, string(data), m.dark)
 	source = strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
@@ -406,6 +406,8 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		p.SetCursor(p.Cursor, h)
 	case "e":
 		return m.edit(m.view.path)
+	case "o":
+		return m.open(m.view.path)
 	case "@":
 		m.mode = modeWorkspace
 		m.mention(m.view.path)

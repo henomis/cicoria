@@ -170,6 +170,8 @@ func (m *Model) filesKey(key string) tea.Cmd {
 		if !row.Dir {
 			return m.edit(row.Path)
 		}
+	case "o":
+		return m.open(row.Path)
 	case "@":
 		m.mention(row.Path)
 	case "i":
@@ -207,6 +209,8 @@ func (m *Model) changesKey(key string) tea.Cmd {
 		}
 	case "e":
 		return m.edit(path)
+	case "o":
+		return m.open(path)
 	case "@":
 		m.mention(path)
 	case "s":
@@ -302,6 +306,16 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 func (m *Model) forwardMouse(msg tea.MouseMsg, pane rect) {
 	s := m.current()
 	if s == nil || s.Term == nil || s.Status == agent.Exited {
+		return
+	}
+	// An agent that does not read the mouse has its screen scrolled for it.
+	if _, isWheel := msg.(tea.MouseWheelMsg); isWheel && !s.Term.OwnsScrolling() {
+		switch msg.Mouse().Button {
+		case tea.MouseWheelUp:
+			s.Term.Scroll(wheelStep)
+		case tea.MouseWheelDown:
+			s.Term.Scroll(-wheelStep)
+		}
 		return
 	}
 	mouse := uv.Mouse(msg.Mouse())

@@ -22,7 +22,7 @@ A single test:
 
 ```sh
 env -u CICORIA_SOCK -u CICORIA_SESSION go test ./internal/ui -run TestPagerWrap
-env -u CICORIA_SOCK -u CICORIA_SESSION go test ./cmd/cicoria -run TestReviewSinceTheStart -v
+env -u CICORIA_SOCK -u CICORIA_SESSION go test . -run TestReviewSinceTheStart -v
 ```
 
 The `env -u` matters when working from inside a cicoria session: the tests start cicoria themselves, and those two variables would point their hooks at the instance that is already running. The Makefile targets do this already.
@@ -31,9 +31,9 @@ CI (`.github/workflows/checks.yml`) runs `golangci-lint` and `make check` on pus
 
 ## Architecture
 
-Dependencies point one way: `cmd/cicoria` → `internal/app` → everything else. `internal/ui` knows nothing about agents, sessions or git.
+Dependencies point one way: `main.go` → `internal/app` → everything else. `internal/ui` knows nothing about agents, sessions or git.
 
-- **`cmd/cicoria`** is two programs in one binary. `cicoria [dir]` opens the workspace. `cicoria hook` is what an agent's hooks call: it reads the hook payload on stdin and forwards it to the running workspace, and it must always succeed so that it never gets in the agent's way.
+- **`main.go`** is two programs in one binary. `cicoria [dir]` opens the workspace. `cicoria hook` is what an agent's hooks call: it reads the hook payload on stdin and forwards it to the running workspace, and it must always succeed so that it never gets in the agent's way.
 - **`internal/app`** is the single Bubble Tea model (`Model` in `app.go`). It owns all state: the sessions, which pane has the keys (`focus`), what is on top of the workspace (`mode`: full-screen view, palette, help), and the one-line prompt/confirm in the status bar. `keys.go` routes input, `commands.go` holds the table of prefix commands, `view.go` draws, `fullview.go` is the full-screen file/diff view with notes, `queue.go` the message queue.
 - **`internal/agent`** hides everything specific to one agent behind `Adapter`: how to build its command line, whether it reports its status, how to mention a file, and how to turn a hook event into an `Update`. `claude.go` is the full integration; `generic.go` is any other command line.
 - **`internal/session`** is one agent plus its terminal: status, queue, notes, tokens, and the commit its changes are counted from. `store.go` saves the workspace as JSON under `$XDG_STATE_HOME/cicoria/<hash of the directory>/`. The file records its directory, so that the other workspaces can be listed, and a `lock` file next to it is held while the workspace is open.
@@ -66,5 +66,5 @@ The changes panel shows either what is not committed or everything since `Sessio
 - **A user-visible change is documented in four places**: the help screen in `internal/app/view.go`, `README.md`, `web/docs.html` and, for headline features, `web/index.html`. The website is plain HTML, CSS and JavaScript with no build step.
 - **Settings**: a new key goes in `config.Config` with its default in `Default()`, and in the README and `web/docs.html` tables. `Load` rejects unknown keys and invalid values, so every key is a compatibility promise; keep the list short.
 - **Colours come from the terminal's 16-colour palette** (`internal/ui/style.go`) so that they follow the user's theme. Do not introduce fixed RGB colours in the app.
-- **End-to-end tests** (`cmd/cicoria/e2e_test.go`) build the binary and drive it in a PTY against a scratch git project, with a shell script standing in for Claude Code that emits real hook events. `w.see(...)` and `w.gone(...)` wait for text on the screen; `w.set(...)` adds a line to the config before `w.launch`. Text asserted with `gone` must not also appear in another panel, such as a file name in the file tree.
+- **End-to-end tests** (`e2e_test.go`) build the binary and drive it in a PTY against a scratch git project, with a shell script standing in for Claude Code that emits real hook events. `w.see(...)` and `w.gone(...)` wait for text on the screen; `w.set(...)` adds a line to the config before `w.launch`. Text asserted with `gone` must not also appear in another panel, such as a file name in the file tree.
 - **Comments and commit messages** are short plain sentences that say what something is for. A commit subject is an imperative sentence about the user-visible change, and the body explains it in a few lines.
