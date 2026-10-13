@@ -575,8 +575,8 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	if i == m.active {
 		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
 	}
-	made := m.sessions[i].Worktree
-	m.sessions[i].Close()
+	closed := m.sessions[i]
+	made := closed.Worktree
 	m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
 	if m.active > i || m.active >= len(m.sessions) {
 		m.active = max(m.active-1, 0)
@@ -590,7 +590,10 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	m.seen()
 	m.save()
 	m.askRemoveWorktree(made)
-	return m.showProject()
+	// The agent is given a moment to end, which is not for the screen to
+	// wait for.
+	stop := func() tea.Msg { closed.Close(); return nil }
+	return tea.Batch(stop, m.showProject())
 }
 
 func (m *Model) askQuit() tea.Cmd {

@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -86,6 +87,11 @@ type Model struct {
 	// is the directory of the workspace to open once this one is closed.
 	unlock func()
 	next   string
+	// twice says another cicoria had the workspace open when this one came:
+	// its agents are not started before the user says so. declined says the
+	// user did not, and the workspace is left as the other one keeps it.
+	twice    bool
+	declined bool
 
 	sessions []*session.Session
 	active   int
@@ -161,8 +167,10 @@ type prompt struct {
 type confirm struct {
 	question string
 	yes      func() tea.Cmd
-	// no, when set, is what a plain no leads to; esc drops the question.
-	no func() tea.Cmd
+	// no, when set, is what a plain no leads to; esc drops the question,
+	// unless always says it must be answered: then any other key is a no.
+	no     func() tea.Cmd
+	always bool
 }
 
 // Messages.
@@ -214,7 +222,9 @@ type (
 )
 
 // New returns a workspace opened on dir, with the sessions it had last time.
-func New(cfg config.Config, dir string, dark bool) (*Model, error) {
+// One that another cicoria has open is asked about before its agents start,
+// unless agreed says the user was asked already.
+func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 	srv, err := ipc.Listen()
 	if err != nil {
 		return nil, err
@@ -232,8 +242,9 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 		ipc:         srv,
 		dark:        dark,
 		trees:       map[string]*ui.Tree{},
-		unlock:      session.Lock(dir),
+		twice:       !agreed && session.InUse(dir),
 	}
+	m.unlock = session.Lock(dir)
 
 	st, err := session.LoadState(session.StatePath(dir))
 	if err != nil {
@@ -390,10 +401,16 @@ func (m *Model) save() {
 
 // Close stops every agent and saves the workspace.
 func (m *Model) Close() error {
-	m.save()
-	for _, s := range m.sessions {
-		s.Close()
+	// What was never opened here is the other cicoria's to save.
+	if !m.declined {
+		m.save()
 	}
+	// Each agent is given a moment to end: all of them at once.
+	var stopping sync.WaitGroup
+	for _, s := range m.sessions {
+		stopping.Go(s.Close)
+	}
+	stopping.Wait()
 	m.unlock()
 	return m.ipc.Close()
 }
@@ -492,6 +509,16 @@ func (m *Model) refresh() tea.Cmd {
 	}
 }
 
+// startAll launches the agents of the sessions the workspace opens with.
+func (m *Model) startAll() tea.Cmd {
+	m.play(ui.Bloom, "cicoria", nil)
+	var cmds []tea.Cmd
+	for _, s := range m.sessions {
+		cmds = append(cmds, m.start(s))
+	}
+	return tea.Batch(cmds...)
+}
+
 // start launches the agent of a session in the agent pane.
 func (m *Model) start(s *session.Session) tea.Cmd {
 	pane := m.pane(s)
@@ -536,12 +563,17 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		m.started = true
-		m.play(ui.Bloom, "cicoria", nil)
-		var cmds []tea.Cmd
-		for _, s := range m.sessions {
-			cmds = append(cmds, m.start(s))
+		if m.twice {
+			// Two of them would run the same agents on the same conversations.
+			m.confirm = &confirm{
+				question: tilde(m.dir) + " is open in another cicoria, and its agents would run twice. open it here too?",
+				yes:      m.startAll,
+				no:       func() tea.Cmd { m.declined = true; return tea.Quit },
+				always:   true,
+			}
+			return nil
 		}
-		return tea.Batch(cmds...)
+		return m.startAll()
 
 	case frameMsg:
 		if m.anim != nil && time.Since(m.anim.start) < animFor {

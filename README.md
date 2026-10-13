@@ -14,7 +14,7 @@ A terminal workspace for the AI-first engineer: run several coding agents side b
 │▾ api/                   •││                                        │╭─ Queue (1) ───────────╮
 │   auth.go               M││                                        ││▸ then run the linter  │
 ╰──────────────────────────╯╰────────────────────────────────────────╯╰───────────────────────╯
- ▲ fix-flaky-test needs input                   ctx 82k · in 4.2M · out 38k · ctrl+a ? help
+ ▲ fix-flaky-test needs input                                       queue 1 · ctrl+a ? help
 ```
 
 Website and full documentation: <https://henomis.github.io/cicoria/>
@@ -216,9 +216,9 @@ With `animations` on, a second of ASCII art plays in the agent pane when cicoria
 
 ## What is remembered
 
-Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes; Claude Code, Copilot CLI and Codex CLI sessions continue their conversation when reopened.
+Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes: each is told that its terminal is gone, as when a terminal window is closed, and killed only if it is still there two seconds later; Claude Code, Copilot CLI and Codex CLI sessions continue their conversation when reopened.
 
-A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
+A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. A workspace that another cicoria has open is asked about before it is opened a second time, from there or with `cicoria` itself: its agents would run twice, on the same conversations. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
 
 ## Develop
 

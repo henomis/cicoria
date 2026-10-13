@@ -305,7 +305,7 @@ func TestWorkspace(t *testing.T) {
 
 	// A file the agent writes shows up as a change.
 	w.line("edit notes.txt")
-	w.see("Changes (1)", "? notes.txt", "+1")
+	w.see("Changes (1)", "? notes.txt", "+1", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 
@@ -623,6 +623,38 @@ func TestOtherWorkspaces(t *testing.T) {
 	w.quit()
 }
 
+// A workspace that another cicoria has open is asked about before its agents
+// are started a second time.
+func TestWorkspaceOpenTwice(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle", "agent ready")
+	first := w.tm
+
+	// Anything but a yes leaves it to the one that has it.
+	w.launch(140, 40)
+	w.see("is open in another cicoria, and its agents would run twice. open it here too?")
+	if screen := w.tm.String(); strings.Contains(screen, "agent ready") {
+		t.Fatalf("an agent was started before the answer:\n%s", screen)
+	}
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	select {
+	case <-w.tm.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("did not quit; screen:\n%s", w.tm.String())
+	}
+
+	w.launch(140, 40)
+	w.see("open it here too?")
+	w.typeText("y")
+	w.see("claude-1 · claude · idle", "agent ready")
+	w.quit()
+
+	w.tm = first
+	w.see("claude-1 · claude · idle")
+	w.quit()
+}
+
 // Unless the settings say otherwise, the changes are what is not committed,
 // and what a session did since it started is one key away.
 func TestChangesAreUncommittedByDefault(t *testing.T) {
@@ -631,7 +663,7 @@ func TestChangesAreUncommittedByDefault(t *testing.T) {
 	w.see("agent ready", "working tree clean")
 
 	w.line("edit notes.txt")
-	w.see("Changes (1)", "? notes.txt")
+	w.see("Changes (1)", "? notes.txt", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 	for _, args := range [][]string{
@@ -717,7 +749,7 @@ func TestReviewSinceTheStart(t *testing.T) {
 	w.see("agent ready", "working tree clean")
 
 	w.line("edit notes.txt")
-	w.see("Changes (1)", "? notes.txt")
+	w.see("Changes (1)", "? notes.txt", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 	for _, args := range [][]string{
@@ -762,7 +794,7 @@ func TestNotes(t *testing.T) {
 	w.launch(140, 40)
 	w.see("agent ready")
 	w.line("edit notes.txt")
-	w.see("Changes (1)")
+	w.see("Changes (1)", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 
@@ -1240,7 +1272,10 @@ func TestClickOnSession(t *testing.T) {
 	w.tm.SendMouse(uv.MouseClickEvent{X: 5, Y: 1, Button: uv.MouseLeft})
 	w.prefix('1')
 	w.line("edit clicked.txt")
-	w.see("? clicked.txt")
+	w.see("? clicked.txt", "claude-1 · claude · working")
+	// A session left working would be asked about before quitting.
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
 	w.quit()
 }
 

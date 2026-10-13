@@ -25,6 +25,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -54,6 +55,11 @@ type Server struct {
 	path   string
 	ln     net.Listener
 	events chan Event
+	// closed is closed with the server, and readers counts the connections
+	// still being read: events is closed once there are none.
+	closed    chan struct{}
+	closeOnce sync.Once
+	readers   sync.WaitGroup
 }
 
 // Listen creates the socket in the user's runtime directory.
@@ -74,7 +80,7 @@ func Listen() (*Server, error) {
 		return nil, err
 	}
 
-	s := &Server{path: path, ln: ln, events: make(chan Event, 64)}
+	s := &Server{path: path, ln: ln, events: make(chan Event, 64), closed: make(chan struct{})}
 	go s.accept()
 	return s, nil
 }
@@ -83,10 +89,12 @@ func (s *Server) accept() {
 	for {
 		conn, err := s.ln.Accept()
 		if err != nil {
+			// An event that is still being read must not find events closed.
+			s.readers.Wait()
 			close(s.events)
 			return
 		}
-		go s.read(conn)
+		s.readers.Go(func() { s.read(conn) })
 	}
 }
 
@@ -98,7 +106,11 @@ func (s *Server) read(conn net.Conn) {
 	if err := json.NewDecoder(io.LimitReader(conn, maxEvent)).Decode(&ev); err != nil {
 		return
 	}
-	s.events <- ev
+	// Nobody takes the events of a server that is closed.
+	select {
+	case s.events <- ev:
+	case <-s.closed:
+	}
 }
 
 // Path returns the socket path, to be handed to agents.
@@ -109,6 +121,7 @@ func (s *Server) Events() <-chan Event { return s.events }
 
 // Close stops the server and removes the socket.
 func (s *Server) Close() error {
+	s.closeOnce.Do(func() { close(s.closed) })
 	err := s.ln.Close()
 	// Closing the listener takes the socket away with it, as a rule.
 	if rm := os.Remove(s.path); rm != nil && !errors.Is(rm, fs.ErrNotExist) {

@@ -130,7 +130,7 @@ func lockPath(dir string) string {
 
 // Lock marks the workspace opened on dir as in use, until the returned
 // function is called or the process ends. It does nothing when the workspace
-// is already in use: opening one twice is allowed.
+// is already in use: opening one twice is allowed, and asked about first.
 func Lock(dir string) (release func()) {
 	path := lockPath(dir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

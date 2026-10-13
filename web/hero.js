@@ -81,7 +81,6 @@
       ],
       changes: ["Changes (3)", [change("M", "api/auth.go", 42, 3), change("A", "api/token.go", 18), change("M", "go.mod", 1)]],
       queue: ["then run the linter", "update the changelog"],
-      tokens: "ctx 82k · in 4.2M · out 38k",
     },
     {
       name: "fix-flaky-test", status: "needs input", dir: "~/src/worker", since: "6m",
@@ -98,7 +97,6 @@
       ],
       changes: ["Changes (1)", [change("M", "retry/retry_test.go", 6, 2)]],
       queue: [],
-      tokens: "ctx 31k · in 910k · out 9k",
     },
     {
       name: "docs-pass", status: "idle", dir: "~/src/site", since: "12m", unseen: true,
@@ -110,7 +108,6 @@
       files: [file("▾ docs/", dot, true), file("   usage.md", M, true), file("  README.md", M, true)],
       changes: ["Changes (2) · 2 commits", [change("M", "README.md", 30, 12), change("M", "docs/usage.md", 9)]],
       queue: [],
-      tokens: "ctx 12k · in 240k · out 5k",
     },
   ];
 
@@ -164,7 +161,7 @@
 
     const waiting = sessions.filter((x, i) => x.status === "needs input" && i !== active);
     const note = waiting.map((x) => ` ▲ ${x.name} needs input`).join("");
-    const hint = s.tokens + " · ctrl+a ? help ";
+    const hint = (s.queue.length ? `queue ${s.queue.length} · ` : "") + "ctrl+a ? help ";
     const status = [t(note, "w"), t(" ".repeat(Math.max(COLS - [...note].length - [...hint].length, 1))), t(hint, "d")];
 
     const esc = (text) => text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
