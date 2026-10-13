@@ -281,8 +281,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 
 	case l.sessions.contains(x, y):
 		if row := y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) {
-			m.switchTo(row)
+			cmd := m.switchTo(row)
 			m.focus = focusSessions
+			return cmd
 		}
 
 	case l.files.contains(x, y):

@@ -1204,6 +1204,19 @@ func TestAskSession(t *testing.T) {
 	w.quit()
 }
 
+// A click on a session goes to it, and the panels keep following the work
+// tree afterwards.
+func TestClickOnSession(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle", "working tree clean")
+	w.tm.SendMouse(uv.MouseClickEvent{X: 5, Y: 1, Button: uv.MouseLeft})
+	w.prefix('1')
+	w.line("edit clicked.txt")
+	w.see("? clicked.txt")
+	w.quit()
+}
+
 func TestQueue(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(140, 40)
