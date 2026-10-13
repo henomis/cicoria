@@ -28,7 +28,7 @@
     <p class="lede">cicoria runs your coding agents in your terminal, each in a session of its own. It shows which session is waiting for you, keeps everything each one changed ready to review, and sends your notes on the code back as one message.</p>
 
     <div class="install">
-      <code id="install">go install github.com/henomis/cicoria@latest</code>
+      <code id="install">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
       <button type="button" data-copy="install">Copy</button>
     </div>
     <p class="next"><a href="docs.html">Read the docs</a><a href="https://github.com/henomis/cicoria">Source on GitHub</a></p>
@@ -58,7 +58,7 @@
 <span class="d">╰────────────────────────────╯</span></pre>
         <div>
           <h3>Review everything it did, commits included</h3>
-          <p>Work the agent has already committed is still there to review: one key counts the changes from the commit the session started on. Diffs open on the whole screen, with search and jumps between hunks, and <kbd>ctrl+a</kbd> <kbd>h</kbd> starts the count again once you have looked.</p>
+          <p>Work the agent has already committed is still there to review: one key counts the changes from the commit the session started on. Diffs open on the whole screen, with search and jumps between hunks, Markdown files as the documents they describe, and <kbd>ctrl+a</kbd> <kbd>h</kbd> starts the count again once you have looked.</p>
         </div>
       </li>
       <li>
@@ -79,6 +79,45 @@
         <div>
           <h3>Line up the next three instructions now</h3>
           <p>Stop waiting for a turn to end before you type the next thing. <kbd>ctrl+a</kbd> <kbd>m</kbd> queues a message, and each one goes out when the agent ends its turn. Nothing is sent while it waits for a permission.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="d">I asked the session "api":</span>
+<span class="b">&gt;</span> what does /orders return?
+
+<span class="d">It answered:</span>
+<span class="b">&gt;</span> 200, an empty list
+
+Handle it in the client.</pre>
+        <div>
+          <h3>Let one session ask another</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>k</kbd> puts a question to another session. Its answer comes back to the one you asked from by itself, with your question and what to do next, so you stop copying between panes.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="b">╭─ api · claude · working ───╮</span>
+<span class="b">│</span>Adding the empty-cart case… <span class="b">│</span>
+<span class="b">╰────────────────────────────╯</span>
+<span class="d">╭─ web · codex · idle ───────╮</span>
+<span class="d">│</span>Done: the client handles it.<span class="d">│</span>
+<span class="d">╰────────────────────────────╯</span></pre>
+        <div>
+          <h3>Watch two agents at once</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>-</kbd> splits the agent pane and shows a second session below the first. <kbd>ctrl+a</kbd> <kbd>tab</kbd> or a click moves the keys from one to the other.</p>
+        </div>
+      </li>
+      <li>
+        <pre><span class="w">api already works in this</span>
+<span class="w">repository: give this session</span>
+<span class="w">a worktree of its own?</span> [y/N]
+
+<span class="b">╭─ fix-login · claude ───────╮</span>
+<span class="b">│</span><span class="d">~/src/app.worktrees/fix-login</span>
+<span class="b">│</span><span class="g">cicoria/fix-login</span>
+<span class="b">╰────────────────────────────╯</span></pre>
+        <div>
+          <h3>Two agents on one repository, each in its own worktree</h3>
+          <p>Create a session where another one already works and cicoria offers it a git worktree and a branch of its own, so their changes never mix. Closing the session offers to remove the worktree, and the branch stays.</p>
         </div>
       </li>
       <li>
@@ -111,7 +150,7 @@ command = ["aider"]
 command = ["claude", "--model", "opus"]</pre>
         <div>
           <h3>Any agent, with nothing of its interface lost</h3>
-          <p>An agent is a command line in a real terminal, so its own interface works as it does alone, and the wheel scrolls back through what left the screen. Claude Code, GitHub Copilot CLI and Codex CLI report their status, the end of their turn and their tokens through hooks. For other agents the status is guessed from the terminal, and queued messages are sent by hand.</p>
+          <p>An agent is a command line in a real terminal, so its own interface works as it does alone, and the wheel scrolls back through what left the screen. Claude Code, GitHub Copilot CLI and Codex CLI report their status and the end of their turn through hooks. For other agents the status is guessed from the terminal, and queued messages are sent by hand.</p>
         </div>
       </li>
     </ul>
@@ -121,8 +160,8 @@ command = ["claude", "--model", "opus"]</pre>
     <h2>The first minute</h2>
     <ol class="steps">
       <li><div>
-        <p>Install it. You need Go 1.26 or later, git, and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too. It runs on Linux, on macOS, and on Windows in WSL2.</p>
-        <pre>go install github.com/henomis/cicoria@latest</pre>
+        <p>Install it. You need git and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too. It runs on Linux, on macOS, and on Windows in WSL2.</p>
+        <pre>curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</pre>
       </div></li>
       <li><div>
         <p>Open it on a project. The first session starts, and what you type goes to the agent.</p>
@@ -141,7 +180,7 @@ cicoria</pre>
   <div class="wrap section close">
     <h2>Start the agents, go do something else, and come back when one calls you.</h2>
     <div class="install">
-      <code id="install-again">go install github.com/henomis/cicoria@latest</code>
+      <code id="install-again">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
       <button type="button" data-copy="install-again">Copy</button>
     </div>
   </div>

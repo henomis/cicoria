@@ -25,6 +25,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -278,12 +280,35 @@ func (t *Terminal) Paste(text string) {
 	t.emu.Paste(text)
 }
 
-// Close terminates the command and releases the PTY.
+// grace is how long a command that was told its terminal is gone has to
+// end by itself.
+const grace = 2 * time.Second
+
+// signal sends a signal to the command and to what it started, unless the
+// command has ended. The command leads a process group of its own, as the
+// first process of a terminal does.
+func (t *Terminal) signal(sig syscall.Signal) {
+	select {
+	case <-t.done:
+	default:
+		if t.cmd.Process != nil {
+			_ = syscall.Kill(-t.cmd.Process.Pid, sig)
+		}
+	}
+}
+
+// Close ends the command and releases the PTY. The command is told that its
+// terminal is gone, as when a terminal window is closed, and has a moment to
+// put its things in order: only one that is still there after that is
+// killed. Close waits for it.
 func (t *Terminal) Close() error {
 	var err error
 	t.closeOnce.Do(func() {
-		if t.cmd.Process != nil {
-			_ = t.cmd.Process.Kill()
+		t.signal(syscall.SIGHUP)
+		select {
+		case <-t.done:
+		case <-time.After(grace):
+			t.signal(syscall.SIGKILL)
 		}
 		err = t.pty.Close()
 		// Closing the input pipe ends writeInput. Emulator.Close would do the

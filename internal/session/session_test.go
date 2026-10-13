@@ -15,6 +15,7 @@
 package session
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -32,7 +33,7 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("missing file: %+v, %v", st, err)
 	}
 
-	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Conversation: "c", Base: "abc", Notes: []Note{{Path: "x", From: 1, To: 2, Quote: []string{"q"}, Text: "t"}}, Queue: []string{"x", "y"}, Paused: true}}, Active: 1}
+	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Conversation: "c", Base: "abc", Worktree: "/work/b", Notes: []Note{{Path: "x", From: 1, To: 2, Quote: []string{"q"}, Text: "t"}}, Queue: []Message{{Text: "x"}, {Text: "y", ReplyTo: "1", Then: "z"}}, Paused: true}}, Active: 1}
 	if err := SaveState(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -180,24 +181,24 @@ func TestStalled(t *testing.T) {
 func TestQueue(t *testing.T) {
 	s := New("1", "s", "/p", agent.NewClaude(nil))
 	for _, text := range []string{"a", "b", "c", "d"} {
-		s.Enqueue(text)
+		s.Enqueue(Message{Text: text})
 	}
 
-	if got := s.MoveQueued(0, 1); got != 1 || s.Queue[0] != "b" || s.Queue[1] != "a" {
+	if got := s.MoveQueued(0, 1); got != 1 || s.Queue[0].Text != "b" || s.Queue[1].Text != "a" {
 		t.Errorf("move down: at %d, queue %v", got, s.Queue)
 	}
-	if got := s.MoveQueued(0, -1); got != 0 || s.Queue[0] != "b" {
+	if got := s.MoveQueued(0, -1); got != 0 || s.Queue[0].Text != "b" {
 		t.Errorf("move past the start: at %d, queue %v", got, s.Queue)
 	}
 	s.RemoveQueued(2)
 	s.RemoveQueued(9)
-	if len(s.Queue) != 3 || s.Queue[2] != "d" {
+	if len(s.Queue) != 3 || s.Queue[2].Text != "d" {
 		t.Errorf("after remove: %v", s.Queue)
 	}
 
 	for _, want := range []string{"b", "a", "d"} {
-		if got, ok := s.Dequeue(); !ok || got != want {
-			t.Errorf("Dequeue = %q, %v; want %q", got, ok, want)
+		if got, ok := s.Dequeue(); !ok || got.Text != want {
+			t.Errorf("Dequeue = %+v, %v; want %q", got, ok, want)
 		}
 	}
 	if _, ok := s.Dequeue(); ok {
@@ -249,7 +250,7 @@ func TestCanAutoSend(t *testing.T) {
 		}
 		t.Cleanup(s.Close)
 		s.Adapter = a
-		s.Enqueue("next")
+		s.Enqueue(Message{Text: "next"})
 		return s
 	}
 
@@ -339,5 +340,84 @@ func TestLock(t *testing.T) {
 	release()
 	if InUse("/work/a") {
 		t.Error("still in use after it was closed")
+	}
+}
+
+func TestMessageSavedAsText(t *testing.T) {
+	// A queue saved before a message could be a question holds texts.
+	var st State
+	data := `{"sessions":[{"id":"1","queue":["old",{"text":"new","reply_to":"2","then":"go on"}]}]}`
+	if err := json.Unmarshal([]byte(data), &st); err != nil {
+		t.Fatal(err)
+	}
+	want := []Message{{Text: "old"}, {Text: "new", ReplyTo: "2", Then: "go on"}}
+	if got := st.Sessions[0].Queue; !reflect.DeepEqual(got, want) {
+		t.Errorf("queue = %+v, want %+v", got, want)
+	}
+}
+
+func TestAnswer(t *testing.T) {
+	got := Answer("api", Message{Text: "what does it return?", Then: "handle it"}, "An empty list.\n\nSee orders.go.\n")
+	want := "I asked the session \"api\":\n> what does it return?\n\nIt answered:\n> An empty list.\n>\n> See orders.go.\n\nhandle it"
+	if got != want {
+		t.Errorf("Answer =\n%s\nwant\n%s", got, want)
+	}
+	if got := Answer("api", Message{Text: "q"}, "a"); got != "I asked the session \"api\":\n> q\n\nIt answered:\n> a" {
+		t.Errorf("without a follow-up: %q", got)
+	}
+}
+
+func TestSettle(t *testing.T) {
+	var (
+		start     = agent.Update{TurnStarted: true}
+		end       = agent.Update{TurnEnded: true}
+		tool      = agent.Update{Status: agent.Working, HasStatus: true}
+		failed    = agent.Update{Failed: true}
+		interrupt = agent.Update{Interrupted: true}
+	)
+	named := func(u agent.Update, prompt string) agent.Update {
+		u.Prompt = prompt
+		return u
+	}
+	tests := []struct {
+		name    string
+		updates []agent.Update
+		// settled and answered are what the last update gives; the ones
+		// before it settle nothing.
+		settled, answered bool
+	}{
+		{"the turn the question starts is its answer", []agent.Update{start, tool, end}, true, true},
+		{"a turn that was going on is not", []agent.Update{tool, end}, false, false},
+		{"nor is the one after it", []agent.Update{end, start, end}, true, true},
+		{"a turn that fails has no answer", []agent.Update{start, failed}, true, false},
+		{"nor one that fails before it starts", []agent.Update{failed}, true, false},
+		{"nor one the user stops", []agent.Update{start, interrupt}, true, false},
+		{"another message means the turn was cut short", []agent.Update{start, tool, start}, true, false},
+		{"a named turn that ends is the answer", []agent.Update{named(start, "a"), named(end, "a")}, true, true},
+		{"another message does not settle a named turn", []agent.Update{named(start, "a"), named(start, "b")}, false, false},
+		{"which may still be the one that ends", []agent.Update{named(start, "a"), named(start, "b"), named(end, "a")}, true, true},
+		{"or not", []agent.Update{named(start, "a"), named(start, "b"), named(end, "b")}, true, false},
+	}
+	for _, tt := range tests {
+		s := New("1", "s", "/p", agent.NewClaude(nil))
+		s.Ask(Message{Text: "q", ReplyTo: "2"})
+		for i, u := range tt.updates {
+			q, answered := s.Settle(u)
+			last := i == len(tt.updates)-1
+			if !last && q != nil {
+				t.Errorf("%s: settled by update %d", tt.name, i)
+			}
+			if last && (q != nil != tt.settled || answered != tt.answered) {
+				t.Errorf("%s: settled %v, answered %v; want %v, %v", tt.name, q != nil, answered, tt.settled, tt.answered)
+			}
+		}
+		if tt.settled && s.Answering != nil {
+			t.Errorf("%s: the question is still there", tt.name)
+		}
+	}
+
+	// Without a question there is nothing to settle.
+	if q, _ := New("1", "s", "/p", agent.NewClaude(nil)).Settle(end); q != nil {
+		t.Error("settled a question nobody asked")
 	}
 }

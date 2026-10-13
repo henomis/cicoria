@@ -15,9 +15,7 @@
 package agent
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,9 +29,6 @@ import (
 // that report what the agent is doing.
 type Claude struct {
 	argv []string
-	// tallies holds the token count of each transcript. MapEvent is its only
-	// user.
-	tallies tallies
 }
 
 // NewClaude returns the Claude Code adapter. argv is the command line to
@@ -53,6 +48,9 @@ func (c *Claude) ReportsStatus() bool { return true }
 
 // ReportsReady implements Adapter.
 func (c *Claude) ReportsReady() bool { return true }
+
+// ReportsAnswer implements Adapter.
+func (c *Claude) ReportsAnswer() bool { return true }
 
 // Mention implements Adapter.
 func (c *Claude) Mention(path string) string { return "@" + path + " " }
@@ -124,8 +122,9 @@ func claudeTranscript(dir, sessionID string) string {
 type claudeHook struct {
 	Event            string `json:"hook_event_name"`
 	SessionID        string `json:"session_id"`
-	TranscriptPath   string `json:"transcript_path"`
+	PromptID         string `json:"prompt_id"`
 	NotificationType string `json:"notification_type"`
+	LastMessage      string `json:"last_assistant_message"`
 	ToolInput        struct {
 		FilePath     string `json:"file_path"`
 		NotebookPath string `json:"notebook_path"`
@@ -140,7 +139,7 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 	}
 	u, ok := c.mapHook(h)
 	if ok {
-		u.Conversation = h.SessionID
+		u.Conversation, u.Prompt = h.SessionID, h.PromptID
 	}
 	return u, ok
 }
@@ -148,10 +147,11 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 	switch h.Event {
 	case "SessionStart":
-		// A conversation that is resumed has a count already.
-		t := c.tallies.count(h.TranscriptPath, claudeLine)
-		return Update{Status: Idle, HasStatus: true, ContextTokens: t.context, InputTokens: t.in, OutputTokens: t.out}, true
-	case "UserPromptSubmit", "PreToolUse":
+		//
+		return Update{Status: Idle, HasStatus: true}, true
+	case "UserPromptSubmit":
+		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
+	case "PreToolUse":
 		return Update{Status: Working, HasStatus: true}, true
 	case "PostToolUse":
 		file := h.ToolInput.FilePath
@@ -162,18 +162,15 @@ func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 	case "Notification":
 		return notification(h.NotificationType)
 	case "Stop", "StopFailure":
-		t := c.tallies.count(h.TranscriptPath, claudeLine)
 		// A turn that ended on an error is over, but there is no answer to
 		// follow up on: what waits in the queue stays there.
 		failed := h.Event == "StopFailure"
 		return Update{
-			Status:        Idle,
-			HasStatus:     true,
-			TurnEnded:     !failed,
-			Failed:        failed,
-			ContextTokens: t.context,
-			InputTokens:   t.in,
-			OutputTokens:  t.out,
+			Status:    Idle,
+			HasStatus: true,
+			TurnEnded: !failed,
+			Answer:    h.LastMessage,
+			Failed:    failed,
 		}, true
 	}
 	return Update{}, false
@@ -191,96 +188,4 @@ func notification(kind string) (Update, bool) {
 	// The rest is news, such as a login that went well, and asks for
 	// nothing.
 	return Update{}, false
-}
-
-// claudeUsage is what one model reply cost, as a transcript records it.
-type claudeUsage struct {
-	Input         int `json:"input_tokens"`
-	CacheCreation int `json:"cache_creation_input_tokens"`
-	CacheRead     int `json:"cache_read_input_tokens"`
-	Output        int `json:"output_tokens"`
-}
-
-func (u claudeUsage) in() int { return u.Input + u.CacheCreation + u.CacheRead }
-
-// tally is the token count of a transcript, as far as it has been read.
-type tally struct {
-	// offset is where reading goes on from.
-	offset int64
-	// replies holds the cost of each model reply by its ID. A transcript has
-	// one line for every part of a reply, each with the cost of the whole.
-	replies map[string]claudeUsage
-	// in and out are the tokens read and written by the model over the whole
-	// conversation; context is the size of the context at the last reply.
-	in, out, context int
-}
-
-// read counts what was added to the transcript since the last time, a line
-// at a time. A transcript that cannot be read leaves the count as it was.
-func (t *tally) read(path string, add func(t *tally, line []byte)) {
-	f, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	defer func() { _ = f.Close() }()
-
-	// A transcript that got shorter is another one: count it from the start.
-	if st, err := f.Stat(); err != nil || st.Size() < t.offset {
-		*t = tally{}
-	}
-	if t.replies == nil {
-		t.replies = map[string]claudeUsage{}
-	}
-	if _, err := f.Seek(t.offset, io.SeekStart); err != nil {
-		return
-	}
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return
-	}
-	// A line still being written is left for the next time.
-	data = data[:bytes.LastIndexByte(data, '\n')+1]
-	t.offset += int64(len(data))
-
-	for _, line := range bytes.Split(data, []byte("\n")) {
-		add(t, line)
-	}
-}
-
-// claudeLine counts one line of a Claude Code transcript.
-func claudeLine(t *tally, line []byte) {
-	var entry struct {
-		Message struct {
-			ID    string       `json:"id"`
-			Usage *claudeUsage `json:"usage"`
-		} `json:"message"`
-	}
-	if json.Unmarshal(line, &entry) != nil || entry.Message.Usage == nil {
-		return
-	}
-	u, id := *entry.Message.Usage, entry.Message.ID
-	if id != "" {
-		before := t.replies[id]
-		t.in, t.out = t.in-before.in(), t.out-before.Output
-		t.replies[id] = u
-	}
-	t.in, t.out, t.context = t.in+u.in(), t.out+u.Output, u.in()
-}
-
-// tallies holds the token count of each transcript by its path, so that only
-// what is new has to be read.
-type tallies map[string]*tally
-
-// count returns the token count of a transcript, read as far as it goes.
-func (ts *tallies) count(path string, add func(t *tally, line []byte)) *tally {
-	if *ts == nil {
-		*ts = tallies{}
-	}
-	t := (*ts)[path]
-	if t == nil {
-		t = &tally{}
-		(*ts)[path] = t
-	}
-	t.read(path, add)
-	return t
 }

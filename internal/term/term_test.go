@@ -15,8 +15,12 @@
 package term
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -209,5 +213,55 @@ func TestTitleStaysOffScreen(t *testing.T) {
 	}
 	if string(out) != want {
 		t.Errorf("filtered = %q, want %q", out, want)
+	}
+}
+
+// A command is told that its terminal is gone, and ends by itself.
+func TestCloseLetsCommandEnd(t *testing.T) {
+	left := filepath.Join(t.TempDir(), "left")
+	tm, err := Start(exec.Command("sh", "-c", `trap 'echo bye > "$0"; exit' HUP; echo ready; while :; do sleep 0.05; done`, left), 40, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, tm, "ready")
+
+	began := time.Now()
+	_ = tm.Close()
+	if took := time.Since(began); took >= grace {
+		t.Errorf("Close took %v: the command was not left to end by itself", took)
+	}
+	if _, err := os.Stat(left); err != nil {
+		t.Errorf("the command was stopped before it could end: %v", err)
+	}
+}
+
+// A command that does not end when told to is killed, with what it started.
+func TestCloseKillsCommandThatStays(t *testing.T) {
+	tm, err := Start(exec.Command("sh", "-c", `trap '' HUP; sleep 300 & echo "child $!"; echo ready; wait`), 40, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, tm, "ready")
+	var child int
+	for _, line := range strings.Split(tm.String(), "\n") {
+		_, _ = fmt.Sscanf(line, "child %d", &child)
+	}
+	if child == 0 {
+		t.Fatalf("no child on the screen:\n%s", tm.String())
+	}
+
+	_ = tm.Close()
+	select {
+	case <-tm.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the command is still there")
+	}
+	// A process that is gone cannot be signalled, once it has been reaped.
+	deadline := time.Now().Add(5 * time.Second)
+	for syscall.Kill(child, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("what the command started is still there")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

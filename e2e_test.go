@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -39,6 +40,7 @@ while read -r cmd arg; do
     work) hook '{"hook_event_name":"UserPromptSubmit"}' ;;
     ask)  hook '{"hook_event_name":"Notification","notification_type":"permission_prompt"}' ;;
     stop) hook '{"hook_event_name":"Stop"}' ;;
+    reply) hook "{\"hook_event_name\":\"Stop\",\"last_assistant_message\":\"$arg\"}" ;;
     fail) hook '{"hook_event_name":"StopFailure"}' ;;
     news) hook '{"hook_event_name":"Notification","notification_type":"auth_success"}' ;;
     edit) echo "hello from the agent" > "$arg"
@@ -47,7 +49,7 @@ while read -r cmd arg; do
     size) echo "size $(stty size)" ;;
     pwd)  echo "in $PWD" ;;
     many) seq 1 100 ;;
-    *)    echo "got $cmd" ;;
+    *)    echo "got $cmd $arg" ;;
   esac
 done
 `
@@ -140,6 +142,8 @@ func newWorkspace(t *testing.T) *workspace {
 
 	config := fmt.Sprintf("notify = false\nanimations = false\n\n[agents.claude]\ncommand = [\"sh\", \"-c\", %q, \"fake-claude\"]\n", fakeAgent)
 	config += fmt.Sprintf("\n[agents.copilot]\ncommand = [\"sh\", \"-c\", %q, \"fake-copilot\"]\n", fakeCopilot)
+	// Any other command line, which is offered a worktree as an agent is.
+	config += "\n[agents.aider]\ncommand = [\"sh\"]\n"
 	config += fmt.Sprintf("\n[agents.codex]\ncommand = [\"sh\", \"-c\", %q, \"fake-codex\"]\n", fakeCodex)
 	must(os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0o644))
 	must(os.MkdirAll(filepath.Join(home, "run"), 0o700))
@@ -302,7 +306,7 @@ func TestWorkspace(t *testing.T) {
 
 	// A file the agent writes shows up as a change.
 	w.line("edit notes.txt")
-	w.see("Changes (1)", "? notes.txt", "+1")
+	w.see("Changes (1)", "? notes.txt", "+1", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 
@@ -344,6 +348,7 @@ func TestWorkspace(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: claude-2")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude-2 · claude · idle")
@@ -429,7 +434,16 @@ func TestWorkspace(t *testing.T) {
 	w.quit()
 }
 
-// newShell opens a shell session with the name it is offered.
+// sameTree turns down the worktree offered to a session that is created in
+// the work tree of another one.
+func (w *workspace) sameTree() {
+	w.t.Helper()
+	w.see("give this session a worktree of its own?")
+	w.typeText("n")
+}
+
+// newShell opens a shell session with the name it is offered. A shell is
+// not offered a worktree.
 func (w *workspace) newShell() {
 	w.t.Helper()
 	w.prefix('c')
@@ -521,6 +535,45 @@ func TestSessionClosesWithItsAgent(t *testing.T) {
 	w.quit()
 }
 
+// Quitting right after a session was closed still waits for its agent, and
+// kills one that does not end when told to.
+func TestQuitWhileSessionCloses(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+
+	// A command that stays when its terminal goes, and does not read from it.
+	w.newShell()
+	pidFile := filepath.Join(filepath.Dir(w.dir), "pid")
+	w.line(fmt.Sprintf("trap '' HUP; echo $$ > %s; exec sleep 300", pidFile))
+	var pid int
+	deadline := time.Now().Add(5 * time.Second)
+	for pid == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the command never said which process it is")
+		}
+		time.Sleep(20 * time.Millisecond)
+		out, _ := os.ReadFile(pidFile)
+		_, _ = fmt.Sscanf(string(out), "%d", &pid)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+
+	w.prefix('x')
+	w.see("close shell-1 and stop its agent?")
+	w.typeText("y")
+	w.gone("shell-1")
+	w.quit()
+
+	// A process that is gone cannot be signalled, once it has been reaped.
+	deadline = time.Now().Add(2 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the command outlived cicoria")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // What has left the agent's screen comes back with page up and the wheel.
 func TestScrollBack(t *testing.T) {
 	w := newWorkspace(t)
@@ -610,6 +663,38 @@ func TestOtherWorkspaces(t *testing.T) {
 	w.quit()
 }
 
+// A workspace that another cicoria has open is asked about before its agents
+// are started a second time.
+func TestWorkspaceOpenTwice(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle", "agent ready")
+	first := w.tm
+
+	// Anything but a yes leaves it to the one that has it.
+	w.launch(140, 40)
+	w.see("is open in another cicoria, and its agents would run twice. open it here too?")
+	if screen := w.tm.String(); strings.Contains(screen, "agent ready") {
+		t.Fatalf("an agent was started before the answer:\n%s", screen)
+	}
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	select {
+	case <-w.tm.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("did not quit; screen:\n%s", w.tm.String())
+	}
+
+	w.launch(140, 40)
+	w.see("open it here too?")
+	w.typeText("y")
+	w.see("claude-1 · claude · idle", "agent ready")
+	w.quit()
+
+	w.tm = first
+	w.see("claude-1 · claude · idle")
+	w.quit()
+}
+
 // Unless the settings say otherwise, the changes are what is not committed,
 // and what a session did since it started is one key away.
 func TestChangesAreUncommittedByDefault(t *testing.T) {
@@ -618,7 +703,7 @@ func TestChangesAreUncommittedByDefault(t *testing.T) {
 	w.see("agent ready", "working tree clean")
 
 	w.line("edit notes.txt")
-	w.see("Changes (1)", "? notes.txt")
+	w.see("Changes (1)", "? notes.txt", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 	for _, args := range [][]string{
@@ -704,7 +789,7 @@ func TestReviewSinceTheStart(t *testing.T) {
 	w.see("agent ready", "working tree clean")
 
 	w.line("edit notes.txt")
-	w.see("Changes (1)", "? notes.txt")
+	w.see("Changes (1)", "? notes.txt", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 	for _, args := range [][]string{
@@ -749,7 +834,7 @@ func TestNotes(t *testing.T) {
 	w.launch(140, 40)
 	w.see("agent ready")
 	w.line("edit notes.txt")
-	w.see("Changes (1)")
+	w.see("Changes (1)", "claude-1 · claude · working")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 
@@ -822,6 +907,60 @@ func TestNotes(t *testing.T) {
 	w.quit()
 }
 
+func TestMarkdown(t *testing.T) {
+	w := newWorkspace(t)
+	guide := "# Guide\n\nRead **this** first.\n\n## Setup\n\n- run `make`\n"
+	if err := os.WriteFile(filepath.Join(w.dir, "guide.md"), []byte(guide), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.launch(140, 40)
+	w.see("agent ready", "Changes (1)")
+
+	// A Markdown file opens as the document it describes.
+	w.prefix('o')
+	w.see("file ›")
+	w.typeText("guide")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("rendered  guide.md", "Read this first.", "• run make")
+	w.gone("## Setup")
+
+	// Notes are for its text, which m shows at the same place.
+	w.typeText("c")
+	w.see("notes are written on the text of the file")
+	w.typeText("]")
+	w.see("▌Setup")
+	w.typeText("m")
+	w.see("file  guide.md", "3 Read **this** first.", "▌5 ## Setup")
+	w.typeText("c")
+	w.see("note on guide.md:5:")
+	w.line("name the tools")
+	w.see("1 note(s)", "*▌5 ## Setup")
+
+	// The document shows where the notes are, and the choice of the text
+	// is kept for the next file.
+	w.typeText("m")
+	w.see("rendered  guide.md", "*▌Setup")
+	w.typeText("mq")
+	w.see("Sessions")
+	w.prefix('o')
+	w.see("file ›")
+	w.typeText("guide")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  guide.md", "5 ## Setup")
+	w.typeText("mq")
+	w.see("Sessions")
+
+	// What is reviewed is the text.
+	w.prefix('g')
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("diff  guide.md", "+## Setup")
+	w.typeText("d")
+	w.see("file  guide.md", "5 ## Setup")
+	w.typeText("q")
+	w.see("Sessions")
+	w.quit()
+}
+
 func TestNarrowTerminalHidesPanels(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(60, 20)
@@ -885,6 +1024,7 @@ func TestAnimations(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("launching claude-2", "|[]|")
@@ -948,6 +1088,7 @@ func TestCopilot(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("copilot in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: copilot-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 
@@ -968,6 +1109,17 @@ func TestCopilot(t *testing.T) {
 	w.see("got next", "copilot-1 · copilot · working")
 	w.line("stop")
 	w.see("copilot-1 · copilot · idle")
+
+	// It does not tell what it said, so it cannot be asked a question.
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›", "copilot-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message", "not supported by copilot")
+	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("asking is not supported by copilot")
 	w.quit()
 }
 
@@ -984,6 +1136,7 @@ func TestCodex(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("codex in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: codex-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 
@@ -1045,6 +1198,227 @@ func (w *workspace) queue(messages ...string) {
 		// One message is asked for at a time.
 		w.gone("queue for ")
 	}
+}
+
+// TestAskSession sends a message from one session to another, with and
+// without its answer coming back.
+func TestAskSession(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	// With one session there is nobody to send to.
+	w.prefix('k')
+	w.see("there is no other session")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle")
+	w.line("work")
+	w.see("claude-2 · claude · working")
+
+	// A question from the first session waits in the queue of the second,
+	// which says where it is from.
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›", "claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message", "Ask, and get the answer here")
+	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("ask claude-2:")
+	w.line("ping")
+	w.see("then tell claude-1 (optional):")
+	w.line("carry on")
+	w.prefix('2')
+	w.see("Queue (1)", "▸ from claude-1: ping")
+
+	// The turn that was going on is not the answer; the one the question
+	// starts is.
+	w.line("reply early")
+	w.see("got ping")
+	w.gone("Queue (")
+	w.line("work")
+	w.line("reply pong")
+	w.see("claude-2 answered claude-1")
+	w.prefix('1')
+	w.see(`got I asked the session "claude-2":`, "got > ping", "got > pong", "got carry on")
+	if strings.Contains(w.tm.String(), "early") {
+		t.Fatal("the answer of another turn was sent back")
+	}
+
+	// A turn that gives way to another message was cut short, and has no
+	// answer.
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message")
+	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("ask claude-2:")
+	w.line("again")
+	w.see("then tell claude-1 (optional):")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.prefix('2')
+	w.see("got again")
+	w.line("work")
+	w.line("work")
+	w.see("claude-2 did not finish its turn: no answer for claude-1")
+	w.line("reply late")
+	w.see("claude-2 · claude · idle")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	if strings.Contains(w.tm.String(), "late") {
+		t.Fatal("the answer of a turn that was cut short was sent back")
+	}
+
+	// A message that is only sent brings nothing back.
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("queue for claude-2:")
+	w.line("hello")
+	w.prefix('2')
+	w.see("got hello")
+	w.line("reply unasked")
+	w.see("claude-2 · claude · idle")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	if strings.Contains(w.tm.String(), "unasked") {
+		t.Fatal("an answer nobody asked for was sent back")
+	}
+	w.quit()
+}
+
+// A click on a session goes to it, and the panels keep following the work
+// tree afterwards.
+func TestClickOnSession(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle", "working tree clean")
+	w.tm.SendMouse(uv.MouseClickEvent{X: 5, Y: 1, Button: uv.MouseLeft})
+	w.prefix('1')
+	w.line("edit clicked.txt")
+	w.see("? clicked.txt", "claude-1 · claude · working")
+	// A session left working would be asked about before quitting.
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.quit()
+}
+
+// The agent pane is split in two, and the keys go from one session to the
+// other.
+func TestSplit(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	// With one session there is nothing to show below.
+	w.prefix('-')
+	w.see("there is no other session")
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	w.see("one session on screen")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle")
+
+	w.prefix('-')
+	w.see("show below ›", "claude-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle", "claude-1 · claude · idle")
+	// The 39 rows above the status bar are shared: 20 above and 19 below,
+	// borders included.
+	w.line("size")
+	w.see("size 18 74")
+
+	// The keys go to the pane below, and back by the number of the session.
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	w.line("size")
+	w.see("size 17 74")
+	w.line("work")
+	w.see("claude-1 · claude · working", "claude-2 · claude · idle")
+	w.prefix('2')
+	w.line("work")
+	w.see("claude-1 · claude · working", "claude-2 · claude · working")
+
+	// Without the side panels the two are still told apart.
+	w.prefix('b')
+	w.gone("Sessions")
+	w.see("claude-1 · claude · working", "claude-2 · claude · working")
+	w.line("size")
+	w.see("size 18 138")
+	w.prefix('b')
+	w.see("Sessions")
+
+	// The same command goes back to one pane.
+	w.prefix('-')
+	w.gone("claude-1 · claude")
+	w.line("size")
+	w.see("size 37 74")
+
+	// A session that is closed leaves its pane to the other.
+	w.prefix('-')
+	w.see("show below ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-1 · claude · working")
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	w.prefix('x')
+	w.see("close claude-1 and stop its agent?")
+	w.typeText("y")
+	w.gone("claude-1")
+	w.see("claude-2 · claude · working")
+	w.prefix('q')
+	w.see("still working")
+	w.typeText("y")
+	select {
+	case <-w.tm.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("did not quit; screen:\n%s", w.tm.String())
+	}
+}
+
+// A terminal that is too short for two panes keeps one.
+func TestSplitNeedsRoom(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 12)
+	w.see("claude-1 · claude · idle")
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle")
+	w.prefix('-')
+	w.see("show below ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("the terminal is too short for two sessions")
+	w.quit()
 }
 
 func TestQueue(t *testing.T) {
@@ -1166,4 +1540,169 @@ func TestQueue(t *testing.T) {
 	w.prefix('u')
 	w.typeText("p")
 	w.see("got later")
+}
+
+// A session created where another one works can have a git worktree of its
+// own, which is offered for removal when the session is closed.
+func TestWorktree(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	tree := filepath.Join(w.dir+".worktrees", "aider-1")
+
+	create := func() {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("aider")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("aider in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("claude-1 already works in this repository: give this session a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: aider-1")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		// It works there, on a branch named after it.
+		w.see("aider-1 · aider", "project.worktrees/aider-1", "cicoria/aider-1")
+	}
+	create()
+	if _, err := os.Stat(filepath.Join(tree, "main.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	// What is changed there is not a change of the first session.
+	w.line("echo draft > draft.txt")
+	w.see("Changes (1)")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.gone("draft.txt")
+
+	// The worktree comes back with the session.
+	w.quit()
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.prefix('2')
+	w.see("aider-1 · aider", "cicoria/aider-1")
+
+	// One with work that is not committed outlives its session.
+	w.prefix('x')
+	w.see("close aider-1 and stop its agent?")
+	w.typeText("y")
+	w.see("worktree kept at", "it has changes that are not committed")
+	if _, err := os.Stat(tree); err != nil {
+		t.Fatal(err)
+	}
+
+	// Its name is taken: another one is offered, and no session is made on
+	// top of it.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("aider")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("a worktree of its own?")
+	w.typeText("y")
+	w.see("session name: aider-2")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("aider-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("already exists")
+	w.gone("aider-1 · aider")
+
+	// A clean one is removed when its session is closed, and its branch
+	// stays.
+	for _, args := range [][]string{{"worktree", "remove", "--force", tree}, {"branch", "-D", "cicoria/aider-1"}} {
+		if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	create()
+	w.prefix('x')
+	w.see("close aider-1 and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree", "the branch cicoria/aider-1 is kept")
+	w.typeText("y")
+	w.see("removed the worktree")
+	if _, err := os.Stat(tree); err == nil {
+		t.Error("the worktree is still there")
+	}
+	out, err := exec.Command("git", "-C", w.dir, "branch", "--list", "cicoria/aider-1").Output()
+	if err != nil || !strings.Contains(string(out), "cicoria/aider-1") {
+		t.Errorf("branch: %q, %v", out, err)
+	}
+
+	// The branch that is kept has the name: the next session is offered
+	// another one.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("aider")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("a worktree of its own?")
+	w.typeText("y")
+	w.see("session name: aider-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider-2 · aider", "project.worktrees/aider-2", "cicoria/aider-2")
+	w.quit()
+}
+
+// Enter answers a question with no, which is what it offers.
+func TestWorktreeTurnedDownWithEnter(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("aider")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("a worktree of its own?")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: aider-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider-1 · aider", "their changes will be mixed")
+	if _, err := os.Stat(w.dir + ".worktrees"); err == nil {
+		t.Error("a worktree was made")
+	}
+
+	// A question with nothing to do on no is only put away.
+	w.prefix('x')
+	w.see("close aider-1 and stop its agent?")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.gone("close aider-1 and stop its agent?")
+	w.see("aider-1 · aider")
+	w.quit()
+}
+
+// A shell is a way to run a command, not a session at work: it is neither
+// offered a worktree nor a reason to offer one.
+func TestShellIsNotAtWork(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.newShell()
+	w.gone("their changes will be mixed")
+
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.prefix('x')
+	w.see("close claude-1 and stop its agent?")
+	w.typeText("y")
+	w.gone("claude-1")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("aider")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: aider-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider-1 · aider")
+	w.gone("their changes will be mixed")
+	w.quit()
 }

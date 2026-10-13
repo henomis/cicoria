@@ -21,6 +21,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -86,9 +88,21 @@ type Model struct {
 	// is the directory of the workspace to open once this one is closed.
 	unlock func()
 	next   string
+	// twice says another cicoria had the workspace open when this one came:
+	// its agents are not started before the user says so. declined says the
+	// user did not, and the workspace is left as the other one keeps it.
+	twice    bool
+	declined bool
 
 	sessions []*session.Session
 	active   int
+	// stopping are the closed sessions whose agents are still ending.
+	stopping []*session.Session
+	// split is the ID of the session shown in the other pane, when the agent
+	// pane is split in two; below says the session with the keys is the
+	// lower one.
+	split string
+	below bool
 
 	width, height int
 	started       bool
@@ -156,6 +170,10 @@ type prompt struct {
 type confirm struct {
 	question string
 	yes      func() tea.Cmd
+	// no, when set, is what a plain no leads to; esc drops the question,
+	// unless always says it must be answered: then any other key is a no.
+	no     func() tea.Cmd
+	always bool
 }
 
 // Messages.
@@ -198,10 +216,20 @@ type (
 	editorMsg struct{ err error }
 	// openedMsg reports that a file could not be opened outside cicoria.
 	openedMsg struct{ err error }
+	// removedMsg reports that the worktree of a closed session was removed,
+	// or why it could not be.
+	removedMsg struct {
+		path string
+		err  error
+	}
+	// stoppedMsg reports that the agent of a closed session has ended.
+	stoppedMsg struct{ s *session.Session }
 )
 
 // New returns a workspace opened on dir, with the sessions it had last time.
-func New(cfg config.Config, dir string, dark bool) (*Model, error) {
+// One that another cicoria has open is asked about before its agents start,
+// unless agreed says the user was asked already.
+func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 	srv, err := ipc.Listen()
 	if err != nil {
 		return nil, err
@@ -219,8 +247,9 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 		ipc:         srv,
 		dark:        dark,
 		trees:       map[string]*ui.Tree{},
-		unlock:      session.Lock(dir),
+		twice:       !agreed && session.InUse(dir),
 	}
+	m.unlock = session.Lock(dir)
 
 	st, err := session.LoadState(session.StatePath(dir))
 	if err != nil {
@@ -236,6 +265,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 			}
 			s := session.New(saved.ID, saved.Name, sdir, a)
 			s.Conversation, s.Base, s.Notes = saved.Conversation, saved.Base, saved.Notes
+			s.Worktree = saved.Worktree
 			s.Uncommitted = cfg.Changes != config.ChangesSession
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
@@ -250,7 +280,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 			_ = srv.Close()
 			return nil, fmt.Errorf("default agent %q is not configured", cfg.DefaultAgent)
 		}
-		s := session.New(session.NewID(), m.newName(a), dir, a)
+		s := session.New(session.NewID(), m.newName(a, nil), dir, a)
 		s.Base, _ = git.Head(dir)
 		s.Uncommitted = cfg.Changes != config.ChangesSession
 		m.sessions = append(m.sessions, s)
@@ -271,11 +301,12 @@ func (m *Model) adapter(name string) agent.Adapter {
 	return nil
 }
 
-// newName returns an unused session name for an agent.
-func (m *Model) newName(a agent.Adapter) string {
+// newName returns an unused session name for an agent. With free, it is
+// also one that free accepts.
+func (m *Model) newName(a agent.Adapter, free func(name string) bool) string {
 	for n := 1; ; n++ {
 		name := fmt.Sprintf("%s-%d", a.Name(), n)
-		taken := false
+		taken := free != nil && !free(name)
 		for _, s := range m.sessions {
 			taken = taken || s.Name == name
 		}
@@ -322,9 +353,36 @@ func (m *Model) byID(id string) (*session.Session, int) {
 	return nil, -1
 }
 
+// splitWith returns the session the agent pane is shared with, or nil when
+// it is not split.
+func (m *Model) splitWith() *session.Session {
+	if s, i := m.byID(m.split); s != nil && i != m.active {
+		return s
+	}
+	return nil
+}
+
+// other returns the session in the pane that does not have the keys, or nil
+// when there is one pane.
+func (m *Model) other() *session.Session {
+	if m.layout().other.h == 0 {
+		return nil
+	}
+	return m.splitWith()
+}
+
+// pane returns the area of the screen the terminal of a session has.
+func (m *Model) pane(s *session.Session) rect {
+	l := m.layout()
+	if l.other.h > 0 && s == m.splitWith() {
+		return l.other
+	}
+	return l.agent
+}
+
 // watching reports whether the user is looking at session i.
 func (m *Model) watching(i int) bool {
-	return i == m.active && !m.blurred && m.mode == modeWorkspace
+	return (i == m.active || m.sessions[i] == m.other()) && !m.blurred && m.mode == modeWorkspace
 }
 
 // say shows a message in the status bar for a while.
@@ -338,7 +396,7 @@ func (m *Model) save() {
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
-			Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
+			Worktree: s.Worktree, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
 		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {
@@ -348,10 +406,17 @@ func (m *Model) save() {
 
 // Close stops every agent and saves the workspace.
 func (m *Model) Close() error {
-	m.save()
-	for _, s := range m.sessions {
-		s.Close()
+	// What was never opened here is the other cicoria's to save.
+	if !m.declined {
+		m.save()
 	}
+	// Each agent is given a moment to end: all of them at once. One of a
+	// session closed just before is waited for as well.
+	var stopping sync.WaitGroup
+	for _, s := range slices.Concat(m.sessions, m.stopping) {
+		stopping.Go(s.Close)
+	}
+	stopping.Wait()
 	m.unlock()
 	return m.ipc.Close()
 }
@@ -450,9 +515,19 @@ func (m *Model) refresh() tea.Cmd {
 	}
 }
 
+// startAll launches the agents of the sessions the workspace opens with.
+func (m *Model) startAll() tea.Cmd {
+	m.play(ui.Bloom, "cicoria", nil)
+	var cmds []tea.Cmd
+	for _, s := range m.sessions {
+		cmds = append(cmds, m.start(s))
+	}
+	return tea.Batch(cmds...)
+}
+
 // start launches the agent of a session in the agent pane.
 func (m *Model) start(s *session.Session) tea.Cmd {
-	pane := m.layout().agent
+	pane := m.pane(s)
 	err := s.Start(agent.LaunchOpts{Self: m.self, Socket: m.ipc.Path()}, pane.w, pane.h)
 	if err != nil {
 		m.say(err.Error())
@@ -461,11 +536,11 @@ func (m *Model) start(s *session.Session) tea.Cmd {
 	return waitOutput(s.ID, s.Term)
 }
 
-// resize fits every agent's terminal to the agent pane.
+// resize fits every agent's terminal to its pane.
 func (m *Model) resize() {
-	pane := m.layout().agent
 	for _, s := range m.sessions {
 		if s.Term != nil {
+			pane := m.pane(s)
 			s.Term.Resize(pane.w, pane.h)
 		}
 	}
@@ -494,12 +569,17 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		m.started = true
-		m.play(ui.Bloom, "cicoria", nil)
-		var cmds []tea.Cmd
-		for _, s := range m.sessions {
-			cmds = append(cmds, m.start(s))
+		if m.twice {
+			// Two of them would run the same agents on the same conversations.
+			m.confirm = &confirm{
+				question: tilde(m.dir) + " is open in another cicoria, and its agents would run twice. open it here too?",
+				yes:      m.startAll,
+				no:       func() tea.Cmd { m.declined = true; return tea.Quit },
+				always:   true,
+			}
+			return nil
 		}
-		return tea.Batch(cmds...)
+		return m.startAll()
 
 	case frameMsg:
 		if m.anim != nil && time.Since(m.anim.start) < animFor {
@@ -535,6 +615,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		}
 		s.Exit(m.watching(i))
 
+	case stoppedMsg:
+		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s })
+
 	case submitMsg:
 		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term && s.Status != agent.Exited {
 			s.Term.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -565,6 +648,13 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case openedMsg:
 		m.say(msg.err.Error())
 
+	case removedMsg:
+		if msg.err != nil {
+			m.say(msg.err.Error())
+		} else {
+			m.say("removed the worktree " + tilde(msg.path))
+		}
+
 	case editorMsg:
 		if msg.err != nil {
 			m.say("editor: " + msg.err.Error())
@@ -590,10 +680,12 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// seen clears the "something happened" flag of the session on screen.
+// seen clears the "something happened" flag of the sessions on screen.
 func (m *Model) seen() {
-	if s := m.current(); s != nil && m.watching(m.active) {
-		s.Unseen = false
+	for i, s := range m.sessions {
+		if m.watching(i) {
+			s.Unseen = false
+		}
 	}
 }
 
@@ -617,6 +709,7 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 	}
 
 	var cmds []tea.Cmd
+	cmds = append(cmds, m.answer(s, u))
 	if u.TurnEnded {
 		cmds = append(cmds, m.trySend(s))
 	}

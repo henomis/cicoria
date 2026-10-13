@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -50,11 +51,14 @@ func init() {
 		{",", "Rename session", (*Model).askRename},
 		{"r", "Restart session", (*Model).restart},
 		{"x", "Close session", (*Model).askClose},
+		{"-", "Split: show another session below, or close the split", (*Model).askSplit},
+		{"tab", "Go to the other pane of the split", (*Model).focusOther},
 		{"w", "Open another workspace…", (*Model).askWorkspace},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }},
 		{"g", "Focus changes", func(m *Model) tea.Cmd { return m.setFocus(focusChanges) }},
 		{"m", "Queue a message for the agent", (*Model).askQueue},
+		{"k", "Send a message to another session, or ask it", (*Model).askSession},
 		{"u", "Focus queue", func(m *Model) tea.Cmd { return m.setFocus(focusQueue) }},
 		{"d", "Review changes", (*Model).review},
 		{"t", "Send review notes to the agent", (*Model).askSendNotes},
@@ -95,17 +99,83 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 }
 
 // switchTo puts session i on screen, wrapping around the list. The side
-// panels follow it to its project.
+// panels follow it to its project. With the agent pane split, it takes the
+// pane that has the keys, and the keys go to the other pane when it is there.
 func (m *Model) switchTo(i int) tea.Cmd {
 	if len(m.sessions) == 0 {
 		return nil
 	}
-	m.active = (i + len(m.sessions)) % len(m.sessions)
+	i = (i + len(m.sessions)) % len(m.sessions)
+	if s := m.other(); s != nil && s == m.sessions[i] {
+		return m.focusOther()
+	}
+	m.active = i
+	if m.splitWith() == nil {
+		m.split, m.below = "", false
+	}
+	return m.shownNow()
+}
+
+// shownNow follows a change of the session that has the keys.
+func (m *Model) shownNow() tea.Cmd {
 	m.sessionCursor = m.active
 	m.focus = focusAgent
+	// A session that came on screen takes the size of its pane.
+	m.resize()
 	m.seen()
 	m.save()
 	return m.showProject()
+}
+
+// split is the choice of a session to show in the other pane.
+type split struct{ id string }
+
+// askSplit asks which session to show below the one on screen, or goes back
+// to one pane.
+func (m *Model) askSplit() tea.Cmd {
+	if m.splitWith() != nil {
+		m.split, m.below = "", false
+		m.resize()
+		return nil
+	}
+	var items []ui.Item
+	for i, s := range m.sessions {
+		if i != m.active {
+			items = append(items, ui.Item{Label: s.Name, Hint: s.Adapter.Name(), Value: split{s.ID}})
+		}
+	}
+	if len(items) == 0 {
+		m.say("there is no other session")
+		return nil
+	}
+	m.openPalette("show below › ", items)
+	return nil
+}
+
+// openSplit shows a session below the one on screen.
+func (m *Model) openSplit(id string) tea.Cmd {
+	m.split, m.below = id, false
+	if m.other() == nil {
+		m.split = ""
+		m.say("the terminal is too short for two sessions")
+		return nil
+	}
+	m.resize()
+	m.seen()
+	return nil
+}
+
+// focusOther gives the keys to the session in the other pane. The panes stay
+// where they are.
+func (m *Model) focusOther() tea.Cmd {
+	s, was := m.other(), m.current()
+	if s == nil {
+		m.say(fmt.Sprintf("one session on screen — %s - shows another below", m.cfg.Prefix))
+		return nil
+	}
+	_, m.active = m.byID(s.ID)
+	m.split, m.below = was.ID, !m.below
+	return m.shownNow()
 }
 
 // showProject points the side panels at the project of the session on
@@ -179,16 +249,30 @@ func (m *Model) toggleSide(hide *bool) tea.Cmd {
 }
 
 // newSession creates a session of the given name for an agent working in
-// dir and puts it on screen.
-func (m *Model) newSession(a agent.Adapter, name, dir string) tea.Cmd {
+// dir and puts it on screen. With worktree, the session works in a git
+// worktree of its own instead, made for it from the commit dir is on.
+func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea.Cmd {
+	made := ""
+	if worktree {
+		var err error
+		if made, dir, err = addWorktree(name, dir); err != nil {
+			m.say(err.Error())
+			return nil
+		}
+	}
 	// One session to a directory is how the panels tell whose work is whose.
+	// A shell does no work of its own.
 	for _, other := range m.sessions {
+		if isShell(a) || isShell(other.Adapter) {
+			continue
+		}
 		if filepath.Clean(other.Dir) == filepath.Clean(dir) {
 			m.say(other.Name + " already works in this directory: their changes will be mixed")
 			break
 		}
 	}
 	s := session.New(session.NewID(), name, dir, a)
+	s.Worktree = made
 	s.Base, _ = git.Head(dir)
 	s.Uncommitted = m.cfg.Changes != config.ChangesSession
 	m.sessions = append(m.sessions, s)
@@ -213,21 +297,142 @@ func (m *Model) askDir(a agent.Adapter) tea.Cmd {
 			m.say(err.Error())
 			return nil
 		}
-		return m.askName(a, dir)
+		return m.askWorktree(a, dir)
 	}
 	m.prompt = p
 	return nil
 }
 
+// askWorktree offers a new session a git worktree of its own when another
+// session works in the work tree of dir, where their changes would be mixed.
+// A shell is not offered one: it is there to look at the work of the others.
+func (m *Model) askWorktree(a agent.Adapter, dir string) tea.Cmd {
+	other := m.sharing(dir)
+	// A worktree starts from a commit.
+	if _, ok := git.Head(dir); other == nil || !ok || isShell(a) {
+		return m.askName(a, dir, false)
+	}
+	m.confirm = &confirm{
+		question: other.Name + " already works in this repository: give this session a worktree of its own?",
+		yes:      func() tea.Cmd { return m.askName(a, dir, true) },
+		no:       func() tea.Cmd { return m.askName(a, dir, false) },
+	}
+	return nil
+}
+
+// isShell tells the plain shell from an agent: it is a way to run a command
+// without leaving cicoria, and not a session that changes the project.
+func isShell(a agent.Adapter) bool {
+	return a.Name() == config.Shell
+}
+
+// sharing returns a session that works in the git work tree of dir, if any.
+// A shell is not one.
+func (m *Model) sharing(dir string) *session.Session {
+	root, ok := git.Root(dir)
+	if !ok {
+		return nil
+	}
+	for _, s := range m.sessions {
+		if isShell(s.Adapter) {
+			continue
+		}
+		if r, ok := git.Root(s.Dir); ok && r == root {
+			return s
+		}
+	}
+	return nil
+}
+
+var notSlug = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+
+// slug turns the name of a session into one for a directory and a branch.
+func slug(name string) string {
+	return notSlug.ReplaceAllString(name, "-")
+}
+
+// worktreeOf returns where the worktree of a session of that name goes,
+// next to the main work tree of its repository, and the branch it is on.
+func worktreeOf(main, name string) (top, branch string) {
+	return filepath.Join(main+".worktrees", slug(name)), "cicoria/" + slug(name)
+}
+
+// worktreeFree reports whether a session of that name can have a worktree
+// in the repository of dir: the directory and the branch of one that was
+// made before may still be there.
+func worktreeFree(name, dir string) bool {
+	main, ok := git.Main(dir)
+	if !ok {
+		return true
+	}
+	top, branch := worktreeOf(main, name)
+	_, err := os.Stat(top)
+	return err != nil && !git.Exists(dir, "refs/heads/"+branch)
+}
+
+// addWorktree makes a git worktree named after a session, next to the
+// repository of dir and on a branch of its own. It returns the top of the
+// worktree and the directory in it that stands for dir.
+func addWorktree(name, dir string) (top, in string, err error) {
+	root, ok := git.Root(dir)
+	main, isMain := git.Main(dir)
+	if !ok || !isMain {
+		return "", "", errors.New("not a git repository")
+	}
+	top, branch := worktreeOf(main, name)
+	if err := git.AddWorktree(dir, top, branch); err != nil {
+		return "", "", err
+	}
+	// A directory git does not know of is not in the worktree.
+	in = top
+	if rel, err := filepath.Rel(root, dir); err == nil {
+		if st, err := os.Stat(filepath.Join(top, rel)); err == nil && st.IsDir() {
+			in = filepath.Join(top, rel)
+		}
+	}
+	return top, in, nil
+}
+
+// askRemoveWorktree offers to remove the worktree that was made for a
+// session that is now closed. One that holds work not committed is kept,
+// and so is one another session works in.
+func (m *Model) askRemoveWorktree(path string) {
+	if _, err := os.Stat(path); path == "" || err != nil {
+		return
+	}
+	for _, s := range m.sessions {
+		if rel, err := filepath.Rel(path, s.Dir); err == nil && filepath.IsLocal(rel) {
+			return
+		}
+	}
+	if !git.Clean(path) {
+		m.say("worktree kept at " + tilde(path) + ": it has changes that are not committed")
+		return
+	}
+	m.confirm = &confirm{
+		question: fmt.Sprintf("remove the worktree %s? the branch %s is kept", tilde(path), git.Branch(path)),
+		yes: func() tea.Cmd {
+			return func() tea.Msg { return removedMsg{path, git.RemoveWorktree(path)} }
+		},
+	}
+}
+
 // askName asks what to call a new session, offering a name that is free.
-func (m *Model) askName(a agent.Adapter, dir string) tea.Cmd {
+// With worktree, the name is also that of the worktree made for it.
+func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
+	// The name of a worktree that is still there, or of its branch, is not
+	// offered again.
+	var free func(string) bool
+	if worktree {
+		free = func(name string) bool { return worktreeFree(name, dir) }
+	}
 	p := &prompt{input: ui.Input{Prompt: "session name: "}}
-	p.input.Set(m.newName(a))
+	p.input.Set(m.newName(a, free))
 	p.done = func(name string) tea.Cmd {
 		if name == "" {
-			name = m.newName(a)
+			name = m.newName(a, free)
 		}
-		return m.newSession(a, name, dir)
+		return m.newSession(a, name, dir, worktree)
 	}
 	m.prompt = p
 	return nil
@@ -290,11 +495,17 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askDir(v)
 	case sendNotes:
 		return m.sendReview(v.queue)
+	case split:
+		return m.openSplit(v.id)
+	case ask:
+		return m.askReply(v)
+	case askHow:
+		return m.askMessage(ask(v))
 	case workspace:
 		return m.askOpen(v)
 	case string:
 		m.tree().Reveal(v)
-		m.openFile(v)
+		m.showFile(v)
 	}
 	return nil
 }
@@ -364,16 +575,26 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	if i == m.active {
 		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
 	}
-	m.sessions[i].Close()
+	closed := m.sessions[i]
+	made := closed.Worktree
 	m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
 	if m.active > i || m.active >= len(m.sessions) {
 		m.active = max(m.active-1, 0)
 	}
 	m.sessionCursor = max(min(m.sessionCursor, len(m.sessions)-1), 0)
+	// The session left on screen may be the one the pane was shared with.
+	if m.splitWith() == nil {
+		m.split, m.below = "", false
+	}
 	m.resize()
 	m.seen()
 	m.save()
-	return m.showProject()
+	m.askRemoveWorktree(made)
+	// The agent is given a moment to end, which is not for the screen to
+	// wait for. Quitting in that moment waits for it.
+	m.stopping = append(m.stopping, closed)
+	stop := func() tea.Msg { closed.Close(); return stoppedMsg{closed} }
+	return tea.Batch(stop, m.showProject())
 }
 
 func (m *Model) askQuit() tea.Cmd {

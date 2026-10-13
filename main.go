@@ -115,8 +115,10 @@ func run(args []string) error {
 
 	dark := lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
 	// One workspace after the other, for as long as the user asks for another.
-	for dir != "" {
-		m, err := app.New(cfg, dir, dark)
+	// A workspace picked from inside cicoria was asked about there, when
+	// another cicoria has it open.
+	for agreed := false; dir != ""; agreed = true {
+		m, err := app.New(cfg, dir, dark, agreed)
 		if err != nil {
 			return err
 		}

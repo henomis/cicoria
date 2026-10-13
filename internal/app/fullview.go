@@ -40,6 +40,14 @@ type fullView struct {
 	dir  string
 	path string
 	diff bool
+	// rendered says the file is shown as the document its Markdown
+	// describes, and spans which lines of the file each line of it shows.
+	// raw says the user asked for the text of such files instead.
+	rendered bool
+	spans    []ui.Span
+	raw      bool
+	// wrap says long lines of a file or diff are wrapped.
+	wrap bool
 	// plain holds the text of each line shown, without styling, and refs
 	// which line of the file it is. Lines that show none cannot carry a note.
 	plain []string
@@ -55,7 +63,8 @@ func (m *Model) viewHeight() int { return max(m.height-2, 1) }
 func (m *Model) openDiff(c git.Change) {
 	m.view.dir, m.view.path, m.view.diff = m.project(), c.Path, true
 	m.view.plain, m.view.refs = nil, nil
-	m.view.pager.Title = c.Path
+	m.view.rendered, m.view.spans = false, nil
+	m.view.pager.Title, m.view.pager.Wrap = c.Path, m.view.wrap
 	m.mode = modeView
 
 	diff, err := git.Diff(m.view.dir, c, m.changesBase)
@@ -72,10 +81,42 @@ func (m *Model) openDiff(c git.Change) {
 	m.markNotes()
 }
 
-// openFile shows a file on the whole screen.
+// showFile shows a file the way it reads best: a Markdown one rendered,
+// unless the user asked for its text.
+func (m *Model) showFile(path string) {
+	if ui.IsMarkdown(path) && !m.view.raw {
+		m.openRendered(path)
+	} else {
+		m.openFile(path)
+	}
+}
+
+// openRendered shows a Markdown file as the document it describes. One
+// that cannot be read whole is shown as text.
+func (m *Model) openRendered(path string) {
+	m.view.dir = m.project()
+	text, size, problem := m.fileText(path)
+	if problem != "" || size > maxFile {
+		m.openFile(path)
+		return
+	}
+	m.view.path, m.view.diff, m.view.rendered = path, false, true
+	m.view.plain, m.view.refs = nil, nil
+	m.mode = modeView
+
+	doc := ui.Markdown(text, m.dark)
+	m.view.spans = doc.Spans
+	m.view.pager.SetContent(doc.Lines, doc.Heads)
+	// A paragraph is one line, which only reads wrapped.
+	m.view.pager.Title, m.view.pager.Wrap, m.view.pager.Hang = path, true, doc.Hang
+	m.markNotes()
+}
+
+// openFile shows the text of a file on the whole screen.
 func (m *Model) openFile(path string) {
 	m.view.dir, m.view.path, m.view.diff = m.project(), path, false
-	m.view.pager.Title = path
+	m.view.rendered, m.view.spans = false, nil
+	m.view.pager.Title, m.view.pager.Wrap = path, m.view.wrap
 	m.mode = modeView
 
 	lines, source := m.fileLines(path)
@@ -90,18 +131,37 @@ func (m *Model) openFile(path string) {
 // fileLines returns a file as the lines to show and, when it is text, the
 // lines of the file they show.
 func (m *Model) fileLines(path string) (lines, source []string) {
+	text, size, problem := m.fileText(path)
+	if problem != "" {
+		return []string{problem}, nil
+	}
+	lines = ui.FileLines(path, text, m.dark)
+	source = strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	if len(source) != len(lines) {
+		source = nil
+	}
+	if size > maxFile {
+		lines = append(lines, ui.Warn.Render(fmt.Sprintf("… only the first %d MB are shown", maxFile>>20)))
+	}
+	return lines, source
+}
+
+// fileText returns the start of a file, which is all of a file no larger
+// than maxFile, and its size. A file that is not text has a problem, which
+// is the line to show in its place.
+func (m *Model) fileText(path string) (text string, size int64, problem string) {
 	full := filepath.Join(m.view.dir, path)
 	st, err := os.Stat(full)
 	if err != nil {
-		return []string{ui.Bad.Render(err.Error())}, nil
+		return "", 0, ui.Bad.Render(err.Error())
 	}
 	if st.IsDir() {
-		return []string{ui.Dim.Render("a directory")}, nil
+		return "", 0, ui.Dim.Render("a directory")
 	}
 
 	f, err := os.Open(full)
 	if err != nil {
-		return []string{ui.Bad.Render(err.Error())}, nil
+		return "", 0, ui.Bad.Render(err.Error())
 	}
 	defer func() { _ = f.Close() }()
 	data := make([]byte, min(st.Size(), maxFile))
@@ -109,17 +169,9 @@ func (m *Model) fileLines(path string) (lines, source []string) {
 	data = data[:n]
 
 	if ui.IsBinary(data) {
-		return []string{ui.Dim.Render(fmt.Sprintf("binary file, %d bytes: o opens it outside cicoria", st.Size()))}, nil
+		return "", 0, ui.Dim.Render(fmt.Sprintf("binary file, %d bytes: o opens it outside cicoria", st.Size()))
 	}
-	lines = ui.FileLines(path, string(data), m.dark)
-	source = strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-	if len(source) != len(lines) {
-		source = nil
-	}
-	if st.Size() > maxFile {
-		lines = append(lines, ui.Warn.Render(fmt.Sprintf("… only the first %d MB are shown", maxFile>>20)))
-	}
-	return lines, source
+	return string(data), st.Size(), ""
 }
 
 // maxQuote is the most lines a note quotes of what it is about.
@@ -155,6 +207,16 @@ func (m *Model) markNotes() {
 	for i := range m.view.refs {
 		if m.noteAt(i) >= 0 {
 			noted[i] = true
+		}
+	}
+	// A rendered document shows where the notes on its text are.
+	if s := m.current(); s != nil {
+		for i, span := range m.view.spans {
+			for _, n := range s.Notes {
+				if n.Path == m.view.path && !n.Removed && n.From <= span.To && n.To >= span.From {
+					noted[i] = true
+				}
+			}
 		}
 	}
 	m.view.pager.Noted = noted
@@ -195,12 +257,19 @@ func (m *Model) selected() (session.Note, bool) {
 	return note, true
 }
 
+// notesOnText is what a rendered document answers to a note.
+const notesOnText = "notes are written on the text of the file: m shows it"
+
 // askNote asks for a note on the selected lines, or for a new text for the
 // note the cursor is on.
 func (m *Model) askNote() {
 	s := m.current()
 	if s == nil {
 		m.say(errNoSession.Error())
+		return
+	}
+	if m.view.rendered {
+		m.say(notesOnText)
 		return
 	}
 	note, ok := m.selected()
@@ -241,6 +310,10 @@ func (m *Model) askNote() {
 
 // dropNote deletes the note the cursor is on.
 func (m *Model) dropNote() {
+	if m.view.rendered {
+		m.say(notesOnText)
+		return
+	}
 	s := m.current()
 	i := m.noteAt(m.view.pager.Cursor)
 	if s == nil || i < 0 {
@@ -293,7 +366,7 @@ func (m *Model) sendReview(queue bool) tea.Cmd {
 	// The review is over: back to the agent it went to.
 	m.focus = focusAgent
 	if queue {
-		return m.enqueue(s, text)
+		return m.enqueue(s, session.Message{Text: text})
 	}
 	m.save()
 	return m.deliver(s, text)
@@ -301,13 +374,15 @@ func (m *Model) sendReview(queue bool) tea.Cmd {
 
 // reloadView reads again what the full-screen view shows, keeping its place.
 func (m *Model) reloadView() {
-	top, cursor := m.view.pager.Top, m.view.pager.Cursor
+	top, cursor, wrap := m.view.pager.Top, m.view.pager.Cursor, m.view.pager.Wrap
 	if c, ok := m.change(m.view.path); m.view.diff && ok {
 		m.openDiff(c)
+	} else if m.view.rendered {
+		m.openRendered(m.view.path)
 	} else {
 		m.openFile(m.view.path)
 	}
-	m.view.pager.Top = top
+	m.view.pager.Top, m.view.pager.Wrap = top, wrap
 	m.view.pager.SetCursor(cursor, m.viewHeight())
 }
 
@@ -322,6 +397,50 @@ func (m *Model) toggleView() {
 	} else {
 		m.say(m.view.path + " has no changes")
 	}
+}
+
+// toggleRendered switches between a Markdown file as a document and its
+// text, staying on the same part of it.
+func (m *Model) toggleRendered() {
+	if !ui.IsMarkdown(m.view.path) {
+		m.say(m.view.path + " is not a Markdown file")
+		return
+	}
+	line := m.fileLine()
+	m.view.raw = m.view.rendered
+	if m.view.rendered {
+		m.openFile(m.view.path)
+	} else {
+		m.openRendered(m.view.path)
+	}
+
+	at := line - 1
+	if m.view.rendered {
+		at = 0
+		for i, span := range m.view.spans {
+			if span.From > 0 && span.From <= line {
+				at = i
+			}
+		}
+	}
+	if line > 0 {
+		m.view.pager.Top = at
+		m.view.pager.SetCursor(at, m.viewHeight())
+	}
+}
+
+// fileLine returns the line of the file the cursor is on, or the one
+// before it that shows one, or 0.
+func (m *Model) fileLine() int {
+	for i := m.view.pager.Cursor; i >= 0; i-- {
+		if i < len(m.view.spans) && m.view.spans[i].From > 0 {
+			return m.view.spans[i].From
+		}
+		if r, ok := m.ref(i); ok && r.New > 0 {
+			return r.New
+		}
+	}
+	return 0
 }
 
 // stepView moves to the next or previous changed file.
@@ -394,13 +513,17 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		p.Move(-p.Len(), h)
 	case "G", "end":
 		p.Move(p.Len(), h)
-	case "]":
-		if !p.Mark(1) {
-			m.say("no more hunks")
+	case "]", "[":
+		dir := 1
+		if k.String() == "[" {
+			dir = -1
 		}
-	case "[":
-		if !p.Mark(-1) {
-			m.say("no more hunks")
+		if !p.Mark(dir) {
+			if m.view.rendered {
+				m.say("no more headings")
+			} else {
+				m.say("no more hunks")
+			}
 		}
 	case "/":
 		m.view.search = &ui.Input{Prompt: "/"}
@@ -414,9 +537,15 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		m.stepView(-1)
 	case "d":
 		m.toggleView()
+	case "m":
+		m.toggleRendered()
 	case "w":
-		// The line the cursor is on stays on screen.
+		// The line the cursor is on stays on screen. A document goes back
+		// to being wrapped the next time one is opened.
 		p.Wrap = !p.Wrap
+		if !m.view.rendered {
+			m.view.wrap = p.Wrap
+		}
 		p.SetCursor(p.Cursor, h)
 	case "e":
 		return m.edit(m.view.path)

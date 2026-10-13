@@ -40,12 +40,14 @@ type Saved struct {
 	Conversation string `json:"conversation,omitempty"`
 	// Base is the commit the session's changes are counted from.
 	Base string `json:"base,omitempty"`
+	// Worktree is the git worktree that was made for the session, if any.
+	Worktree string `json:"worktree,omitempty"`
 	// Notes are the remarks on code not yet sent to the agent.
 	Notes []Note `json:"notes,omitempty"`
 	// Queue and Paused are the messages waiting to be sent and whether they
 	// are held back.
-	Queue  []string `json:"queue,omitempty"`
-	Paused bool     `json:"paused,omitempty"`
+	Queue  []Message `json:"queue,omitempty"`
+	Paused bool      `json:"paused,omitempty"`
 }
 
 // State is a saved workspace.
@@ -128,7 +130,7 @@ func lockPath(dir string) string {
 
 // Lock marks the workspace opened on dir as in use, until the returned
 // function is called or the process ends. It does nothing when the workspace
-// is already in use: opening one twice is allowed.
+// is already in use: opening one twice is allowed, and asked about first.
 func Lock(dir string) (release func()) {
 	path := lockPath(dir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

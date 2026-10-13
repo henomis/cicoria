@@ -35,7 +35,7 @@ func TestCopilotMapEvent(t *testing.T) {
 	}{
 		// The first hook to run comes with the first message.
 		{"sessionStart", `{"source":"new"}`, working, true},
-		{"userPromptSubmitted", `{"prompt":"hi"}`, working, true},
+		{"userPromptSubmitted", `{"prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
 		{"preToolUse", `{"toolName":"bash","toolArgs":{"command":"ls"}}`, working, true},
 		{"preToolUse", `{"toolName":"ask_user","toolArgs":{"question":"which?"}}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		{"postToolUse", `{"toolName":"edit","toolArgs":{"path":"/p/a.go","old_str":"a","new_str":"b"}}`, Update{Status: Working, HasStatus: true, File: "/p/a.go"}, true},
@@ -125,48 +125,4 @@ func TestCopilotCommand(t *testing.T) {
 	if got := c.Command(o).Args[5]; got != "later" {
 		t.Errorf("session = %q, want later", got)
 	}
-}
-
-func TestCopilotCountsTokens(t *testing.T) {
-	t.Setenv("COPILOT_HOME", t.TempDir())
-	transcript := copilotTranscript("conv")
-	if err := os.MkdirAll(filepath.Dir(transcript), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	write := func(lines ...string) {
-		t.Helper()
-		f, err := os.OpenFile(transcript, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = f.Close() }()
-		if _, err := f.WriteString(strings.Join(lines, "\n") + "\n"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	check := func(u Update, context, in, out int) {
-		t.Helper()
-		if u.ContextTokens != context || u.InputTokens != in || u.OutputTokens != out {
-			t.Errorf("tokens = ctx %d, in %d, out %d; want %d, %d, %d", u.ContextTokens, u.InputTokens, u.OutputTokens, context, in, out)
-		}
-	}
-
-	write(
-		`{"type":"user.message","data":{"content":"hi"}}`,
-		`{"type":"session.usage_record","data":{"usage":{"inputTokens":13049,"outputTokens":44,"cacheReadTokens":0}}}`,
-		`{"type":"session.usage_record","data":{"usage":{"inputTokens":13113,"outputTokens":80,"cacheReadTokens":13024}}}`,
-	)
-	// The transcript is the one the hook names, or the one of its session.
-	c := NewCopilot(nil)
-	u, _ := c.MapEvent(ipc.Event{Name: "agentStop", Payload: json.RawMessage(`{"transcriptPath":"` + transcript + `"}`)})
-	check(u, 13113, 26162, 124)
-
-	// Only what was added is read the next time.
-	write(`{"type":"session.usage_record","data":{"usage":{"inputTokens":13201,"outputTokens":98}}}`)
-	u, _ = c.MapEvent(ipc.Event{Name: "agentStop", Payload: json.RawMessage(`{"sessionId":"conv"}`)})
-	check(u, 13201, 39363, 222)
-
-	// A conversation that is resumed has its count from the first message.
-	u, _ = NewCopilot(nil).MapEvent(ipc.Event{Name: "sessionStart", Payload: json.RawMessage(`{"sessionId":"conv"}`)})
-	check(u, 13201, 39363, 222)
 }

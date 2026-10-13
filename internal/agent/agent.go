@@ -70,9 +70,18 @@ type Update struct {
 	// Status is the new status, when HasStatus is set.
 	Status    Status
 	HasStatus bool
+	// TurnStarted says the agent took a message and begins to answer it.
+	TurnStarted bool
+	// Prompt is the agent's own name for the message a turn is for, when it
+	// tells: the start and the end of one turn have the same.
+	Prompt string
+	// Interrupted says the user stopped the turn before it had an answer.
+	Interrupted bool
 	// TurnEnded says the agent finished answering and waits for the next
 	// message.
 	TurnEnded bool
+	// Answer is what the agent said last in the turn that ended, if known.
+	Answer string
 	// Failed says the turn ended on an error instead of an answer.
 	Failed bool
 	// Conversation is the agent's own name for the conversation it is in,
@@ -80,11 +89,6 @@ type Update struct {
 	Conversation string
 	// File is a file the agent just changed, if any.
 	File string
-	// ContextTokens is the size of the agent's context, if known.
-	ContextTokens int
-	// InputTokens and OutputTokens are what the model read and wrote over
-	// the whole conversation, if known.
-	InputTokens, OutputTokens int
 }
 
 // Adapter knows one kind of agent.
@@ -101,6 +105,9 @@ type Adapter interface {
 	// waits for a message. When it does not, it is taken to be ready once
 	// its screen goes quiet.
 	ReportsReady() bool
+	// ReportsAnswer says whether the agent tells what it said at the end of
+	// a turn, which is what the question of another session is answered with.
+	ReportsAnswer() bool
 	// Mention returns the text to type at the agent's prompt to refer to a
 	// file of the project.
 	Mention(path string) string

@@ -28,9 +28,6 @@ import (
 // process only, whose hooks report what the agent is doing.
 type Copilot struct {
 	argv []string
-	// tallies holds the token count of each transcript. MapEvent is its only
-	// user.
-	tallies tallies
 }
 
 // NewCopilot returns the Copilot CLI adapter. argv is the command line to
@@ -51,6 +48,10 @@ func (c *Copilot) ReportsStatus() bool { return true }
 // ReportsReady implements Adapter. Copilot CLI runs no hook until the first
 // message is sent.
 func (c *Copilot) ReportsReady() bool { return false }
+
+// ReportsAnswer implements Adapter. Copilot CLI ends a turn without saying
+// what the model said.
+func (c *Copilot) ReportsAnswer() bool { return false }
 
 // Mention implements Adapter.
 func (c *Copilot) Mention(path string) string { return "@" + path + " " }
@@ -142,7 +143,6 @@ func copilotTranscript(sessionID string) string {
 // copilotHook is the part of a Copilot CLI hook payload cicoria reads.
 type copilotHook struct {
 	SessionID        string `json:"sessionId"`
-	TranscriptPath   string `json:"transcriptPath"`
 	NotificationType string `json:"notification_type"`
 	ToolName         string `json:"toolName"`
 	// ToolArgs is an object for most tools, but not for all of them.
@@ -167,11 +167,10 @@ func (c *Copilot) mapHook(name string, h copilotHook) (Update, bool) {
 	switch name {
 	case "sessionStart":
 		// It runs when the first message is sent, so the agent is at work
-		// already. A conversation that is resumed has a count already.
-		t := c.count(h)
-		return Update{Status: Working, HasStatus: true, ContextTokens: t.context, InputTokens: t.in, OutputTokens: t.out}, true
-	case "userPromptSubmitted":
+		// already.
 		return Update{Status: Working, HasStatus: true}, true
+	case "userPromptSubmitted":
+		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
 	case "preToolUse":
 		// A question to the user is a tool like the others.
 		if h.ToolName == "ask_user" {
@@ -193,14 +192,10 @@ func (c *Copilot) mapHook(name string, h copilotHook) (Update, bool) {
 		}
 		return Update{Status: Idle, HasStatus: true, Failed: true}, true
 	case "agentStop":
-		t := c.count(h)
 		return Update{
-			Status:        Idle,
-			HasStatus:     true,
-			TurnEnded:     true,
-			ContextTokens: t.context,
-			InputTokens:   t.in,
-			OutputTokens:  t.out,
+			Status:    Idle,
+			HasStatus: true,
+			TurnEnded: true,
 		}, true
 	}
 	return Update{}, false
@@ -216,32 +211,4 @@ func (h copilotHook) edited() string {
 	}
 	_ = json.Unmarshal(h.ToolArgs, &args)
 	return args.Path
-}
-
-// count returns the token count of the conversation a hook is from.
-func (c *Copilot) count(h copilotHook) *tally {
-	path := h.TranscriptPath
-	if path == "" {
-		path = copilotTranscript(h.SessionID)
-	}
-	return c.tallies.count(path, copilotLine)
-}
-
-// copilotLine counts one line of a Copilot CLI transcript, which records
-// what each model reply cost. The input counts what was cached too.
-func copilotLine(t *tally, line []byte) {
-	var entry struct {
-		Type string `json:"type"`
-		Data struct {
-			Usage struct {
-				Input  int `json:"inputTokens"`
-				Output int `json:"outputTokens"`
-			} `json:"usage"`
-		} `json:"data"`
-	}
-	if json.Unmarshal(line, &entry) != nil || entry.Type != "session.usage_record" {
-		return
-	}
-	u := entry.Data.Usage
-	t.in, t.out, t.context = t.in+u.Input, t.out+u.Output, u.Input
 }

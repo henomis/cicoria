@@ -28,9 +28,6 @@ import (
 // process only, that report what the agent is doing.
 type Codex struct {
 	argv []string
-	// tallies holds the token count of each transcript. MapEvent is its only
-	// user.
-	tallies tallies
 }
 
 // NewCodex returns the Codex CLI adapter. argv is the command line to start
@@ -51,6 +48,9 @@ func (c *Codex) ReportsStatus() bool { return true }
 // ReportsReady implements Adapter. Codex CLI runs no hook until the first
 // message is sent.
 func (c *Codex) ReportsReady() bool { return false }
+
+// ReportsAnswer implements Adapter.
+func (c *Codex) ReportsAnswer() bool { return true }
 
 // Mention implements Adapter.
 func (c *Codex) Mention(path string) string { return "@" + path + " " }
@@ -105,11 +105,11 @@ func codexTranscript(conversation string) string {
 
 // codexHook is the part of a Codex CLI hook payload cicoria reads.
 type codexHook struct {
-	Event          string `json:"hook_event_name"`
-	SessionID      string `json:"session_id"`
-	TranscriptPath string `json:"transcript_path"`
-	Cwd            string `json:"cwd"`
-	ToolName       string `json:"tool_name"`
+	Event       string `json:"hook_event_name"`
+	SessionID   string `json:"session_id"`
+	Cwd         string `json:"cwd"`
+	ToolName    string `json:"tool_name"`
+	LastMessage string `json:"last_assistant_message"`
 	// ToolInput is an object for most tools, but not for all of them.
 	ToolInput json.RawMessage `json:"tool_input"`
 }
@@ -131,10 +131,11 @@ func (c *Codex) mapHook(h codexHook) (Update, bool) {
 	switch h.Event {
 	case "SessionStart":
 		// It runs when the first message is sent, so the agent is at work
-		// already. A conversation that is resumed has a count already.
-		t := c.tallies.count(h.TranscriptPath, codexLine)
-		return Update{Status: Working, HasStatus: true, ContextTokens: t.context, InputTokens: t.in, OutputTokens: t.out}, true
-	case "UserPromptSubmit", "PreToolUse":
+		// already.
+		return Update{Status: Working, HasStatus: true}, true
+	case "UserPromptSubmit":
+		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
+	case "PreToolUse":
 		return Update{Status: Working, HasStatus: true}, true
 	case "PermissionRequest":
 		return Update{Status: NeedsInput, HasStatus: true}, true
@@ -143,16 +144,13 @@ func (c *Codex) mapHook(h codexHook) (Update, bool) {
 	case "Interrupt":
 		// The user stopped the turn: there is no answer to follow up on, and
 		// what waits in the queue stays there.
-		return Update{Status: Idle, HasStatus: true}, true
+		return Update{Status: Idle, HasStatus: true, Interrupted: true}, true
 	case "Stop":
-		t := c.tallies.count(h.TranscriptPath, codexLine)
 		return Update{
-			Status:        Idle,
-			HasStatus:     true,
-			TurnEnded:     true,
-			ContextTokens: t.context,
-			InputTokens:   t.in,
-			OutputTokens:  t.out,
+			Status:    Idle,
+			HasStatus: true,
+			TurnEnded: true,
+			Answer:    h.LastMessage,
 		}, true
 	}
 	return Update{}, false
@@ -180,29 +178,4 @@ func (h codexHook) edited() string {
 		}
 	}
 	return ""
-}
-
-// codexLine counts one line of a Codex CLI transcript, which records after
-// each model reply what the conversation cost so far. The input counts what
-// was cached too.
-func codexLine(t *tally, line []byte) {
-	type usage struct {
-		Input  int `json:"input_tokens"`
-		Output int `json:"output_tokens"`
-	}
-	var entry struct {
-		Type    string `json:"type"`
-		Payload struct {
-			Type string `json:"type"`
-			Info *struct {
-				Total usage `json:"total_token_usage"`
-				Last  usage `json:"last_token_usage"`
-			} `json:"info"`
-		} `json:"payload"`
-	}
-	if json.Unmarshal(line, &entry) != nil || entry.Type != "event_msg" || entry.Payload.Type != "token_count" || entry.Payload.Info == nil {
-		return
-	}
-	info := entry.Payload.Info
-	t.in, t.out, t.context = info.Total.Input, info.Total.Output, info.Last.Input
 }

@@ -44,6 +44,9 @@ func (g *Generic) ReportsStatus() bool { return false }
 // ReportsReady implements Adapter.
 func (g *Generic) ReportsReady() bool { return false }
 
+// ReportsAnswer implements Adapter.
+func (g *Generic) ReportsAnswer() bool { return false }
+
 // MapEvent implements Adapter.
 func (g *Generic) MapEvent(ipc.Event) (Update, bool) { return Update{}, false }
 

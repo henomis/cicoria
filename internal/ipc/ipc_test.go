@@ -16,6 +16,7 @@ package ipc
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -57,5 +58,36 @@ func TestForwardRejectsNonJSON(t *testing.T) {
 	t.Setenv(EnvSession, "s1")
 	if err := Forward("", strings.NewReader(`not json`)); err == nil {
 		t.Error("Forward accepted a non-JSON payload")
+	}
+}
+
+// Closing the server while events are still coming in drops them, and does
+// nothing worse.
+func TestCloseWhileEventsArrive(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	for range 50 {
+		srv, err := Listen()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// More than the server holds, and nobody takes them.
+		var senders sync.WaitGroup
+		for range 2 * cap(srv.events) {
+			senders.Go(func() { _ = Send(srv.Path(), Event{Session: "s1", Payload: []byte(`{}`)}) })
+		}
+		_ = srv.Close()
+		senders.Wait()
+
+		closed := make(chan struct{})
+		go func() {
+			for range srv.Events() {
+			}
+			close(closed)
+		}()
+		select {
+		case <-closed:
+		case <-time.After(2 * time.Second):
+			t.Fatal("the events of a closed server never ended")
+		}
 	}
 }

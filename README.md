@@ -14,7 +14,7 @@ A terminal workspace for the AI-first engineer: run several coding agents side b
 │▾ api/                   •││                                        │╭─ Queue (1) ───────────╮
 │   auth.go               M││                                        ││▸ then run the linter  │
 ╰──────────────────────────╯╰────────────────────────────────────────╯╰───────────────────────╯
- ▲ fix-flaky-test needs input                   ctx 82k · in 4.2M · out 38k · ctrl+a ? help
+ ▲ fix-flaky-test needs input                                       queue 1 · ctrl+a ? help
 ```
 
 Website and full documentation: <https://henomis.github.io/cicoria/>
@@ -26,7 +26,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Keeps the changes of a session reviewable**: what is not committed or, one key away, everything since the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
 - **Lets you write notes on lines of code** and send them to the agent as one message.
 - **Queues messages** and sends each one when the agent ends its turn.
-- **Counts tokens** for Claude Code, Copilot CLI and Codex CLI sessions.
+- **Lets one session ask another**: the answer comes back by itself, with what to do next.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
 Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
@@ -35,7 +35,13 @@ Codex CLI asks you to trust the hooks cicoria gives it, the first time it runs w
 
 ## Install
 
-Download the archive for your system from the [releases](https://github.com/henomis/cicoria/releases) (Linux and macOS, x86_64 and arm64) and put the `cicoria` in it on your `PATH`, or build it with Go:
+```sh
+curl -fsSL https://henomis.github.io/cicoria/install.sh | sh
+```
+
+The [script](web/install.sh) downloads the latest [release](https://github.com/henomis/cicoria/releases) for your system (Linux and macOS, x86_64 and arm64), checks it against the checksums of the release and puts `cicoria` in `~/.local/bin`. `CICORIA_INSTALL_DIR` names another directory and `CICORIA_VERSION` another release, such as `v0.0.4`. Running it again updates cicoria.
+
+You can also download the archive from the releases yourself and put the `cicoria` in it on your `PATH`, or build it with Go:
 
 ```sh
 go install github.com/henomis/cicoria@latest
@@ -66,9 +72,12 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `1`-`9`, `n`, `p` | Go to a session |
 | `a` | Go to the next session that needs input |
 | `,` `r` `x` | Rename, restart, close the session |
+| `-` | Split: show another session below, or close the split |
+| `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `m` | Queue a message for the agent |
+| `k` | Send a message to another session, or ask it and get the answer here |
 | `u` | Focus the queue panel |
 | `d` | Review changes (full-screen diff) |
 | `t` | Send review notes to the agent |
@@ -95,7 +104,21 @@ The files panel also lists what git ignores, in grey; an ignored folder is read 
 
 A session is one agent working in one directory, so one cicoria can hold sessions from several projects. `ctrl+a c` asks for the agent, then the directory (`tab` completes, `ctrl+w` deletes a path component, `ctrl+u` clears, and `~` and relative paths work), then a name, offering one that is free.
 
-Keep one session to a directory. The files and changes panels show the project of the session on screen, so two sessions in the same directory cannot be told apart by their changes; cicoria warns when you open a second one.
+### A worktree of its own
+
+The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a [git worktree](https://git-scm.com/docs/git-worktree) of its own: `y` makes one, `n` or `enter` puts the session in the same directory and warns you, `esc` gives up. A `shell` is a way to run a command without leaving cicoria, not a session at work: it is not asked, opens in the directory you give it, and is no reason to offer the next session a worktree.
+
+The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on a new branch `cicoria/fix-login` that starts from the commit the directory was on. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart.
+
+Closing the session offers to remove the worktree. Its branch is always kept, so what was committed is not lost, and a worktree with changes that are not committed is kept too: the status bar says where it is. Merging the branch is up to you, or to an agent you ask.
+
+A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not copied to it. Claude Code asks whether it can trust the new folder, as it does for any.
+
+### Two sessions on screen
+
+`ctrl+a -` splits the agent pane in two: the session on screen stays above, and the one you pick is shown below it. `ctrl+a tab`, or a click in the other pane, moves the keys from one to the other; the pane that has them is the one with the lit border, and the side panels show its project. Going to a session (`ctrl+a n`, `p`, `1`-`9`) puts it in the pane that has the keys, or moves the keys when it is already in the other one. The wheel scrolls the pane it is over.
+
+`ctrl+a -` again goes back to one pane, as does closing one of the two sessions. A terminal too short for two panes keeps one, and the split is not remembered across restarts.
 
 ### Status
 
@@ -115,7 +138,9 @@ A session closes when its agent or shell exits. It is kept, marked `✕`, when t
 
 The changes panel shows what is not committed. In it, `s` switches to everything the session changed since the commit it started on, committed or not, and back; the panel then says how many commits were made since, and `ctrl+a h` starts the count again from the last commit, once you have looked. With `changes = "session"` in the settings, sessions open on that view.
 
-Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back.
+Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `m` switches a Markdown file between the document and its text, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back.
+
+A Markdown file opened from the file tree or by its name is shown as the document it describes: headings, lists, tables and coloured code, wrapped to the screen, where `[` `]` jump between headings. `m` shows its text instead, at the same place, and the choice holds for the files opened after it. Notes are written on the text, and the document marks where they are; a file opened from the changes panel, or next to its diff, is always text.
 
 ### Notes
 
@@ -131,9 +156,26 @@ In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses 
 
 Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
 
-## Tokens
+### Asking another session
 
-For Claude Code, Copilot CLI and Codex CLI sessions the status bar shows `ctx`, the size of the context, and `in` and `out`, what the model has read and written over the whole conversation, cached input included. With several sessions counting, `all` is what they add up to.
+`ctrl+a k` sends a message from the session on screen to another one. Pick the session, then either:
+
+- **Send a message**: it is queued there, as `ctrl+a m` would do from that session.
+- **Ask, and get the answer here**: the question is queued there, shown as `from <session>`. What its agent says at the end of the turn the question starts is queued back for the session you asked from, together with the question. A second prompt takes what that session should do with the answer; leave it empty to only hand the answer over.
+
+The session that asked receives one message:
+
+```
+I asked the session "api":
+> What does GET /orders return when the cart is empty?
+
+It answered:
+> A 200 with an empty `items` array, never a 404.
+
+Update the client to handle it.
+```
+
+Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code and Codex CLI can be asked, since they are the ones that tell what they said when a turn ends: for Copilot CLI the choice says `not supported`, and the other agents are only sent messages. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.
 
 ## Configure
 
@@ -174,9 +216,9 @@ With `animations` on, a second of ASCII art plays in the agent pane when cicoria
 
 ## What is remembered
 
-Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes; Claude Code, Copilot CLI and Codex CLI sessions continue their conversation when reopened.
+Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues. Agents stop when cicoria closes: each is told that its terminal is gone, as when a terminal window is closed, and killed only if it is still there two seconds later; Claude Code, Copilot CLI and Codex CLI sessions continue their conversation when reopened.
 
-A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
+A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. A workspace that another cicoria has open is asked about before it is opened a second time, from there or with `cicoria` itself: its agents would run twice, on the same conversations. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
 
 ## Develop
 

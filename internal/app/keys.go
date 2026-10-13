@@ -23,6 +23,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/henomis/cicoria/internal/agent"
+	"github.com/henomis/cicoria/internal/session"
 )
 
 // wheelStep is how many rows one notch of the mouse wheel scrolls.
@@ -40,8 +41,12 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 	// A pending question or text field takes every key.
 	if c := m.confirm; c != nil {
 		m.confirm = nil
-		if key == "y" || key == "Y" || key == "enter" {
+		if key == "y" || key == "Y" {
 			return c.yes()
+		}
+		// Enter takes the answer the question offers, which is no.
+		if c.no != nil && (c.always || key == "n" || key == "N" || key == "enter") {
+			return c.no()
 		}
 		return nil
 	}
@@ -172,7 +177,7 @@ func (m *Model) filesKey(key string) tea.Cmd {
 				return m.refreshNow()
 			}
 		} else if row.Path != "" {
-			m.openFile(row.Path)
+			m.showFile(row.Path)
 		}
 	case "d":
 		if c, ok := m.change(row.Path); ok {
@@ -277,12 +282,22 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		if isClick {
 			m.focus = focusAgent
 		}
-		m.forwardMouse(msg, l.agent)
+		m.forwardMouse(msg, m.current(), l.agent)
+
+	case l.other.contains(x, y):
+		// A click takes the keys there; the wheel scrolls without them.
+		if isClick {
+			return m.focusOther()
+		}
+		if isWheel {
+			m.forwardMouse(msg, m.other(), l.other)
+		}
 
 	case l.sessions.contains(x, y):
 		if row := y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) {
-			m.switchTo(row)
+			cmd := m.switchTo(row)
 			m.focus = focusSessions
+			return cmd
 		}
 
 	case l.files.contains(x, y):
@@ -315,10 +330,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	return nil
 }
 
-// forwardMouse passes a mouse event to the agent on screen, in the
-// coordinates of its pane.
-func (m *Model) forwardMouse(msg tea.MouseMsg, pane rect) {
-	s := m.current()
+// forwardMouse passes a mouse event to the agent of a session on screen, in
+// the coordinates of its pane.
+func (m *Model) forwardMouse(msg tea.MouseMsg, s *session.Session, pane rect) {
 	if s == nil || s.Term == nil || s.Status == agent.Exited {
 		return
 	}
