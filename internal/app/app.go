@@ -264,7 +264,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 			_ = srv.Close()
 			return nil, fmt.Errorf("default agent %q is not configured", cfg.DefaultAgent)
 		}
-		s := session.New(session.NewID(), m.newName(a), dir, a)
+		s := session.New(session.NewID(), m.newName(a, nil), dir, a)
 		s.Base, _ = git.Head(dir)
 		s.Uncommitted = cfg.Changes != config.ChangesSession
 		m.sessions = append(m.sessions, s)
@@ -285,11 +285,12 @@ func (m *Model) adapter(name string) agent.Adapter {
 	return nil
 }
 
-// newName returns an unused session name for an agent.
-func (m *Model) newName(a agent.Adapter) string {
+// newName returns an unused session name for an agent. With free, it is
+// also one that free accepts.
+func (m *Model) newName(a agent.Adapter, free func(name string) bool) string {
 	for n := 1; ; n++ {
 		name := fmt.Sprintf("%s-%d", a.Name(), n)
-		taken := false
+		taken := free != nil && !free(name)
 		for _, s := range m.sessions {
 			taken = taken || s.Name == name
 		}

@@ -336,6 +336,25 @@ func slug(name string) string {
 	return notSlug.ReplaceAllString(name, "-")
 }
 
+// worktreeOf returns where the worktree of a session of that name goes,
+// next to the main work tree of its repository, and the branch it is on.
+func worktreeOf(main, name string) (top, branch string) {
+	return filepath.Join(main+".worktrees", slug(name)), "cicoria/" + slug(name)
+}
+
+// worktreeFree reports whether a session of that name can have a worktree
+// in the repository of dir: the directory and the branch of one that was
+// made before may still be there.
+func worktreeFree(name, dir string) bool {
+	main, ok := git.Main(dir)
+	if !ok {
+		return true
+	}
+	top, branch := worktreeOf(main, name)
+	_, err := os.Stat(top)
+	return err != nil && !git.Exists(dir, "refs/heads/"+branch)
+}
+
 // addWorktree makes a git worktree named after a session, next to the
 // repository of dir and on a branch of its own. It returns the top of the
 // worktree and the directory in it that stands for dir.
@@ -345,8 +364,8 @@ func addWorktree(name, dir string) (top, in string, err error) {
 	if !ok || !isMain {
 		return "", "", errors.New("not a git repository")
 	}
-	top = filepath.Join(main+".worktrees", slug(name))
-	if err := git.AddWorktree(dir, top, "cicoria/"+slug(name)); err != nil {
+	top, branch := worktreeOf(main, name)
+	if err := git.AddWorktree(dir, top, branch); err != nil {
 		return "", "", err
 	}
 	// A directory git does not know of is not in the worktree.
@@ -386,11 +405,17 @@ func (m *Model) askRemoveWorktree(path string) {
 // askName asks what to call a new session, offering a name that is free.
 // With worktree, the name is also that of the worktree made for it.
 func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
+	// The name of a worktree that is still there, or of its branch, is not
+	// offered again.
+	var free func(string) bool
+	if worktree {
+		free = func(name string) bool { return worktreeFree(name, dir) }
+	}
 	p := &prompt{input: ui.Input{Prompt: "session name: "}}
-	p.input.Set(m.newName(a))
+	p.input.Set(m.newName(a, free))
 	p.done = func(name string) tea.Cmd {
 		if name == "" {
-			name = m.newName(a)
+			name = m.newName(a, free)
 		}
 		return m.newSession(a, name, dir, worktree)
 	}

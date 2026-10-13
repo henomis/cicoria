@@ -1506,7 +1506,8 @@ func TestWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Its name is taken, and no session is made on top of it.
+	// Its name is taken: another one is offered, and no session is made on
+	// top of it.
 	w.prefix('c')
 	w.see("agent ›")
 	w.typeText("shell")
@@ -1515,7 +1516,9 @@ func TestWorktree(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("a worktree of its own?")
 	w.typeText("y")
-	w.see("session name: shell-1")
+	w.see("session name: shell-2")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("shell-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("already exists")
 	w.gone("shell-1 · shell")
@@ -1541,5 +1544,19 @@ func TestWorktree(t *testing.T) {
 	if err != nil || !strings.Contains(string(out), "cicoria/shell-1") {
 		t.Errorf("branch: %q, %v", out, err)
 	}
+
+	// The branch that is kept has the name: the next session is offered
+	// another one.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("a worktree of its own?")
+	w.typeText("y")
+	w.see("session name: shell-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell-2 · shell", "project.worktrees/shell-2", "cicoria/shell-2")
 	w.quit()
 }
