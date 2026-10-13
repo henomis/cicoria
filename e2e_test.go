@@ -822,6 +822,60 @@ func TestNotes(t *testing.T) {
 	w.quit()
 }
 
+func TestMarkdown(t *testing.T) {
+	w := newWorkspace(t)
+	guide := "# Guide\n\nRead **this** first.\n\n## Setup\n\n- run `make`\n"
+	if err := os.WriteFile(filepath.Join(w.dir, "guide.md"), []byte(guide), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.launch(140, 40)
+	w.see("agent ready", "Changes (1)")
+
+	// A Markdown file opens as the document it describes.
+	w.prefix('o')
+	w.see("file ›")
+	w.typeText("guide")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("rendered  guide.md", "Read this first.", "• run make")
+	w.gone("## Setup")
+
+	// Notes are for its text, which m shows at the same place.
+	w.typeText("c")
+	w.see("notes are written on the text of the file")
+	w.typeText("]")
+	w.see("▌Setup")
+	w.typeText("m")
+	w.see("file  guide.md", "3 Read **this** first.", "▌5 ## Setup")
+	w.typeText("c")
+	w.see("note on guide.md:5:")
+	w.line("name the tools")
+	w.see("1 note(s)", "*▌5 ## Setup")
+
+	// The document shows where the notes are, and the choice of the text
+	// is kept for the next file.
+	w.typeText("m")
+	w.see("rendered  guide.md", "*▌Setup")
+	w.typeText("mq")
+	w.see("Sessions")
+	w.prefix('o')
+	w.see("file ›")
+	w.typeText("guide")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  guide.md", "5 ## Setup")
+	w.typeText("mq")
+	w.see("Sessions")
+
+	// What is reviewed is the text.
+	w.prefix('g')
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("diff  guide.md", "+## Setup")
+	w.typeText("d")
+	w.see("file  guide.md", "5 ## Setup")
+	w.typeText("q")
+	w.see("Sessions")
+	w.quit()
+}
+
 func TestNarrowTerminalHidesPanels(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(60, 20)

@@ -75,7 +75,11 @@ func FileLines(name, content string, dark bool) []string {
 // highlight colours source code line by line. It returns nil when the
 // language is unknown or the code cannot be tokenised.
 func highlight(name, content string, dark bool) []string {
-	lexer := lexers.Match(name)
+	return colour(lexers.Match(name), content, dark)
+}
+
+// colour colours source code in the language of a lexer, which may be nil.
+func colour(lexer chroma.Lexer, content string, dark bool) []string {
 	if lexer == nil {
 		return nil
 	}

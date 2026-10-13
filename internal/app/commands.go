@@ -294,7 +294,7 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askOpen(v)
 	case string:
 		m.tree().Reveal(v)
-		m.openFile(v)
+		m.showFile(v)
 	}
 	return nil
 }

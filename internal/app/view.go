@@ -417,8 +417,11 @@ func (m *Model) renderChanges(r rect) []string {
 
 func (m *Model) renderView() []string {
 	kind := "file"
-	if m.view.diff {
+	switch {
+	case m.view.diff:
 		kind = "diff"
+	case m.view.rendered:
+		kind = "rendered"
 	}
 	header := fmt.Sprintf(" %s  %s", kind, m.view.path)
 	if where := ui.Dim.Render(tilde(m.view.dir)) + " "; ansi.StringWidth(header)+ansi.StringWidth(where) < m.width {
@@ -475,6 +478,7 @@ func (m *Model) renderHelp() []string {
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
 		"    tab/shift+tab next/previous changed file · d file ⇄ diff · e editor · q back",
 		"    w wrap long lines ⇄ cut them · o open with the system",
+		"    m a Markdown file as a document ⇄ its text · [ ] headings of a document",
 		"    v select lines · c write a note on them · x delete it · s send the notes",
 		"",
 		ui.Bold.Render("  Notes"),

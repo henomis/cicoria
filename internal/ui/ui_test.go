@@ -481,3 +481,97 @@ func TestPagerWrap(t *testing.T) {
 		t.Errorf("past a line taller than the screen: cursor %d, top %d", p.Cursor, p.Top)
 	}
 }
+
+func TestMarkdown(t *testing.T) {
+	doc := Markdown(strings.Join([]string{
+		"# Title",                   // 1
+		"",                          // 2
+		"Some **bold** text with a", // 3
+		"[link](https://example.com) &amp; `code`.", // 4
+		"",                 // 5
+		"## Lists",         // 6
+		"",                 // 7
+		"- one",            // 8
+		"  - [x] nested",   // 9
+		"",                 // 10
+		"> quoted",         // 11
+		"",                 // 12
+		"```go",            // 13
+		"func main() {}",   // 14
+		"```",              // 15
+		"",                 // 16
+		"| Name | Count |", // 17
+		"|------|------:|", // 18
+		"| a    | 1     |", // 19
+	}, "\n"), true)
+
+	var got []string
+	for _, l := range doc.Lines {
+		got = append(got, ansi.Strip(l))
+	}
+	want := []string{
+		" Title ",
+		"",
+		"Some bold text with a link (https://example.com) & code.",
+		"",
+		"Lists",
+		"",
+		"• one",
+		"  • ☑ nested",
+		"",
+		"┃ quoted",
+		"",
+		"    func main() {}",
+		"",
+		"Name │ Count",
+		"─────┼──────",
+		"a    │     1",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("rendered:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	// Each line knows the lines of the file it shows, and a paragraph is
+	// one line of however many.
+	spans := []Span{{1, 1}, {}, {3, 4}, {}, {6, 6}, {}, {8, 8}, {9, 9}, {}, {11, 11}, {}, {14, 14}, {}, {17, 17}, {}, {19, 19}}
+	if !slices.Equal(doc.Spans, spans) {
+		t.Errorf("spans = %v, want %v", doc.Spans, spans)
+	}
+	if !slices.Equal(doc.Heads, []int{0, 4}) {
+		t.Errorf("headings on lines %v", doc.Heads)
+	}
+	if !strings.Contains(doc.Lines[2], Bold.Render("bold")) {
+		t.Errorf("bold text is not bold: %q", doc.Lines[2])
+	}
+
+	if !IsMarkdown("docs/README.MD") || IsMarkdown("main.go") {
+		t.Error("a Markdown file is told by its name")
+	}
+}
+
+func TestPagerHang(t *testing.T) {
+	var p Pager
+	p.SetContent([]string{"• " + strings.TrimSpace(strings.Repeat("word ", 12)), "last"}, nil)
+	p.Hang, p.Wrap = []string{"  "}, true
+	const w, h = 30, 5
+
+	// The rows a line is wrapped to stay under its text, not its bullet.
+	rows := p.View(w, h)
+	var words int
+	for i, r := range rows[:3] {
+		text := ansi.Strip(ansi.Cut(r, gutter, w))
+		if start := "  w"; i > 0 && !strings.HasPrefix(text, start) {
+			t.Errorf("row %d of a wrapped item = %q", i, text)
+		}
+		if ansi.StringWidth(r) != w {
+			t.Errorf("row %d is %d cells wide", i, ansi.StringWidth(r))
+		}
+		words += strings.Count(text, "word")
+	}
+	if words != 12 || !strings.HasPrefix(ansi.Strip(ansi.Cut(rows[0], gutter, w)), "• word") {
+		t.Errorf("a wrapped item shows %d words: %q", words, rows)
+	}
+	if got := strings.TrimSpace(ansi.Strip(rows[3])); got != "last" {
+		t.Errorf("the row under a wrapped item = %q", got)
+	}
+}

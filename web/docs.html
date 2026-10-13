@@ -164,10 +164,11 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>space, b</td><td>A page down, up</td></tr>
           <tr><td>g, G</td><td>First, last line</td></tr>
           <tr><td>/, n, N</td><td>Search, next match, previous match</td></tr>
-          <tr><td>[, ]</td><td>Previous, next hunk of a diff</td></tr>
+          <tr><td>[, ]</td><td>Previous, next hunk of a diff, or heading of a document</td></tr>
           <tr><td>tab, shift+tab</td><td>Next, previous changed file</td></tr>
           <tr><td>d</td><td>Switch between the file and its diff</td></tr>
           <tr><td>w</td><td>Wrap long lines, or cut them again</td></tr>
+          <tr><td>m</td><td>Switch a Markdown file between the document and its text</td></tr>
           <tr><td>e</td><td>Open the file in <code>$VISUAL</code> or <code>$EDITOR</code></td></tr>
           <tr><td>o</td><td>Open the file with the system: an image in the viewer, a web page in the browser</td></tr>
           <tr><td>@</td><td>Mention the file to the agent</td></tr>
@@ -175,6 +176,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>q</td><td>Back to the workspace</td></tr>
         </tbody>
       </table></div>
+      <p>A Markdown file opened from the file tree or by its name is shown as the document it describes: headings, lists, tables and coloured code, wrapped to the screen. <kbd>m</kbd> shows its text instead, at the same place, and the choice holds for the files opened after it. Notes are written on the text, and the document marks the passages that have one. A file opened from the changes panel, or next to its diff, is always text.</p>
     </section>
 
     <section id="notes">

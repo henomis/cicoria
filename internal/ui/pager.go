@@ -45,6 +45,10 @@ type Pager struct {
 	// Wrap says a line too long for the screen goes on in the rows under it
 	// instead of being cut.
 	Wrap bool
+	// Hang is what the rows a line is wrapped to start with, after the
+	// first: the indent of a list item. It may be nil, and SetContent
+	// drops it.
+	Hang []string
 	// width is how wide the pager was last drawn, and wrapped the rows of
 	// the lines that were wrapped to it so far.
 	width   int
@@ -66,7 +70,7 @@ func (p *Pager) SetContent(lines []string, marks []int) {
 	for i, l := range lines {
 		p.plain[i] = strings.ToLower(ansi.Strip(l))
 	}
-	p.Top, p.Cursor, p.selecting, p.wrapped = 0, 0, false, nil
+	p.Top, p.Cursor, p.selecting, p.wrapped, p.Hang = 0, 0, false, nil, nil
 	p.Search(p.query)
 }
 
@@ -82,7 +86,7 @@ func (p *Pager) rows(i, height int) []string {
 	}
 	rows, ok := p.wrapped[i]
 	if !ok {
-		rows = strings.Split(lipgloss.Wrap(p.lines[i], text, ""), "\n")
+		rows = p.wrap(i, text)
 		if p.wrapped == nil {
 			p.wrapped = map[int][]string{}
 		}
@@ -90,6 +94,32 @@ func (p *Pager) rows(i, height int) []string {
 	}
 	if height = max(height, 1); len(rows) > height {
 		rows = append(slices.Clone(rows[:height-1]), ansi.Truncate(rows[height-1], text-1, "")+"…")
+	}
+	return rows
+}
+
+// minHang is the least width of text that is still indented under a line.
+const minHang = 20
+
+// wrap returns line i on rows of width cells.
+func (p *Pager) wrap(i, width int) []string {
+	var hang string
+	if i < len(p.Hang) {
+		hang = p.Hang[i]
+	}
+	indent := ansi.StringWidth(hang)
+	if indent == 0 || width-indent < minHang {
+		return strings.Split(lipgloss.Wrap(p.lines[i], width, ""), "\n")
+	}
+	// The line starts with as much as its other rows are indented by.
+	l := p.lines[i]
+	rows := strings.Split(lipgloss.Wrap(ansi.Cut(l, indent, ansi.StringWidth(l)), width-indent, ""), "\n")
+	for j := range rows {
+		if j == 0 {
+			rows[j] = ansi.Cut(l, 0, indent) + rows[j]
+		} else {
+			rows[j] = hang + rows[j]
+		}
 	}
 	return rows
 }

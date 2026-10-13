@@ -172,7 +172,7 @@ func (m *Model) filesKey(key string) tea.Cmd {
 				return m.refreshNow()
 			}
 		} else if row.Path != "" {
-			m.openFile(row.Path)
+			m.showFile(row.Path)
 		}
 	case "d":
 		if c, ok := m.change(row.Path); ok {
