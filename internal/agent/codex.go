@@ -110,6 +110,7 @@ type codexHook struct {
 	TranscriptPath string `json:"transcript_path"`
 	Cwd            string `json:"cwd"`
 	ToolName       string `json:"tool_name"`
+	LastMessage    string `json:"last_assistant_message"`
 	// ToolInput is an object for most tools, but not for all of them.
 	ToolInput json.RawMessage `json:"tool_input"`
 }
@@ -134,7 +135,9 @@ func (c *Codex) mapHook(h codexHook) (Update, bool) {
 		// already. A conversation that is resumed has a count already.
 		t := c.tallies.count(h.TranscriptPath, codexLine)
 		return Update{Status: Working, HasStatus: true, ContextTokens: t.context, InputTokens: t.in, OutputTokens: t.out}, true
-	case "UserPromptSubmit", "PreToolUse":
+	case "UserPromptSubmit":
+		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
+	case "PreToolUse":
 		return Update{Status: Working, HasStatus: true}, true
 	case "PermissionRequest":
 		return Update{Status: NeedsInput, HasStatus: true}, true
@@ -143,13 +146,14 @@ func (c *Codex) mapHook(h codexHook) (Update, bool) {
 	case "Interrupt":
 		// The user stopped the turn: there is no answer to follow up on, and
 		// what waits in the queue stays there.
-		return Update{Status: Idle, HasStatus: true}, true
+		return Update{Status: Idle, HasStatus: true, Interrupted: true}, true
 	case "Stop":
 		t := c.tallies.count(h.TranscriptPath, codexLine)
 		return Update{
 			Status:        Idle,
 			HasStatus:     true,
 			TurnEnded:     true,
+			Answer:        h.LastMessage,
 			ContextTokens: t.context,
 			InputTokens:   t.in,
 			OutputTokens:  t.out,

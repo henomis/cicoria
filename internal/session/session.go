@@ -17,6 +17,7 @@ package session
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -80,12 +81,63 @@ type Session struct {
 	Notes []Note
 
 	// Queue holds messages waiting to be sent to the agent, one per turn.
-	Queue []string
+	Queue []Message
 	// Paused holds the queue back.
 	Paused bool
+	// Answering is the question of another session the agent is working on:
+	// what it says at the end of its turn goes back there.
+	Answering *Message
+	// asked is how far the turn for that question got.
+	asked struct {
+		// started says the agent took the question; prompt is its name for
+		// it, when it tells.
+		started bool
+		prompt  string
+	}
 
 	lastInput  time.Time
 	lastOutput time.Time
+}
+
+// Message is one message of a queue.
+type Message struct {
+	Text string `json:"text"`
+	// ReplyTo is the ID of the session the agent's answer goes back to, when
+	// the message is a question asked from another session.
+	ReplyTo string `json:"reply_to,omitempty"`
+	// Then is what the session that asked is told to do with the answer.
+	Then string `json:"then,omitempty"`
+}
+
+// UnmarshalJSON reads a message. Queues saved before a message could be a
+// question hold its text alone.
+func (m *Message) UnmarshalJSON(data []byte) error {
+	if json.Unmarshal(data, &m.Text) == nil {
+		return nil
+	}
+	type message Message
+	return json.Unmarshal(data, (*message)(m))
+}
+
+// Answer writes what the session called from replied to a question, as a
+// message for the session the question was asked from.
+func Answer(from string, q Message, answer string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "I asked the session %q:\n", from)
+	quote(&b, q.Text)
+	b.WriteString("\nIt answered:\n")
+	quote(&b, answer)
+	if q.Then != "" {
+		b.WriteString("\n" + q.Then + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// quote writes a text as quoted lines.
+func quote(b *strings.Builder, text string) {
+	for line := range strings.SplitSeq(strings.TrimSpace(text), "\n") {
+		b.WriteString(strings.TrimRight("> "+line, " ") + "\n")
+	}
 }
 
 // Note is a remark of the user on some lines of a file.
@@ -296,18 +348,18 @@ func (s *Session) Stalled(now time.Time) bool {
 }
 
 // Enqueue adds a message at the end of the queue.
-func (s *Session) Enqueue(text string) {
-	s.Queue = append(s.Queue, text)
+func (s *Session) Enqueue(msg Message) {
+	s.Queue = append(s.Queue, msg)
 }
 
 // Dequeue takes the first message off the queue.
-func (s *Session) Dequeue() (string, bool) {
+func (s *Session) Dequeue() (Message, bool) {
 	if len(s.Queue) == 0 {
-		return "", false
+		return Message{}, false
 	}
-	text := s.Queue[0]
+	msg := s.Queue[0]
 	s.Queue = s.Queue[1:]
-	return text, true
+	return msg, true
 }
 
 // RemoveQueued drops message i from the queue.
@@ -326,6 +378,45 @@ func (s *Session) MoveQueued(i, delta int) int {
 	}
 	s.Queue[i], s.Queue[j] = s.Queue[j], s.Queue[i]
 	return j
+}
+
+// Ask records that the message just sent to the agent is a question from
+// another session.
+func (s *Session) Ask(q Message) {
+	s.Answering = &q
+	s.asked.started, s.asked.prompt = false, ""
+}
+
+// Settle follows the question of another session through the agent's turn.
+// It returns the question once an update settles it, and whether the turn
+// it started ended, which makes what the agent said its answer. A turn that
+// failed, that the user stopped, or that gave way to another message has
+// none.
+func (s *Session) Settle(u agent.Update) (q *Message, answered bool) {
+	q = s.Answering
+	switch {
+	case q == nil:
+		return nil, false
+	case u.Failed:
+	case !s.asked.started:
+		// What happens before the agent takes the question is about an
+		// earlier turn.
+		if u.TurnStarted {
+			s.asked.started, s.asked.prompt = true, u.Prompt
+		}
+		return nil, false
+	case u.TurnEnded:
+		// An agent that names its messages says whose turn this was.
+		answered = s.asked.prompt == "" || u.Prompt == "" || u.Prompt == s.asked.prompt
+	case u.Interrupted:
+	case u.TurnStarted && (s.asked.prompt == "" || u.Prompt == ""):
+		// Another message was taken before the turn ended. With names, the
+		// end of the turn tells whether it was still the question's.
+	default:
+		return nil, false
+	}
+	s.Answering = nil
+	return q, answered
 }
 
 // CanSend reports whether the agent is there to receive a message.
@@ -348,6 +439,7 @@ func (s *Session) Sent(now time.Time) {
 
 // Exit records that the agent's process ended.
 func (s *Session) Exit(active bool) {
+	s.Answering = nil
 	s.setStatus(agent.Exited, active)
 }
 

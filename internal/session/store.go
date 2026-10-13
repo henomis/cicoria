@@ -44,8 +44,8 @@ type Saved struct {
 	Notes []Note `json:"notes,omitempty"`
 	// Queue and Paused are the messages waiting to be sent and whether they
 	// are held back.
-	Queue  []string `json:"queue,omitempty"`
-	Paused bool     `json:"paused,omitempty"`
+	Queue  []Message `json:"queue,omitempty"`
+	Paused bool      `json:"paused,omitempty"`
 }
 
 // State is a saved workspace.

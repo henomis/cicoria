@@ -52,6 +52,8 @@ Codex CLI is started with one `-c hooks.<Event>=…` option for each hook, which
 
 Queued messages depend on this: a message goes out when an `Update` says the turn ended, which only Claude Code, Copilot CLI and Codex CLI report.
 
+A queued message can be a question from another session (`session.Message.ReplyTo`). The session that gets it remembers it as `Answering`, and `Update.Answer`, what the agent said last in the turn that ended, is queued back for the session that asked. Claude Code and Codex CLI give it in the payload of their `Stop` hook; for Copilot CLI it is read from the transcript. `Session.Settle` decides whether a turn that ended is the one the question started: it is not when another message was taken first (`Update.TurnStarted`), which is how an interrupted turn shows. Claude Code names the message a turn is for (`Update.Prompt`), which settles it exactly.
+
 ### How a conversation survives a restart
 
 The agent process stops with cicoria. A Claude session is started with `--session-id <id>` and, when a transcript for that ID exists under Claude Code's config directory, restarted with `--resume`. After `/clear` Claude Code reports a new conversation ID through the hooks, which is saved as the session's `Conversation` and resumed in preference. Copilot CLI works the same way with `--session-id` alone, which both names a new session and continues an existing one; its transcripts are under `$COPILOT_HOME/session-state`. Codex CLI names its conversations itself: the ID it reports is saved as `Conversation`, and the session is restarted with `resume <id>` when a transcript for it exists under `$CODEX_HOME/sessions`.

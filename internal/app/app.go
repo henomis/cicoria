@@ -617,6 +617,7 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 	}
 
 	var cmds []tea.Cmd
+	cmds = append(cmds, m.answer(s, u))
 	if u.TurnEnded {
 		cmds = append(cmds, m.trySend(s))
 	}

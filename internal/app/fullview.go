@@ -366,7 +366,7 @@ func (m *Model) sendReview(queue bool) tea.Cmd {
 	// The review is over: back to the agent it went to.
 	m.focus = focusAgent
 	if queue {
-		return m.enqueue(s, text)
+		return m.enqueue(s, session.Message{Text: text})
 	}
 	m.save()
 	return m.deliver(s, text)

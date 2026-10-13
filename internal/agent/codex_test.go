@@ -34,7 +34,7 @@ func TestCodexMapEvent(t *testing.T) {
 	}{
 		// The first hook to run comes with the first message.
 		{`{"hook_event_name":"SessionStart","source":"startup"}`, working, true},
-		{`{"hook_event_name":"UserPromptSubmit","prompt":"hi"}`, working, true},
+		{`{"hook_event_name":"UserPromptSubmit","prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
 		{`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`, working, true},
 		{`{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"rm a"}}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		// A command may change files, but does not say which.
@@ -50,8 +50,8 @@ func TestCodexMapEvent(t *testing.T) {
 		},
 		{`{"hook_event_name":"PostToolUse","tool_name":"apply_patch","tool_input":"*** Begin Patch"}`, working, true},
 		// A turn the user stopped is over, with no answer to follow up on.
-		{`{"hook_event_name":"Interrupt"}`, Update{Status: Idle, HasStatus: true}, true},
-		{`{"hook_event_name":"Stop","last_assistant_message":"done"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true}, true},
+		{`{"hook_event_name":"Interrupt"}`, Update{Status: Idle, HasStatus: true, Interrupted: true}, true},
+		{`{"hook_event_name":"Stop","last_assistant_message":"done"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Answer: "done"}, true},
 		{`{"hook_event_name":"Stop","session_id":"conv"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Conversation: "conv"}, true},
 		{`{"hook_event_name":"SessionEnd","reason":"other"}`, Update{}, false},
 		{`garbage`, Update{}, false},

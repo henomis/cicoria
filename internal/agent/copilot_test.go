@@ -35,7 +35,7 @@ func TestCopilotMapEvent(t *testing.T) {
 	}{
 		// The first hook to run comes with the first message.
 		{"sessionStart", `{"source":"new"}`, working, true},
-		{"userPromptSubmitted", `{"prompt":"hi"}`, working, true},
+		{"userPromptSubmitted", `{"prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
 		{"preToolUse", `{"toolName":"bash","toolArgs":{"command":"ls"}}`, working, true},
 		{"preToolUse", `{"toolName":"ask_user","toolArgs":{"question":"which?"}}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		{"postToolUse", `{"toolName":"edit","toolArgs":{"path":"/p/a.go","old_str":"a","new_str":"b"}}`, Update{Status: Working, HasStatus: true, File: "/p/a.go"}, true},
@@ -165,6 +165,24 @@ func TestCopilotCountsTokens(t *testing.T) {
 	write(`{"type":"session.usage_record","data":{"usage":{"inputTokens":13201,"outputTokens":98}}}`)
 	u, _ = c.MapEvent(ipc.Event{Name: "agentStop", Payload: json.RawMessage(`{"sessionId":"conv"}`)})
 	check(u, 13201, 39363, 222)
+
+	// What the model said last since the user's message is the answer of
+	// the turn; a reply that only calls tools says nothing.
+	write(
+		`{"type":"assistant.message","data":{"content":"of the turn before"}}`,
+		`{"type":"user.message","data":{"content":"next"}}`,
+	)
+	if u, _ = c.MapEvent(ipc.Event{Name: "agentStop", Payload: json.RawMessage(`{"sessionId":"conv"}`)}); u.Answer != "" {
+		t.Errorf("answer of a turn that said nothing = %q", u.Answer)
+	}
+	write(
+		`{"type":"assistant.message","data":{"content":"looking","toolRequests":[{}]}}`,
+		`{"type":"assistant.message","data":{"content":"it is 42"}}`,
+		`{"type":"assistant.message","data":{"content":"","toolRequests":[{}]}}`,
+	)
+	if u, _ = c.MapEvent(ipc.Event{Name: "agentStop", Payload: json.RawMessage(`{"sessionId":"conv"}`)}); u.Answer != "it is 42" {
+		t.Errorf("answer = %q, want %q", u.Answer, "it is 42")
+	}
 
 	// A conversation that is resumed has its count from the first message.
 	u, _ = NewCopilot(nil).MapEvent(ipc.Event{Name: "sessionStart", Payload: json.RawMessage(`{"sessionId":"conv"}`)})

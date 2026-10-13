@@ -55,6 +55,7 @@ func init() {
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }},
 		{"g", "Focus changes", func(m *Model) tea.Cmd { return m.setFocus(focusChanges) }},
 		{"m", "Queue a message for the agent", (*Model).askQueue},
+		{"k", "Send a message to another session, or ask it", (*Model).askSession},
 		{"u", "Focus queue", func(m *Model) tea.Cmd { return m.setFocus(focusQueue) }},
 		{"d", "Review changes", (*Model).review},
 		{"t", "Send review notes to the agent", (*Model).askSendNotes},
@@ -290,6 +291,10 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askDir(v)
 	case sendNotes:
 		return m.sendReview(v.queue)
+	case ask:
+		return m.askReply(v)
+	case askHow:
+		return m.askMessage(ask(v))
 	case workspace:
 		return m.askOpen(v)
 	case string:

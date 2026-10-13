@@ -21,6 +21,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/henomis/cicoria/internal/agent"
 	"github.com/henomis/cicoria/internal/session"
 	"github.com/henomis/cicoria/internal/ui"
 )
@@ -43,16 +44,130 @@ func (m *Model) askQueue() tea.Cmd {
 		if s == nil || text == "" {
 			return nil
 		}
-		return m.enqueue(s, text)
+		return m.enqueue(s, session.Message{Text: text})
 	}
 	m.prompt = p
 	return nil
 }
 
+// ask is the choice of a session to send a message to from another one,
+// which gets the answer when reply is set.
+type ask struct {
+	from, to string
+	reply    bool
+}
+
+// askHow is the choice between a message and a question.
+type askHow ask
+
+// askSession asks which other session to send a message to.
+func (m *Model) askSession() tea.Cmd {
+	from := m.current()
+	if from == nil {
+		m.say(errNoSession.Error())
+		return nil
+	}
+	var items []ui.Item
+	for _, s := range m.sessions {
+		if s != from {
+			items = append(items, ui.Item{Label: s.Name, Hint: s.Adapter.Name(), Value: ask{from: from.ID, to: s.ID}})
+		}
+	}
+	if len(items) == 0 {
+		m.say("there is no other session")
+		return nil
+	}
+	m.openPalette("message for › ", items)
+	return nil
+}
+
+// askReply asks whether the answer to the message should come back to the
+// session it is sent from.
+func (m *Model) askReply(a ask) tea.Cmd {
+	to, _ := m.byID(a.to)
+	from, _ := m.byID(a.from)
+	if to == nil || from == nil {
+		return nil
+	}
+	// Only an agent that says when its turn ends has an answer to take.
+	if !to.Adapter.ReportsStatus() {
+		return m.askMessage(a)
+	}
+	m.openPalette(fmt.Sprintf("message for %s › ", to.Name), []ui.Item{
+		{Label: "Send a message", Value: askHow(a)},
+		{Label: "Ask, and get the answer here", Hint: "goes to " + from.Name + " when " + to.Name + " ends its turn", Value: askHow{from: a.from, to: a.to, reply: true}},
+	})
+	return nil
+}
+
+// askMessage asks for the message and, when its answer comes back, for what
+// the session that gets it is to do with it.
+func (m *Model) askMessage(a ask) tea.Cmd {
+	to, _ := m.byID(a.to)
+	from, _ := m.byID(a.from)
+	if to == nil || from == nil {
+		return nil
+	}
+	// send queues the message, unless its session was closed in the meantime.
+	send := func(msg session.Message) tea.Cmd {
+		to, _ := m.byID(a.to)
+		if to == nil {
+			return nil
+		}
+		return m.enqueue(to, msg)
+	}
+
+	verb := "queue for"
+	if a.reply {
+		verb = "ask"
+	}
+	p := &prompt{input: ui.Input{Prompt: fmt.Sprintf("%s %s: ", verb, to.Name)}}
+	p.done = func(text string) tea.Cmd {
+		switch {
+		case text == "":
+			return nil
+		case !a.reply:
+			return send(session.Message{Text: text})
+		}
+		then := &prompt{input: ui.Input{Prompt: fmt.Sprintf("then tell %s (optional): ", from.Name)}}
+		then.done = func(follow string) tea.Cmd {
+			return send(session.Message{Text: text, ReplyTo: a.from, Then: follow})
+		}
+		m.prompt = then
+		return nil
+	}
+	m.prompt = p
+	return nil
+}
+
+// answer follows the question of another session through what its agent
+// reports, and sends what it said at the end of the turn back to the session
+// that asked.
+func (m *Model) answer(s *session.Session, u agent.Update) tea.Cmd {
+	q, answered := s.Settle(u)
+	if q == nil {
+		return nil
+	}
+	to, _ := m.byID(q.ReplyTo)
+	switch {
+	case to == nil:
+		m.say(s.Name + " answered a session that is gone")
+		return nil
+	case !answered:
+		m.say(s.Name + " did not finish its turn: no answer for " + to.Name)
+		return nil
+	case strings.TrimSpace(u.Answer) == "":
+		m.say(s.Name + " ended its turn without an answer for " + to.Name)
+		return nil
+	}
+	m.say(s.Name + " answered " + to.Name)
+	return m.enqueue(to, session.Message{Text: session.Answer(s.Name, *q, u.Answer)})
+}
+
 // enqueue adds a message to a session's queue. An agent that is idle gets
 // it right away.
-func (m *Model) enqueue(s *session.Session, text string) tea.Cmd {
-	s.Enqueue(text)
+func (m *Model) enqueue(s *session.Session, msg session.Message) tea.Cmd {
+	s.Enqueue(msg)
 	m.save()
 	return m.trySend(s)
 }
@@ -71,10 +186,14 @@ func (m *Model) sendNext(s *session.Session) tea.Cmd {
 	if !s.CanSend() {
 		return nil
 	}
-	text, _ := s.Dequeue()
+	msg, _ := s.Dequeue()
 	m.queueCursor = max(min(m.queueCursor, len(s.Queue)-1), 0)
 	m.save()
-	return m.deliver(s, text)
+	// The turn this starts is the answer to a question from another session.
+	if msg.ReplyTo != "" {
+		s.Ask(msg)
+	}
+	return m.deliver(s, msg.Text)
 }
 
 // deliver gives a message to a running agent: pasted now, with enter
@@ -128,7 +247,7 @@ func (m *Model) queueKey(key string) tea.Cmd {
 	case "e":
 		switch {
 		case i >= len(s.Queue):
-		case strings.Contains(s.Queue[i], "\n"):
+		case strings.Contains(s.Queue[i].Text, "\n"):
 			m.say("a message of several lines cannot be changed here")
 		default:
 			m.askEdit(s, i)
@@ -140,13 +259,13 @@ func (m *Model) queueKey(key string) tea.Cmd {
 // askEdit lets the user change a queued message. Emptying it changes
 // nothing; deleting has its own key.
 func (m *Model) askEdit(s *session.Session, i int) {
-	id, old := s.ID, s.Queue[i]
+	id, old := s.ID, s.Queue[i].Text
 	p := &prompt{input: ui.Input{Prompt: "edit message: "}}
 	p.input.Set(old)
 	p.done = func(text string) tea.Cmd {
 		// The queue may have moved on while the message was being edited.
-		if s, _ := m.byID(id); s != nil && text != "" && i < len(s.Queue) && s.Queue[i] == old {
-			s.Queue[i] = text
+		if s, _ := m.byID(id); s != nil && text != "" && i < len(s.Queue) && s.Queue[i].Text == old {
+			s.Queue[i].Text = text
 			m.save()
 		}
 		return nil
@@ -171,9 +290,13 @@ func (m *Model) renderQueue(r rect) []string {
 			lead = ui.Accent.Render("▸ ")
 		}
 		// Of a message of several lines, the first tells which one it is.
-		text, more, _ := strings.Cut(s.Queue[i], "\n")
+		text, more, _ := strings.Cut(s.Queue[i].Text, "\n")
 		if more != "" {
 			text += " …"
+		}
+		// A question says who gets the answer.
+		if from, _ := m.byID(s.Queue[i].ReplyTo); from != nil {
+			text = "from " + from.Name + ": " + text
 		}
 		lines = append(lines, ui.Selected(lead+text, inner, focused && i == cursor, true))
 	}

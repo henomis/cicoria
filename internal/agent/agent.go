@@ -70,9 +70,18 @@ type Update struct {
 	// Status is the new status, when HasStatus is set.
 	Status    Status
 	HasStatus bool
+	// TurnStarted says the agent took a message and begins to answer it.
+	TurnStarted bool
+	// Prompt is the agent's own name for the message a turn is for, when it
+	// tells: the start and the end of one turn have the same.
+	Prompt string
+	// Interrupted says the user stopped the turn before it had an answer.
+	Interrupted bool
 	// TurnEnded says the agent finished answering and waits for the next
 	// message.
 	TurnEnded bool
+	// Answer is what the agent said last in the turn that ended, if known.
+	Answer string
 	// Failed says the turn ended on an error instead of an answer.
 	Failed bool
 	// Conversation is the agent's own name for the conversation it is in,

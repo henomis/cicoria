@@ -32,7 +32,10 @@ func TestClaudeMapEvent(t *testing.T) {
 		ok      bool
 	}{
 		{`{"hook_event_name":"SessionStart"}`, Update{Status: Idle, HasStatus: true}, true},
-		{`{"hook_event_name":"UserPromptSubmit"}`, Update{Status: Working, HasStatus: true}, true},
+		{`{"hook_event_name":"UserPromptSubmit"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
+		// The start and the end of a turn name the message it is for.
+		{`{"hook_event_name":"UserPromptSubmit","prompt_id":"p1"}`, Update{Status: Working, HasStatus: true, TurnStarted: true, Prompt: "p1"}, true},
+		{`{"hook_event_name":"Stop","prompt_id":"p1"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Prompt: "p1"}, true},
 		{`{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/p/a.go"}}`, Update{Status: Working, HasStatus: true}, true},
 		{`{"hook_event_name":"PostToolUse","tool_input":{"file_path":"/p/a.go"}}`, Update{Status: Working, HasStatus: true, File: "/p/a.go"}, true},
 		{`{"hook_event_name":"PostToolUse","tool_input":{"command":"ls"}}`, Update{Status: Working, HasStatus: true}, true},
@@ -47,6 +50,7 @@ func TestClaudeMapEvent(t *testing.T) {
 		{`{"hook_event_name":"Stop"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true}, true},
 		// A turn that failed is over, without being an answer.
 		{`{"hook_event_name":"StopFailure"}`, Update{Status: Idle, HasStatus: true, Failed: true}, true},
+		{`{"hook_event_name":"Stop","last_assistant_message":"done"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Answer: "done"}, true},
 		{`{"hook_event_name":"Stop","session_id":"conv"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Conversation: "conv"}, true},
 		{`{"hook_event_name":"SubagentStop"}`, Update{}, false},
 		{`garbage`, Update{}, false},

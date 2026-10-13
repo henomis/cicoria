@@ -84,6 +84,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>w</td><td>Open another workspace in place of this one</td></tr>
           <tr><td>s, f, g</td><td>Focus the sessions, files, changes panel</td></tr>
           <tr><td>m</td><td>Queue a message for the agent</td></tr>
+          <tr><td>k</td><td>Send a message to another session, or ask it and get the answer here</td></tr>
           <tr><td>u</td><td>Focus the queue panel</td></tr>
           <tr><td>d</td><td>Review changes: open the diff of the selected file</td></tr>
           <tr><td>t</td><td>Send your review notes to the agent</td></tr>
@@ -215,6 +216,24 @@ make this a duration</pre>
         </tbody>
       </table></div>
       <p>Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, marked manual: each message is sent when you press <kbd>enter</kbd> in the panel.</p>
+      <h3>Asking another session</h3>
+      <p><kbd>ctrl+a</kbd> <kbd>k</kbd> sends a message from the session on screen to another one. Pick the session, then choose:</p>
+      <div class="table"><table>
+        <thead><tr><th>Choice</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>Send a message</td><td>Queues it there, as <kbd>ctrl+a</kbd> <kbd>m</kbd> would do from that session</td></tr>
+          <tr><td>Ask, and get the answer here</td><td>Queues the question there, shown as <code>from &lt;session&gt;</code>. What its agent says at the end of the turn the question starts is queued back for the session you asked from</td></tr>
+        </tbody>
+      </table></div>
+      <p>When you ask, a second prompt takes what the session that asked should do with the answer. Leave it empty to only hand the answer over. That session receives one message:</p>
+      <pre>I asked the session "api":
+&gt; What does GET /orders return when the cart is empty?
+
+It answered:
+&gt; A 200 with an empty `items` array, never a 404.
+
+Update the client to handle it.</pre>
+      <p>Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code, Copilot CLI and Codex CLI can be asked, since the answer is taken when the turn ends. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.</p>
     </section>
 
     <section id="agents">

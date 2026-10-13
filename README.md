@@ -26,6 +26,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Keeps the changes of a session reviewable**: what is not committed or, one key away, everything since the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
 - **Lets you write notes on lines of code** and send them to the agent as one message.
 - **Queues messages** and sends each one when the agent ends its turn.
+- **Lets one session ask another**: the answer comes back by itself, with what to do next.
 - **Counts tokens** for Claude Code, Copilot CLI and Codex CLI sessions.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
@@ -69,6 +70,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `w` | Open another workspace in place of this one |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `m` | Queue a message for the agent |
+| `k` | Send a message to another session, or ask it and get the answer here |
 | `u` | Focus the queue panel |
 | `d` | Review changes (full-screen diff) |
 | `t` | Send review notes to the agent |
@@ -132,6 +134,27 @@ While an agent works you can line up what to tell it next. `ctrl+a m` asks for a
 In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses and resumes, `e` edits, `x` deletes, `J`/`K` reorder, `a` adds. Pause when a turn ends with a question you want to answer first.
 
 Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
+
+### Asking another session
+
+`ctrl+a k` sends a message from the session on screen to another one. Pick the session, then either:
+
+- **Send a message**: it is queued there, as `ctrl+a m` would do from that session.
+- **Ask, and get the answer here**: the question is queued there, shown as `from <session>`. What its agent says at the end of the turn the question starts is queued back for the session you asked from, together with the question. A second prompt takes what that session should do with the answer; leave it empty to only hand the answer over.
+
+The session that asked receives one message:
+
+```
+I asked the session "api":
+> What does GET /orders return when the cart is empty?
+
+It answered:
+> A 200 with an empty `items` array, never a 404.
+
+Update the client to handle it.
+```
+
+Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code, Copilot CLI and Codex CLI can be asked, since the answer is taken when the turn ends. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.
 
 ## Tokens
 

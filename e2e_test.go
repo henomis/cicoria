@@ -39,6 +39,7 @@ while read -r cmd arg; do
     work) hook '{"hook_event_name":"UserPromptSubmit"}' ;;
     ask)  hook '{"hook_event_name":"Notification","notification_type":"permission_prompt"}' ;;
     stop) hook '{"hook_event_name":"Stop"}' ;;
+    reply) hook "{\"hook_event_name\":\"Stop\",\"last_assistant_message\":\"$arg\"}" ;;
     fail) hook '{"hook_event_name":"StopFailure"}' ;;
     news) hook '{"hook_event_name":"Notification","notification_type":"auth_success"}' ;;
     edit) echo "hello from the agent" > "$arg"
@@ -47,7 +48,7 @@ while read -r cmd arg; do
     size) echo "size $(stty size)" ;;
     pwd)  echo "in $PWD" ;;
     many) seq 1 100 ;;
-    *)    echo "got $cmd" ;;
+    *)    echo "got $cmd $arg" ;;
   esac
 done
 `
@@ -1099,6 +1100,108 @@ func (w *workspace) queue(messages ...string) {
 		// One message is asked for at a time.
 		w.gone("queue for ")
 	}
+}
+
+// TestAskSession sends a message from one session to another, with and
+// without its answer coming back.
+func TestAskSession(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	// With one session there is nobody to send to.
+	w.prefix('k')
+	w.see("there is no other session")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle")
+	w.line("work")
+	w.see("claude-2 · claude · working")
+
+	// A question from the first session waits in the queue of the second,
+	// which says where it is from.
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›", "claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message", "Ask, and get the answer here")
+	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("ask claude-2:")
+	w.line("ping")
+	w.see("then tell claude-1 (optional):")
+	w.line("carry on")
+	w.prefix('2')
+	w.see("Queue (1)", "▸ from claude-1: ping")
+
+	// The turn that was going on is not the answer; the one the question
+	// starts is.
+	w.line("reply early")
+	w.see("got ping")
+	w.gone("Queue (")
+	w.line("work")
+	w.line("reply pong")
+	w.see("claude-2 answered claude-1")
+	w.prefix('1')
+	w.see(`got I asked the session "claude-2":`, "got > ping", "got > pong", "got carry on")
+	if strings.Contains(w.tm.String(), "early") {
+		t.Fatal("the answer of another turn was sent back")
+	}
+
+	// A turn that gives way to another message was cut short, and has no
+	// answer.
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message")
+	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("ask claude-2:")
+	w.line("again")
+	w.see("then tell claude-1 (optional):")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.prefix('2')
+	w.see("got again")
+	w.line("work")
+	w.line("work")
+	w.see("claude-2 did not finish its turn: no answer for claude-1")
+	w.line("reply late")
+	w.see("claude-2 · claude · idle")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	if strings.Contains(w.tm.String(), "late") {
+		t.Fatal("the answer of a turn that was cut short was sent back")
+	}
+
+	// A message that is only sent brings nothing back.
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("queue for claude-2:")
+	w.line("hello")
+	w.prefix('2')
+	w.see("got hello")
+	w.line("reply unasked")
+	w.see("claude-2 · claude · idle")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	if strings.Contains(w.tm.String(), "unasked") {
+		t.Fatal("an answer nobody asked for was sent back")
+	}
+	w.quit()
 }
 
 func TestQueue(t *testing.T) {

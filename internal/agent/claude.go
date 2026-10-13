@@ -124,8 +124,10 @@ func claudeTranscript(dir, sessionID string) string {
 type claudeHook struct {
 	Event            string `json:"hook_event_name"`
 	SessionID        string `json:"session_id"`
+	PromptID         string `json:"prompt_id"`
 	TranscriptPath   string `json:"transcript_path"`
 	NotificationType string `json:"notification_type"`
+	LastMessage      string `json:"last_assistant_message"`
 	ToolInput        struct {
 		FilePath     string `json:"file_path"`
 		NotebookPath string `json:"notebook_path"`
@@ -140,7 +142,7 @@ func (c *Claude) MapEvent(ev ipc.Event) (Update, bool) {
 	}
 	u, ok := c.mapHook(h)
 	if ok {
-		u.Conversation = h.SessionID
+		u.Conversation, u.Prompt = h.SessionID, h.PromptID
 	}
 	return u, ok
 }
@@ -151,7 +153,9 @@ func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 		// A conversation that is resumed has a count already.
 		t := c.tallies.count(h.TranscriptPath, claudeLine)
 		return Update{Status: Idle, HasStatus: true, ContextTokens: t.context, InputTokens: t.in, OutputTokens: t.out}, true
-	case "UserPromptSubmit", "PreToolUse":
+	case "UserPromptSubmit":
+		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
+	case "PreToolUse":
 		return Update{Status: Working, HasStatus: true}, true
 	case "PostToolUse":
 		file := h.ToolInput.FilePath
@@ -170,6 +174,7 @@ func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 			Status:        Idle,
 			HasStatus:     true,
 			TurnEnded:     !failed,
+			Answer:        h.LastMessage,
 			Failed:        failed,
 			ContextTokens: t.context,
 			InputTokens:   t.in,
@@ -213,6 +218,9 @@ type tally struct {
 	// in and out are the tokens read and written by the model over the whole
 	// conversation; context is the size of the context at the last reply.
 	in, out, context int
+	// answer is what the model said last in the turn it is in, for the
+	// agents whose hooks do not tell.
+	answer string
 }
 
 // read counts what was added to the transcript since the last time, a line

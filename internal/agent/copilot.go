@@ -171,7 +171,7 @@ func (c *Copilot) mapHook(name string, h copilotHook) (Update, bool) {
 		t := c.count(h)
 		return Update{Status: Working, HasStatus: true, ContextTokens: t.context, InputTokens: t.in, OutputTokens: t.out}, true
 	case "userPromptSubmitted":
-		return Update{Status: Working, HasStatus: true}, true
+		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
 	case "preToolUse":
 		// A question to the user is a tool like the others.
 		if h.ToolName == "ask_user" {
@@ -198,6 +198,7 @@ func (c *Copilot) mapHook(name string, h copilotHook) (Update, bool) {
 			Status:        Idle,
 			HasStatus:     true,
 			TurnEnded:     true,
+			Answer:        t.answer,
 			ContextTokens: t.context,
 			InputTokens:   t.in,
 			OutputTokens:  t.out,
@@ -228,20 +229,32 @@ func (c *Copilot) count(h copilotHook) *tally {
 }
 
 // copilotLine counts one line of a Copilot CLI transcript, which records
-// what each model reply cost. The input counts what was cached too.
+// what each model reply cost, and keeps what the model said last since the
+// user's message. The input counts what was cached too.
 func copilotLine(t *tally, line []byte) {
 	var entry struct {
 		Type string `json:"type"`
 		Data struct {
-			Usage struct {
+			Content string `json:"content"`
+			Usage   struct {
 				Input  int `json:"inputTokens"`
 				Output int `json:"outputTokens"`
 			} `json:"usage"`
 		} `json:"data"`
 	}
-	if json.Unmarshal(line, &entry) != nil || entry.Type != "session.usage_record" {
+	if json.Unmarshal(line, &entry) != nil {
 		return
 	}
-	u := entry.Data.Usage
-	t.in, t.out, t.context = t.in+u.Input, t.out+u.Output, u.Input
+	switch entry.Type {
+	case "user.message":
+		t.answer = ""
+	case "assistant.message":
+		// A reply that only calls tools says nothing.
+		if entry.Data.Content != "" {
+			t.answer = entry.Data.Content
+		}
+	case "session.usage_record":
+		u := entry.Data.Usage
+		t.in, t.out, t.context = t.in+u.Input, t.out+u.Output, u.Input
+	}
 }
