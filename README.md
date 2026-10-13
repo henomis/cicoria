@@ -67,6 +67,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `1`-`9`, `n`, `p` | Go to a session |
 | `a` | Go to the next session that needs input |
 | `,` `r` `x` | Rename, restart, close the session |
+| `-` | Split: show another session below, or close the split |
+| `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `m` | Queue a message for the agent |
@@ -98,6 +100,12 @@ The files panel also lists what git ignores, in grey; an ignored folder is read 
 A session is one agent working in one directory, so one cicoria can hold sessions from several projects. `ctrl+a c` asks for the agent, then the directory (`tab` completes, `ctrl+w` deletes a path component, `ctrl+u` clears, and `~` and relative paths work), then a name, offering one that is free.
 
 Keep one session to a directory. The files and changes panels show the project of the session on screen, so two sessions in the same directory cannot be told apart by their changes; cicoria warns when you open a second one.
+
+### Two sessions on screen
+
+`ctrl+a -` splits the agent pane in two: the session on screen stays above, and the one you pick is shown below it. `ctrl+a tab`, or a click in the other pane, moves the keys from one to the other; the pane that has them is the one with the lit border, and the side panels show its project. Going to a session (`ctrl+a n`, `p`, `1`-`9`) puts it in the pane that has the keys, or moves the keys when it is already in the other one. The wheel scrolls the pane it is over.
+
+`ctrl+a -` again goes back to one pane, as does closing one of the two sessions. A terminal too short for two panes keeps one, and the split is not remembered across restarts.
 
 ### Status
 

@@ -1217,6 +1217,106 @@ func TestClickOnSession(t *testing.T) {
 	w.quit()
 }
 
+// The agent pane is split in two, and the keys go from one session to the
+// other.
+func TestSplit(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	// With one session there is nothing to show below.
+	w.prefix('-')
+	w.see("there is no other session")
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	w.see("one session on screen")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle")
+
+	w.prefix('-')
+	w.see("show below ›", "claude-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle", "claude-1 · claude · idle")
+	// The 39 rows above the status bar are shared: 20 above and 19 below,
+	// borders included.
+	w.line("size")
+	w.see("size 18 74")
+
+	// The keys go to the pane below, and back by the number of the session.
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	w.line("size")
+	w.see("size 17 74")
+	w.line("work")
+	w.see("claude-1 · claude · working", "claude-2 · claude · idle")
+	w.prefix('2')
+	w.line("work")
+	w.see("claude-1 · claude · working", "claude-2 · claude · working")
+
+	// Without the side panels the two are still told apart.
+	w.prefix('b')
+	w.gone("Sessions")
+	w.see("claude-1 · claude · working", "claude-2 · claude · working")
+	w.line("size")
+	w.see("size 18 138")
+	w.prefix('b')
+	w.see("Sessions")
+
+	// The same command goes back to one pane.
+	w.prefix('-')
+	w.gone("claude-1 · claude")
+	w.line("size")
+	w.see("size 37 74")
+
+	// A session that is closed leaves its pane to the other.
+	w.prefix('-')
+	w.see("show below ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-1 · claude · working")
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	w.prefix('x')
+	w.see("close claude-1 and stop its agent?")
+	w.typeText("y")
+	w.gone("claude-1")
+	w.see("claude-2 · claude · working")
+	w.prefix('q')
+	w.see("still working")
+	w.typeText("y")
+	select {
+	case <-w.tm.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatalf("did not quit; screen:\n%s", w.tm.String())
+	}
+}
+
+// A terminal that is too short for two panes keeps one.
+func TestSplitNeedsRoom(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 12)
+	w.see("claude-1 · claude · idle")
+	w.prefix('c')
+	w.see("agent ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle")
+	w.prefix('-')
+	w.see("show below ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("the terminal is too short for two sessions")
+	w.quit()
+}
+
 func TestQueue(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(140, 40)

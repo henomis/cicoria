@@ -50,6 +50,8 @@ func init() {
 		{",", "Rename session", (*Model).askRename},
 		{"r", "Restart session", (*Model).restart},
 		{"x", "Close session", (*Model).askClose},
+		{"-", "Split: show another session below, or close the split", (*Model).askSplit},
+		{"tab", "Go to the other pane of the split", (*Model).focusOther},
 		{"w", "Open another workspace…", (*Model).askWorkspace},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }},
@@ -96,17 +98,83 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 }
 
 // switchTo puts session i on screen, wrapping around the list. The side
-// panels follow it to its project.
+// panels follow it to its project. With the agent pane split, it takes the
+// pane that has the keys, and the keys go to the other pane when it is there.
 func (m *Model) switchTo(i int) tea.Cmd {
 	if len(m.sessions) == 0 {
 		return nil
 	}
-	m.active = (i + len(m.sessions)) % len(m.sessions)
+	i = (i + len(m.sessions)) % len(m.sessions)
+	if s := m.other(); s != nil && s == m.sessions[i] {
+		return m.focusOther()
+	}
+	m.active = i
+	if m.splitWith() == nil {
+		m.split, m.below = "", false
+	}
+	return m.shownNow()
+}
+
+// shownNow follows a change of the session that has the keys.
+func (m *Model) shownNow() tea.Cmd {
 	m.sessionCursor = m.active
 	m.focus = focusAgent
+	// A session that came on screen takes the size of its pane.
+	m.resize()
 	m.seen()
 	m.save()
 	return m.showProject()
+}
+
+// split is the choice of a session to show in the other pane.
+type split struct{ id string }
+
+// askSplit asks which session to show below the one on screen, or goes back
+// to one pane.
+func (m *Model) askSplit() tea.Cmd {
+	if m.splitWith() != nil {
+		m.split, m.below = "", false
+		m.resize()
+		return nil
+	}
+	var items []ui.Item
+	for i, s := range m.sessions {
+		if i != m.active {
+			items = append(items, ui.Item{Label: s.Name, Hint: s.Adapter.Name(), Value: split{s.ID}})
+		}
+	}
+	if len(items) == 0 {
+		m.say("there is no other session")
+		return nil
+	}
+	m.openPalette("show below › ", items)
+	return nil
+}
+
+// openSplit shows a session below the one on screen.
+func (m *Model) openSplit(id string) tea.Cmd {
+	m.split, m.below = id, false
+	if m.other() == nil {
+		m.split = ""
+		m.say("the terminal is too short for two sessions")
+		return nil
+	}
+	m.resize()
+	m.seen()
+	return nil
+}
+
+// focusOther gives the keys to the session in the other pane. The panes stay
+// where they are.
+func (m *Model) focusOther() tea.Cmd {
+	s, was := m.other(), m.current()
+	if s == nil {
+		m.say(fmt.Sprintf("one session on screen — %s - shows another below", m.cfg.Prefix))
+		return nil
+	}
+	_, m.active = m.byID(s.ID)
+	m.split, m.below = was.ID, !m.below
+	return m.shownNow()
 }
 
 // showProject points the side panels at the project of the session on
@@ -291,6 +359,8 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askDir(v)
 	case sendNotes:
 		return m.sendReview(v.queue)
+	case split:
+		return m.openSplit(v.id)
 	case ask:
 		return m.askReply(v)
 	case askHow:
@@ -375,6 +445,10 @@ func (m *Model) closeSession(i int) tea.Cmd {
 		m.active = max(m.active-1, 0)
 	}
 	m.sessionCursor = max(min(m.sessionCursor, len(m.sessions)-1), 0)
+	// The session left on screen may be the one the pane was shared with.
+	if m.splitWith() == nil {
+		m.split, m.below = "", false
+	}
 	m.resize()
 	m.seen()
 	m.save()

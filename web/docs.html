@@ -81,6 +81,8 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>,</td><td>Rename the session</td></tr>
           <tr><td>r</td><td>Restart a session whose agent has exited</td></tr>
           <tr><td>x</td><td>Close the session</td></tr>
+          <tr><td>-</td><td>Split: show another session below, or close the split</td></tr>
+          <tr><td>tab</td><td>Go to the other pane of the split</td></tr>
           <tr><td>w</td><td>Open another workspace in place of this one</td></tr>
           <tr><td>s, f, g</td><td>Focus the sessions, files, changes panel</td></tr>
           <tr><td>m</td><td>Queue a message for the agent</td></tr>
@@ -110,6 +112,10 @@ cicoria -version   <span class="c"># which version this is</span></pre>
       </ul>
       <p>Keep one session to a directory. The files and changes panels show the project of the session on screen, so two sessions in the same directory cannot be told apart by their changes. cicoria lets you do it and warns you.</p>
       <p>Closing a session whose agent is still running, or that has queued messages, asks first. Quitting asks when a Claude Code, Copilot CLI or Codex CLI session is still working.</p>
+      <h3>Two sessions on screen</h3>
+      <p><kbd>ctrl+a</kbd> <kbd>-</kbd> splits the agent pane in two: the session on screen stays above, and the one you pick is shown below it. <kbd>ctrl+a</kbd> <kbd>tab</kbd>, or a click in the other pane, moves the keys from one to the other. The pane that has them is the one with the lit border, and the side panels show its project.</p>
+      <p>Going to a session (<kbd>ctrl+a</kbd> <kbd>n</kbd>, <kbd>p</kbd>, <kbd>1</kbd> to <kbd>9</kbd>) puts it in the pane that has the keys, or moves the keys when it is already in the other one. The wheel scrolls the pane it is over.</p>
+      <p><kbd>ctrl+a</kbd> <kbd>-</kbd> again goes back to one pane, as does closing one of the two sessions. A terminal too short for two panes keeps one, and the split is not remembered across restarts.</p>
     </section>
 
     <section id="status">

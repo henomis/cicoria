@@ -47,8 +47,37 @@ type layout struct {
 	// waiting.
 	sessions, files, changes, queue rect
 	// agentBox is the agent pane with its border; agent is the terminal
-	// inside it. Without side panels there is no border and they are equal.
+	// inside it. Without side panels there is no border and they are equal,
+	// unless the pane is split.
 	agentBox, agent rect
+	// otherBox and other are the same for the second session, when the agent
+	// pane is split in two. They are empty when it is not.
+	otherBox, other rect
+}
+
+// splitMin is the height below which the agent pane is not split.
+const splitMin = 12
+
+// inside returns the area within the border of a box.
+func (r rect) inside() rect {
+	return rect{r.x + 1, r.y + 1, r.w - 2, r.h - 2}
+}
+
+// divide gives half of the agent pane to the second session, when there is
+// one and the room for both.
+func (m *Model) divide(l layout) layout {
+	if m.splitWith() == nil || l.agentBox.h < splitMin {
+		return l
+	}
+	box := l.agentBox
+	upper := rect{box.x, box.y, box.w, (box.h + 1) / 2}
+	lower := rect{box.x, box.y + upper.h, box.w, box.h - upper.h}
+	l.agentBox, l.otherBox = upper, lower
+	if m.below {
+		l.agentBox, l.otherBox = lower, upper
+	}
+	l.agent, l.other = l.agentBox.inside(), l.otherBox.inside()
+	return l
 }
 
 func (m *Model) layout() layout {
@@ -66,7 +95,7 @@ func (m *Model) layout() layout {
 		right = 0
 	}
 	if left+right == 0 || m.width < left+right+30 || l.body.h < 8 {
-		return l
+		return m.divide(l)
 	}
 	l.left, l.right, l.panels = left > 0, right > 0, true
 
@@ -84,8 +113,8 @@ func (m *Model) layout() layout {
 		}
 	}
 	l.agentBox = rect{left, 0, m.width - left - right, l.body.h}
-	l.agent = rect{left + 1, 1, l.agentBox.w - 2, l.agentBox.h - 2}
-	return l
+	l.agent = l.agentBox.inside()
+	return m.divide(l)
 }
 
 // View implements tea.Model.
@@ -132,6 +161,14 @@ func (m *Model) typing() bool {
 
 func (m *Model) renderWorkspace(l layout) []string {
 	agentRows := m.renderAgent(l)
+	if l.other.h > 0 {
+		otherRows := m.renderPane(m.splitWith(), l.otherBox, l.other, false)
+		if m.below {
+			agentRows = append(otherRows, agentRows...)
+		} else {
+			agentRows = append(agentRows, otherRows...)
+		}
+	}
 	if !l.panels {
 		return agentRows
 	}
@@ -162,30 +199,48 @@ func (m *Model) renderAgent(l layout) []string {
 		lines = m.anim.scene(min(p, 1), l.agent.w, l.agent.h)
 	case s == nil:
 		lines = []string{"", ui.Dim.Render(fmt.Sprintf("  no sessions — %s c starts one", m.cfg.Prefix))}
-	case s.Term == nil:
-		title = s.Name
-		lines = []string{""}
-		if s.Err != nil {
-			lines = append(lines, ui.Bad.Render("  could not start: "+s.Err.Error()))
-		}
 	default:
-		status := s.Status.String()
-		if s.Stalled(time.Now()) {
-			status += "?"
-		}
-		// Before the directory, which is what a narrow pane cuts off.
-		if back := s.Term.Scrolled(); back > 0 {
-			status = fmt.Sprintf("%s · %d lines back", status, back)
-		}
-		head := fmt.Sprintf("%s · %s · %s", s.Name, s.Adapter.Name(), status)
-		title = paneTitle(head, tilde(s.Dir), m.branch, l.agentBox.w-6)
-		lines = strings.Split(s.Term.Render(), "\n")
+		return m.renderPane(s, l.agentBox, l.agent, m.focus == focusAgent)
 	}
 
-	if !l.panels {
+	if l.agent == l.agentBox {
 		return ui.Block(lines, l.agent.w, l.agent.h)
 	}
 	return ui.Box(title, lines, l.agentBox.w, l.agentBox.h, m.focus == focusAgent)
+}
+
+// renderPane draws the screen of a session's agent in a pane, under a title
+// that says what it is and how it is doing.
+func (m *Model) renderPane(s *session.Session, box, inner rect, focused bool) []string {
+	if s.Term == nil {
+		lines := []string{""}
+		if s.Err != nil {
+			lines = append(lines, ui.Bad.Render("  could not start: "+s.Err.Error()))
+		}
+		if inner == box {
+			return ui.Block(lines, inner.w, inner.h)
+		}
+		return ui.Box(s.Name, lines, box.w, box.h, focused)
+	}
+	lines := strings.Split(s.Term.Render(), "\n")
+	if inner == box {
+		return ui.Block(lines, inner.w, inner.h)
+	}
+	status := s.Status.String()
+	if s.Stalled(time.Now()) {
+		status += "?"
+	}
+	// Before the directory, which is what a narrow pane cuts off.
+	if back := s.Term.Scrolled(); back > 0 {
+		status = fmt.Sprintf("%s · %d lines back", status, back)
+	}
+	head := fmt.Sprintf("%s · %s · %s", s.Name, s.Adapter.Name(), status)
+	// The branch that is known is that of the project in the side panels.
+	branch := ""
+	if s.Dir == m.shown {
+		branch = m.branch
+	}
+	return ui.Box(paneTitle(head, tilde(s.Dir), branch, box.w-6), lines, box.w, box.h, focused)
 }
 
 // paneTitle heads the agent pane with the session, its directory and the
@@ -270,7 +325,7 @@ func (m *Model) renderSessions(r rect) []string {
 			num = fmt.Sprint(i + 1)
 		}
 		name := s.Name
-		if i == m.active {
+		if i == m.active || s == m.other() {
 			name = ui.Bold.Render(name)
 		}
 		row := fmt.Sprintf("%s %s %s", ui.Dim.Render(num), badge(s), name)
@@ -459,6 +514,11 @@ func (m *Model) renderHelp() []string {
 		"    the mouse wheel and pgup/pgdn scroll through what has left the agent's",
 		"    screen; typing goes back to the end. An agent that reads the mouse or",
 		"    takes the whole screen, like an editor, scrolls by itself.",
+		"",
+		ui.Bold.Render("  Two sessions on screen"),
+		"    "+p+" - shows another session below the one on screen; again, and there is",
+		"    one pane. "+p+" tab or a click moves the keys from one pane to the other.",
+		"    Going to a session puts it in the pane that has the keys.",
 		"",
 		ui.Bold.Render("  Queue"),
 		"    messages wait in the queue and go to the agent one by one, each when it ends",

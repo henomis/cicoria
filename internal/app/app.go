@@ -89,6 +89,11 @@ type Model struct {
 
 	sessions []*session.Session
 	active   int
+	// split is the ID of the session shown in the other pane, when the agent
+	// pane is split in two; below says the session with the keys is the
+	// lower one.
+	split string
+	below bool
 
 	width, height int
 	started       bool
@@ -322,9 +327,36 @@ func (m *Model) byID(id string) (*session.Session, int) {
 	return nil, -1
 }
 
+// splitWith returns the session the agent pane is shared with, or nil when
+// it is not split.
+func (m *Model) splitWith() *session.Session {
+	if s, i := m.byID(m.split); s != nil && i != m.active {
+		return s
+	}
+	return nil
+}
+
+// other returns the session in the pane that does not have the keys, or nil
+// when there is one pane.
+func (m *Model) other() *session.Session {
+	if m.layout().other.h == 0 {
+		return nil
+	}
+	return m.splitWith()
+}
+
+// pane returns the area of the screen the terminal of a session has.
+func (m *Model) pane(s *session.Session) rect {
+	l := m.layout()
+	if l.other.h > 0 && s == m.splitWith() {
+		return l.other
+	}
+	return l.agent
+}
+
 // watching reports whether the user is looking at session i.
 func (m *Model) watching(i int) bool {
-	return i == m.active && !m.blurred && m.mode == modeWorkspace
+	return (i == m.active || m.sessions[i] == m.other()) && !m.blurred && m.mode == modeWorkspace
 }
 
 // say shows a message in the status bar for a while.
@@ -452,7 +484,7 @@ func (m *Model) refresh() tea.Cmd {
 
 // start launches the agent of a session in the agent pane.
 func (m *Model) start(s *session.Session) tea.Cmd {
-	pane := m.layout().agent
+	pane := m.pane(s)
 	err := s.Start(agent.LaunchOpts{Self: m.self, Socket: m.ipc.Path()}, pane.w, pane.h)
 	if err != nil {
 		m.say(err.Error())
@@ -461,11 +493,11 @@ func (m *Model) start(s *session.Session) tea.Cmd {
 	return waitOutput(s.ID, s.Term)
 }
 
-// resize fits every agent's terminal to the agent pane.
+// resize fits every agent's terminal to its pane.
 func (m *Model) resize() {
-	pane := m.layout().agent
 	for _, s := range m.sessions {
 		if s.Term != nil {
+			pane := m.pane(s)
 			s.Term.Resize(pane.w, pane.h)
 		}
 	}
@@ -590,10 +622,12 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// seen clears the "something happened" flag of the session on screen.
+// seen clears the "something happened" flag of the sessions on screen.
 func (m *Model) seen() {
-	if s := m.current(); s != nil && m.watching(m.active) {
-		s.Unseen = false
+	for i, s := range m.sessions {
+		if m.watching(i) {
+			s.Unseen = false
+		}
 	}
 }
 
