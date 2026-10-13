@@ -27,7 +27,6 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Lets you write notes on lines of code** and send them to the agent as one message.
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Lets one session ask another**: the answer comes back by itself, with what to do next.
-- **Counts tokens** for Claude Code, Copilot CLI and Codex CLI sessions.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
 Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
@@ -107,7 +106,7 @@ A session is one agent working in one directory, so one cicoria can hold session
 
 ### A worktree of its own
 
-The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a [git worktree](https://git-scm.com/docs/git-worktree) of its own: `y` makes one, `n` puts the session in the same directory and warns you, `esc` gives up.
+The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a [git worktree](https://git-scm.com/docs/git-worktree) of its own: `y` makes one, `n` or `enter` puts the session in the same directory and warns you, `esc` gives up. A `shell` is a way to run a command without leaving cicoria, not a session at work: it is not asked, opens in the directory you give it, and is no reason to offer the next session a worktree.
 
 The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on a new branch `cicoria/fix-login` that starts from the commit the directory was on. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart.
 
@@ -176,11 +175,7 @@ It answered:
 Update the client to handle it.
 ```
 
-Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code, Copilot CLI and Codex CLI can be asked, since the answer is taken when the turn ends. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.
-
-## Tokens
-
-For Claude Code, Copilot CLI and Codex CLI sessions the status bar shows `ctx`, the size of the context, and `in` and `out`, what the model has read and written over the whole conversation, cached input included. With several sessions counting, `all` is what they add up to.
+Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code and Codex CLI can be asked, since they are the ones that tell what they said when a turn ends: for Copilot CLI the choice says `not supported`, and the other agents are only sent messages. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.
 
 ## Configure
 

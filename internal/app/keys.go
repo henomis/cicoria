@@ -41,10 +41,11 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 	// A pending question or text field takes every key.
 	if c := m.confirm; c != nil {
 		m.confirm = nil
-		if key == "y" || key == "Y" || key == "enter" {
+		if key == "y" || key == "Y" {
 			return c.yes()
 		}
-		if c.no != nil && (key == "n" || key == "N") {
+		// Enter takes the answer the question offers, which is no.
+		if c.no != nil && (key == "n" || key == "N" || key == "enter") {
 			return c.no()
 		}
 		return nil

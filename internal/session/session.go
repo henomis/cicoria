@@ -71,11 +71,6 @@ type Session struct {
 	// Unseen marks a status change that happened while the session was not
 	// the one on screen.
 	Unseen bool
-	// ContextTokens is the size of the agent's context, when it reports it.
-	ContextTokens int
-	// InputTokens and OutputTokens are what the agent's model read and wrote
-	// over the whole conversation, when it reports it.
-	InputTokens, OutputTokens int
 	// Touched records when the agent last changed each file, by path relative
 	// to Dir.
 	Touched map[string]time.Time
@@ -276,12 +271,6 @@ func (s *Session) Apply(u agent.Update, active bool, now time.Time) {
 	}
 	if u.Conversation != "" && u.Conversation != s.ID {
 		s.Conversation = u.Conversation
-	}
-	if u.ContextTokens > 0 {
-		s.ContextTokens = u.ContextTokens
-	}
-	if u.InputTokens > 0 || u.OutputTokens > 0 {
-		s.InputTokens, s.OutputTokens = u.InputTokens, u.OutputTokens
 	}
 	if u.File != "" {
 		if rel, err := filepath.Rel(s.Dir, u.File); err == nil && filepath.IsLocal(rel) {

@@ -114,7 +114,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
       </ul>
       <p>Closing a session whose agent is still running, or that has queued messages, asks first. Quitting asks when a Claude Code, Copilot CLI or Codex CLI session is still working.</p>
       <h3>A worktree of its own</h3>
-      <p>The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a <a href="https://git-scm.com/docs/git-worktree">git worktree</a> of its own: <kbd>y</kbd> makes one, <kbd>n</kbd> puts the session in the same directory and warns you, <kbd>esc</kbd> gives up.</p>
+      <p>The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a <a href="https://git-scm.com/docs/git-worktree">git worktree</a> of its own: <kbd>y</kbd> makes one, <kbd>n</kbd> or <kbd>enter</kbd> puts the session in the same directory and warns you, <kbd>esc</kbd> gives up. A <code>shell</code> is a way to run a command without leaving cicoria, not a session at work: it is not asked, opens in the directory you give it, and is no reason to offer the next session a worktree.</p>
       <p>The worktree is named after the session: for a session <code>fix-login</code> on <code>~/src/app</code> it is <code>~/src/app.worktrees/fix-login</code>, on a new branch <code>cicoria/fix-login</code> that starts from the commit the directory was on. In the name, anything but letters, digits, <code>-</code> and <code>_</code> becomes <code>-</code>. The session works there from then on, and comes back there after a restart.</p>
       <p>Closing the session offers to remove the worktree. Its branch is always kept, so what was committed is not lost, and a worktree with changes that are not committed is kept too: the status bar says where it is. Merging the branch is up to you, or to an agent you ask.</p>
       <p>A worktree holds what git tracks: files that are not committed or that git ignores, such as <code>.env</code> or <code>node_modules</code>, are not copied to it. Claude Code asks whether it can trust the new folder, as it does for any.</p>
@@ -245,7 +245,7 @@ It answered:
 &gt; A 200 with an empty `items` array, never a 404.
 
 Update the client to handle it.</pre>
-      <p>Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code, Copilot CLI and Codex CLI can be asked, since the answer is taken when the turn ends. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.</p>
+      <p>Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code and Codex CLI can be asked, since they are the ones that tell what they said when a turn ends: for Copilot CLI the choice says <code>not supported</code>, and the other agents are only sent messages. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.</p>
     </section>
 
     <section id="agents">
@@ -258,8 +258,6 @@ Update the client to handle it.</pre>
         <li>Any command you add to the configuration. Its status is guessed from terminal activity.</li>
         <li>A plain shell, always.</li>
       </ul>
-      <h3>Tokens</h3>
-      <p>For Claude Code, Copilot CLI and Codex CLI sessions the status bar shows <code>ctx</code>, the size of the context at the last reply, and <code>in</code> and <code>out</code>, what the model has read and written over the whole conversation. Cached input is counted in <code>in</code>, which is why it grows fast. With several sessions counting, <code>all</code> is their sum.</p>
     </section>
 
     <section id="configure">

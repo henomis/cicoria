@@ -132,6 +132,9 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
+// Shell is the name of the plain shell, which is always offered.
+const Shell = "shell"
+
 // Adapters returns the agents to offer: Claude Code, Copilot CLI and Codex
 // CLI first, then the configured ones by name, then a plain shell.
 func (c Config) Adapters() []agent.Adapter {
@@ -144,7 +147,7 @@ func (c Config) Adapters() []agent.Adapter {
 
 	names := make([]string, 0, len(c.Agents))
 	for name := range c.Agents {
-		if name != "claude" && name != "copilot" && name != "codex" && name != "shell" {
+		if name != "claude" && name != "copilot" && name != "codex" && name != Shell {
 			names = append(names, name)
 		}
 	}
@@ -154,10 +157,10 @@ func (c Config) Adapters() []agent.Adapter {
 	}
 
 	shell := []string{os.Getenv("SHELL")}
-	if a, ok := c.Agents["shell"]; ok {
+	if a, ok := c.Agents[Shell]; ok {
 		shell = a.Command
 	} else if shell[0] == "" {
 		shell[0] = "sh"
 	}
-	return append(adapters, agent.NewGeneric("shell", shell))
+	return append(adapters, agent.NewGeneric(Shell, shell))
 }

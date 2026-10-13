@@ -261,7 +261,11 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 		}
 	}
 	// One session to a directory is how the panels tell whose work is whose.
+	// A shell does no work of its own.
 	for _, other := range m.sessions {
+		if isShell(a) || isShell(other.Adapter) {
+			continue
+		}
 		if filepath.Clean(other.Dir) == filepath.Clean(dir) {
 			m.say(other.Name + " already works in this directory: their changes will be mixed")
 			break
@@ -301,10 +305,11 @@ func (m *Model) askDir(a agent.Adapter) tea.Cmd {
 
 // askWorktree offers a new session a git worktree of its own when another
 // session works in the work tree of dir, where their changes would be mixed.
+// A shell is not offered one: it is there to look at the work of the others.
 func (m *Model) askWorktree(a agent.Adapter, dir string) tea.Cmd {
 	other := m.sharing(dir)
 	// A worktree starts from a commit.
-	if _, ok := git.Head(dir); other == nil || !ok {
+	if _, ok := git.Head(dir); other == nil || !ok || isShell(a) {
 		return m.askName(a, dir, false)
 	}
 	m.confirm = &confirm{
@@ -315,13 +320,23 @@ func (m *Model) askWorktree(a agent.Adapter, dir string) tea.Cmd {
 	return nil
 }
 
+// isShell tells the plain shell from an agent: it is a way to run a command
+// without leaving cicoria, and not a session that changes the project.
+func isShell(a agent.Adapter) bool {
+	return a.Name() == config.Shell
+}
+
 // sharing returns a session that works in the git work tree of dir, if any.
+// A shell is not one.
 func (m *Model) sharing(dir string) *session.Session {
 	root, ok := git.Root(dir)
 	if !ok {
 		return nil
 	}
 	for _, s := range m.sessions {
+		if isShell(s.Adapter) {
+			continue
+		}
 		if r, ok := git.Root(s.Dir); ok && r == root {
 			return s
 		}

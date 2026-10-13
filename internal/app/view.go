@@ -505,7 +505,9 @@ func (m *Model) renderHelp() []string {
 		"    directory, ctrl+w deletes a path component, ctrl+u clears. The side panels",
 		"    follow the session on screen.",
 		"    Where another session already works, the new one is offered a git worktree",
-		"    of its own, <repository>.worktrees/<name> on the branch cicoria/<name>.",
+		"    of its own, <repository>.worktrees/<name> on the branch cicoria/<name>:",
+		"    y takes it, n or enter does not. A shell does not count: it is not offered",
+		"    one, and is no reason to offer one.",
 		"    Closing the session offers to remove it; the branch is kept.",
 		"",
 		ui.Bold.Render("  Workspaces"),
@@ -530,7 +532,8 @@ func (m *Model) renderHelp() []string {
 		"    queue panel: enter send now · p pause · e edit · x delete · J/K reorder · a add",
 		"    "+p+" k queues a message for another session, or asks it: what its agent says",
 		"    at the end of that turn comes back to this session with your question, and",
-		"    with what you want done with the answer, if you say so.",
+		"    with what you want done with the answer, if you say so. Claude Code and",
+		"    Codex CLI can be asked.",
 		"",
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
@@ -555,17 +558,6 @@ func (m *Model) renderHelp() []string {
 		ui.Dim.Render("  press any key to close"),
 	)
 	return ui.Box("Help", lines, m.width, max(m.height-1, 2), true)
-}
-
-// tokens writes a number of tokens in a few characters.
-func tokens(n int) string {
-	switch {
-	case n < 1000:
-		return fmt.Sprint(n)
-	case n < 999_500:
-		return fmt.Sprintf("%dk", (n+500)/1000)
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/1e6)
 }
 
 // renderStatus draws the bottom line.
@@ -612,22 +604,6 @@ func (m *Model) renderStatus() string {
 			}
 			if n := len(s.Queue); n > 0 {
 				right = fmt.Sprintf("queue %d%s · ", n, map[bool]string{true: " paused"}[s.Paused])
-			}
-			if s.ContextTokens > 0 {
-				right += fmt.Sprintf("ctx %s · ", tokens(s.ContextTokens))
-			}
-			if s.InputTokens > 0 || s.OutputTokens > 0 {
-				right += fmt.Sprintf("in %s · out %s · ", tokens(s.InputTokens), tokens(s.OutputTokens))
-			}
-			// With several sessions counting, what they add up to.
-			counting, in, out := 0, 0, 0
-			for _, s := range m.sessions {
-				if s.InputTokens > 0 || s.OutputTokens > 0 {
-					counting, in, out = counting+1, in+s.InputTokens, out+s.OutputTokens
-				}
-			}
-			if counting > 1 {
-				right += fmt.Sprintf("all in %s · out %s · ", tokens(in), tokens(out))
 			}
 		}
 		right += m.cfg.Prefix + " ? help"

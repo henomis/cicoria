@@ -93,9 +93,13 @@ func (m *Model) askReply(a ask) tea.Cmd {
 	if !to.Adapter.ReportsStatus() {
 		return m.askMessage(a)
 	}
+	hint := "goes to " + from.Name + " when " + to.Name + " ends its turn"
+	if !to.Adapter.ReportsAnswer() {
+		hint = "not supported by " + to.Adapter.Name()
+	}
 	m.openPalette(fmt.Sprintf("message for %s › ", to.Name), []ui.Item{
 		{Label: "Send a message", Value: askHow(a)},
-		{Label: "Ask, and get the answer here", Hint: "goes to " + from.Name + " when " + to.Name + " ends its turn", Value: askHow{from: a.from, to: a.to, reply: true}},
+		{Label: "Ask, and get the answer here", Hint: hint, Value: askHow{from: a.from, to: a.to, reply: true}},
 	})
 	return nil
 }
@@ -106,6 +110,11 @@ func (m *Model) askMessage(a ask) tea.Cmd {
 	to, _ := m.byID(a.to)
 	from, _ := m.byID(a.from)
 	if to == nil || from == nil {
+		return nil
+	}
+	// An agent that does not tell what it said has no answer to send back.
+	if a.reply && !to.Adapter.ReportsAnswer() {
+		m.say("asking is not supported by " + to.Adapter.Name() + ": it does not tell what it answered")
 		return nil
 	}
 	// send queues the message, unless its session was closed in the meantime.

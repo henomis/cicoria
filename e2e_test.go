@@ -141,6 +141,8 @@ func newWorkspace(t *testing.T) *workspace {
 
 	config := fmt.Sprintf("notify = false\nanimations = false\n\n[agents.claude]\ncommand = [\"sh\", \"-c\", %q, \"fake-claude\"]\n", fakeAgent)
 	config += fmt.Sprintf("\n[agents.copilot]\ncommand = [\"sh\", \"-c\", %q, \"fake-copilot\"]\n", fakeCopilot)
+	// Any other command line, which is offered a worktree as an agent is.
+	config += "\n[agents.aider]\ncommand = [\"sh\"]\n"
 	config += fmt.Sprintf("\n[agents.codex]\ncommand = [\"sh\", \"-c\", %q, \"fake-codex\"]\n", fakeCodex)
 	must(os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0o644))
 	must(os.MkdirAll(filepath.Join(home, "run"), 0o700))
@@ -431,7 +433,6 @@ func TestWorkspace(t *testing.T) {
 	w.quit()
 }
 
-// newShell opens a shell session with the name it is offered.
 // sameTree turns down the worktree offered to a session that is created in
 // the work tree of another one.
 func (w *workspace) sameTree() {
@@ -440,6 +441,8 @@ func (w *workspace) sameTree() {
 	w.typeText("n")
 }
 
+// newShell opens a shell session with the name it is offered. A shell is
+// not offered a worktree.
 func (w *workspace) newShell() {
 	w.t.Helper()
 	w.prefix('c')
@@ -448,7 +451,6 @@ func (w *workspace) newShell() {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.sameTree()
 	w.see("session name: shell-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell-1 · shell")
@@ -1035,6 +1037,17 @@ func TestCopilot(t *testing.T) {
 	w.see("got next", "copilot-1 · copilot · working")
 	w.line("stop")
 	w.see("copilot-1 · copilot · idle")
+
+	// It does not tell what it said, so it cannot be asked a question.
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.prefix('k')
+	w.see("message for ›", "copilot-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Send a message", "not supported by copilot")
+	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("asking is not supported by copilot")
 	w.quit()
 }
 
@@ -1416,7 +1429,6 @@ func TestQueue(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.sameTree()
 	w.see("session name: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell-1 · shell")
@@ -1461,22 +1473,22 @@ func TestWorktree(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(140, 40)
 	w.see("claude-1 · claude · idle")
-	tree := filepath.Join(w.dir+".worktrees", "shell-1")
+	tree := filepath.Join(w.dir+".worktrees", "aider-1")
 
 	create := func() {
 		t.Helper()
 		w.prefix('c')
 		w.see("agent ›")
-		w.typeText("shell")
+		w.typeText("aider")
 		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-		w.see("shell in directory: ")
+		w.see("aider in directory: ")
 		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 		w.see("claude-1 already works in this repository: give this session a worktree of its own?")
 		w.typeText("y")
-		w.see("session name: shell-1")
+		w.see("session name: aider-1")
 		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 		// It works there, on a branch named after it.
-		w.see("shell-1 · shell", "project.worktrees/shell-1", "cicoria/shell-1")
+		w.see("aider-1 · aider", "project.worktrees/aider-1", "cicoria/aider-1")
 	}
 	create()
 	if _, err := os.Stat(filepath.Join(tree, "main.go")); err != nil {
@@ -1495,11 +1507,11 @@ func TestWorktree(t *testing.T) {
 	w.launch(140, 40)
 	w.see("claude-1 · claude · idle")
 	w.prefix('2')
-	w.see("shell-1 · shell", "cicoria/shell-1")
+	w.see("aider-1 · aider", "cicoria/aider-1")
 
 	// One with work that is not committed outlives its session.
 	w.prefix('x')
-	w.see("close shell-1 and stop its agent?")
+	w.see("close aider-1 and stop its agent?")
 	w.typeText("y")
 	w.see("worktree kept at", "it has changes that are not committed")
 	if _, err := os.Stat(tree); err != nil {
@@ -1510,38 +1522,38 @@ func TestWorktree(t *testing.T) {
 	// top of it.
 	w.prefix('c')
 	w.see("agent ›")
-	w.typeText("shell")
+	w.typeText("aider")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("shell in directory: ")
+	w.see("aider in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("a worktree of its own?")
 	w.typeText("y")
-	w.see("session name: shell-2")
+	w.see("session name: aider-2")
 	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
-	w.typeText("shell-1")
+	w.typeText("aider-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("already exists")
-	w.gone("shell-1 · shell")
+	w.gone("aider-1 · aider")
 
 	// A clean one is removed when its session is closed, and its branch
 	// stays.
-	for _, args := range [][]string{{"worktree", "remove", "--force", tree}, {"branch", "-D", "cicoria/shell-1"}} {
+	for _, args := range [][]string{{"worktree", "remove", "--force", tree}, {"branch", "-D", "cicoria/aider-1"}} {
 		if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
 	create()
 	w.prefix('x')
-	w.see("close shell-1 and stop its agent?")
+	w.see("close aider-1 and stop its agent?")
 	w.typeText("y")
-	w.see("remove the worktree", "the branch cicoria/shell-1 is kept")
+	w.see("remove the worktree", "the branch cicoria/aider-1 is kept")
 	w.typeText("y")
 	w.see("removed the worktree")
 	if _, err := os.Stat(tree); err == nil {
 		t.Error("the worktree is still there")
 	}
-	out, err := exec.Command("git", "-C", w.dir, "branch", "--list", "cicoria/shell-1").Output()
-	if err != nil || !strings.Contains(string(out), "cicoria/shell-1") {
+	out, err := exec.Command("git", "-C", w.dir, "branch", "--list", "cicoria/aider-1").Output()
+	if err != nil || !strings.Contains(string(out), "cicoria/aider-1") {
 		t.Errorf("branch: %q, %v", out, err)
 	}
 
@@ -1549,14 +1561,73 @@ func TestWorktree(t *testing.T) {
 	// another one.
 	w.prefix('c')
 	w.see("agent ›")
-	w.typeText("shell")
+	w.typeText("aider")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("shell in directory: ")
+	w.see("aider in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("a worktree of its own?")
 	w.typeText("y")
-	w.see("session name: shell-2")
+	w.see("session name: aider-2")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("shell-2 · shell", "project.worktrees/shell-2", "cicoria/shell-2")
+	w.see("aider-2 · aider", "project.worktrees/aider-2", "cicoria/aider-2")
+	w.quit()
+}
+
+// Enter answers a question with no, which is what it offers.
+func TestWorktreeTurnedDownWithEnter(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("aider")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("a worktree of its own?")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: aider-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider-1 · aider", "their changes will be mixed")
+	if _, err := os.Stat(w.dir + ".worktrees"); err == nil {
+		t.Error("a worktree was made")
+	}
+
+	// A question with nothing to do on no is only put away.
+	w.prefix('x')
+	w.see("close aider-1 and stop its agent?")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.gone("close aider-1 and stop its agent?")
+	w.see("aider-1 · aider")
+	w.quit()
+}
+
+// A shell is a way to run a command, not a session at work: it is neither
+// offered a worktree nor a reason to offer one.
+func TestShellIsNotAtWork(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.newShell()
+	w.gone("their changes will be mixed")
+
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.prefix('x')
+	w.see("close claude-1 and stop its agent?")
+	w.typeText("y")
+	w.gone("claude-1")
+
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("aider")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("session name: aider-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider-1 · aider")
+	w.gone("their changes will be mixed")
 	w.quit()
 }

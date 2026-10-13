@@ -89,11 +89,6 @@ type Update struct {
 	Conversation string
 	// File is a file the agent just changed, if any.
 	File string
-	// ContextTokens is the size of the agent's context, if known.
-	ContextTokens int
-	// InputTokens and OutputTokens are what the model read and wrote over
-	// the whole conversation, if known.
-	InputTokens, OutputTokens int
 }
 
 // Adapter knows one kind of agent.
@@ -110,6 +105,9 @@ type Adapter interface {
 	// waits for a message. When it does not, it is taken to be ready once
 	// its screen goes quiet.
 	ReportsReady() bool
+	// ReportsAnswer says whether the agent tells what it said at the end of
+	// a turn, which is what the question of another session is answered with.
+	ReportsAnswer() bool
 	// Mention returns the text to type at the agent's prompt to refer to a
 	// file of the project.
 	Mention(path string) string
