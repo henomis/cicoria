@@ -20,6 +20,7 @@ builds:
 archives:
   - formats: [tar.gz]
     # The names of the system and the processor are those "uname" gives.
+    # web/install.sh downloads the archives and the checksums by these names.
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_

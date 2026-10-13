@@ -44,7 +44,9 @@
 
     <section id="install">
       <h2>Install</h2>
-      <p>Download the archive for your system from the <a href="https://github.com/henomis/cicoria/releases">releases</a> (Linux and macOS, x86_64 and arm64) and put the <code>cicoria</code> in it on your <code>PATH</code>, or build it with Go:</p>
+      <pre>curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</pre>
+      <p>The <a href="install.sh">script</a> downloads the latest <a href="https://github.com/henomis/cicoria/releases">release</a> for your system (Linux and macOS, x86_64 and arm64), checks it against the checksums of the release and puts <code>cicoria</code> in <code>~/.local/bin</code>. <code>CICORIA_INSTALL_DIR</code> names another directory and <code>CICORIA_VERSION</code> another release, such as <code>v0.0.4</code>. Running it again updates cicoria.</p>
+      <p>You can also download the archive from the releases yourself and put the <code>cicoria</code> in it on your <code>PATH</code>, or build it with Go:</p>
       <pre>go install github.com/henomis/cicoria@latest</pre>
       <p>You need:</p>
       <ul>

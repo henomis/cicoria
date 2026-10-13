@@ -36,7 +36,13 @@ Codex CLI asks you to trust the hooks cicoria gives it, the first time it runs w
 
 ## Install
 
-Download the archive for your system from the [releases](https://github.com/henomis/cicoria/releases) (Linux and macOS, x86_64 and arm64) and put the `cicoria` in it on your `PATH`, or build it with Go:
+```sh
+curl -fsSL https://henomis.github.io/cicoria/install.sh | sh
+```
+
+The [script](web/install.sh) downloads the latest [release](https://github.com/henomis/cicoria/releases) for your system (Linux and macOS, x86_64 and arm64), checks it against the checksums of the release and puts `cicoria` in `~/.local/bin`. `CICORIA_INSTALL_DIR` names another directory and `CICORIA_VERSION` another release, such as `v0.0.4`. Running it again updates cicoria.
+
+You can also download the archive from the releases yourself and put the `cicoria` in it on your `PATH`, or build it with Go:
 
 ```sh
 go install github.com/henomis/cicoria@latest

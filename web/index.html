@@ -28,7 +28,7 @@
     <p class="lede">cicoria runs your coding agents in your terminal, each in a session of its own. It shows which session is waiting for you, keeps everything each one changed ready to review, and sends your notes on the code back as one message.</p>
 
     <div class="install">
-      <code id="install">go install github.com/henomis/cicoria@latest</code>
+      <code id="install">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
       <button type="button" data-copy="install">Copy</button>
     </div>
     <p class="next"><a href="docs.html">Read the docs</a><a href="https://github.com/henomis/cicoria">Source on GitHub</a></p>
@@ -160,8 +160,8 @@ command = ["claude", "--model", "opus"]</pre>
     <h2>The first minute</h2>
     <ol class="steps">
       <li><div>
-        <p>Install it. You need Go 1.26 or later, git, and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too. It runs on Linux, on macOS, and on Windows in WSL2.</p>
-        <pre>go install github.com/henomis/cicoria@latest</pre>
+        <p>Install it. You need git and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too. It runs on Linux, on macOS, and on Windows in WSL2.</p>
+        <pre>curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</pre>
       </div></li>
       <li><div>
         <p>Open it on a project. The first session starts, and what you type goes to the agent.</p>
@@ -180,7 +180,7 @@ cicoria</pre>
   <div class="wrap section close">
     <h2>Start the agents, go do something else, and come back when one calls you.</h2>
     <div class="install">
-      <code id="install-again">go install github.com/henomis/cicoria@latest</code>
+      <code id="install-again">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
       <button type="button" data-copy="install-again">Copy</button>
     </div>
   </div>
