@@ -44,6 +44,9 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		if key == "y" || key == "Y" || key == "enter" {
 			return c.yes()
 		}
+		if c.no != nil && (key == "n" || key == "N") {
+			return c.no()
+		}
 		return nil
 	}
 	if p := m.prompt; p != nil {

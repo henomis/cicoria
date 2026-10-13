@@ -161,6 +161,8 @@ type prompt struct {
 type confirm struct {
 	question string
 	yes      func() tea.Cmd
+	// no, when set, is what a plain no leads to; esc drops the question.
+	no func() tea.Cmd
 }
 
 // Messages.
@@ -203,6 +205,12 @@ type (
 	editorMsg struct{ err error }
 	// openedMsg reports that a file could not be opened outside cicoria.
 	openedMsg struct{ err error }
+	// removedMsg reports that the worktree of a closed session was removed,
+	// or why it could not be.
+	removedMsg struct {
+		path string
+		err  error
+	}
 )
 
 // New returns a workspace opened on dir, with the sessions it had last time.
@@ -241,6 +249,7 @@ func New(cfg config.Config, dir string, dark bool) (*Model, error) {
 			}
 			s := session.New(saved.ID, saved.Name, sdir, a)
 			s.Conversation, s.Base, s.Notes = saved.Conversation, saved.Base, saved.Notes
+			s.Worktree = saved.Worktree
 			s.Uncommitted = cfg.Changes != config.ChangesSession
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
@@ -370,7 +379,7 @@ func (m *Model) save() {
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
-			Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
+			Worktree: s.Worktree, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
 		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {
@@ -596,6 +605,13 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 	case openedMsg:
 		m.say(msg.err.Error())
+
+	case removedMsg:
+		if msg.err != nil {
+			m.say(msg.err.Error())
+		} else {
+			m.say("removed the worktree " + tilde(msg.path))
+		}
 
 	case editorMsg:
 		if msg.err != nil {

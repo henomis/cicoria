@@ -33,7 +33,7 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("missing file: %+v, %v", st, err)
 	}
 
-	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Conversation: "c", Base: "abc", Notes: []Note{{Path: "x", From: 1, To: 2, Quote: []string{"q"}, Text: "t"}}, Queue: []Message{{Text: "x"}, {Text: "y", ReplyTo: "1", Then: "z"}}, Paused: true}}, Active: 1}
+	want := State{Sessions: []Saved{{ID: "1", Name: "a", Agent: "claude"}, {ID: "2", Name: "b", Agent: "shell", Dir: "/work/b", Conversation: "c", Base: "abc", Worktree: "/work/b", Notes: []Note{{Path: "x", From: 1, To: 2, Quote: []string{"q"}, Text: "t"}}, Queue: []Message{{Text: "x"}, {Text: "y", ReplyTo: "1", Then: "z"}}, Paused: true}}, Active: 1}
 	if err := SaveState(path, want); err != nil {
 		t.Fatal(err)
 	}

@@ -345,6 +345,7 @@ func TestWorkspace(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: claude-2")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude-2 · claude · idle")
@@ -431,6 +432,14 @@ func TestWorkspace(t *testing.T) {
 }
 
 // newShell opens a shell session with the name it is offered.
+// sameTree turns down the worktree offered to a session that is created in
+// the work tree of another one.
+func (w *workspace) sameTree() {
+	w.t.Helper()
+	w.see("give this session a worktree of its own?")
+	w.typeText("n")
+}
+
 func (w *workspace) newShell() {
 	w.t.Helper()
 	w.prefix('c')
@@ -439,6 +448,7 @@ func (w *workspace) newShell() {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: shell-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell-1 · shell")
@@ -940,6 +950,7 @@ func TestAnimations(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("launching claude-2", "|[]|")
@@ -1003,6 +1014,7 @@ func TestCopilot(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("copilot in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: copilot-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 
@@ -1039,6 +1051,7 @@ func TestCodex(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("codex in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: codex-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 
@@ -1118,6 +1131,7 @@ func TestAskSession(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: claude-2")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude-2 · claude · idle")
@@ -1236,6 +1250,7 @@ func TestSplit(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: claude-2")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude-2 · claude · idle")
@@ -1307,6 +1322,7 @@ func TestSplitNeedsRoom(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: claude-2")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("claude-2 · claude · idle")
@@ -1400,6 +1416,7 @@ func TestQueue(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell in directory: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.sameTree()
 	w.see("session name: ")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("shell-1 · shell")
@@ -1436,4 +1453,93 @@ func TestQueue(t *testing.T) {
 	w.prefix('u')
 	w.typeText("p")
 	w.see("got later")
+}
+
+// A session created where another one works can have a git worktree of its
+// own, which is offered for removal when the session is closed.
+func TestWorktree(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	tree := filepath.Join(w.dir+".worktrees", "shell-1")
+
+	create := func() {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("shell")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("shell in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("claude-1 already works in this repository: give this session a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: shell-1")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		// It works there, on a branch named after it.
+		w.see("shell-1 · shell", "project.worktrees/shell-1", "cicoria/shell-1")
+	}
+	create()
+	if _, err := os.Stat(filepath.Join(tree, "main.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	// What is changed there is not a change of the first session.
+	w.line("echo draft > draft.txt")
+	w.see("Changes (1)")
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.gone("draft.txt")
+
+	// The worktree comes back with the session.
+	w.quit()
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.prefix('2')
+	w.see("shell-1 · shell", "cicoria/shell-1")
+
+	// One with work that is not committed outlives its session.
+	w.prefix('x')
+	w.see("close shell-1 and stop its agent?")
+	w.typeText("y")
+	w.see("worktree kept at", "it has changes that are not committed")
+	if _, err := os.Stat(tree); err != nil {
+		t.Fatal(err)
+	}
+
+	// Its name is taken, and no session is made on top of it.
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("shell")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("shell in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("a worktree of its own?")
+	w.typeText("y")
+	w.see("session name: shell-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("already exists")
+	w.gone("shell-1 · shell")
+
+	// A clean one is removed when its session is closed, and its branch
+	// stays.
+	for _, args := range [][]string{{"worktree", "remove", "--force", tree}, {"branch", "-D", "cicoria/shell-1"}} {
+		if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	create()
+	w.prefix('x')
+	w.see("close shell-1 and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree", "the branch cicoria/shell-1 is kept")
+	w.typeText("y")
+	w.see("removed the worktree")
+	if _, err := os.Stat(tree); err == nil {
+		t.Error("the worktree is still there")
+	}
+	out, err := exec.Command("git", "-C", w.dir, "branch", "--list", "cicoria/shell-1").Output()
+	if err != nil || !strings.Contains(string(out), "cicoria/shell-1") {
+		t.Errorf("branch: %q, %v", out, err)
+	}
+	w.quit()
 }

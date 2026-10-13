@@ -293,3 +293,51 @@ func TestFiles(t *testing.T) {
 		t.Errorf("ignored outside a repository = %v", got)
 	}
 }
+
+func TestWorktree(t *testing.T) {
+	dir := repo(t)
+	path := filepath.Join(dir+".worktrees", "fix")
+	if err := AddWorktree(dir, path, "cicoria/fix"); err != nil {
+		t.Fatal(err)
+	}
+	if got := Branch(path); got != "cicoria/fix" {
+		t.Errorf("branch = %q", got)
+	}
+	// The main work tree is the same seen from either.
+	for _, from := range []string{dir, path} {
+		if got, ok := Main(from); !ok || got != dir {
+			t.Errorf("main of %s = %q, %v", from, got, ok)
+		}
+	}
+	if _, ok := Main(t.TempDir()); ok {
+		t.Error("main outside a repository")
+	}
+	// A name that is taken is refused.
+	if err := AddWorktree(dir, path+"2", "cicoria/fix"); err == nil {
+		t.Error("the branch was made twice")
+	}
+
+	// Work that is not committed keeps the work tree.
+	writeFile(t, path, "new.txt", "x\n")
+	if Clean(path) {
+		t.Error("clean with a new file")
+	}
+	if err := RemoveWorktree(path); err == nil {
+		t.Fatal("removed with a new file in it")
+	}
+	gitCmd(t, path, "add", "-A")
+	gitCmd(t, path, "commit", "-q", "-m", "work")
+	if !Clean(path) {
+		t.Error("not clean after the commit")
+	}
+	if err := RemoveWorktree(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("the work tree is still there")
+	}
+	// Its branch, and so the commit, stays.
+	if !Exists(dir, "cicoria/fix") {
+		t.Error("the branch went with the work tree")
+	}
+}

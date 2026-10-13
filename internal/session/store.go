@@ -40,6 +40,8 @@ type Saved struct {
 	Conversation string `json:"conversation,omitempty"`
 	// Base is the commit the session's changes are counted from.
 	Base string `json:"base,omitempty"`
+	// Worktree is the git worktree that was made for the session, if any.
+	Worktree string `json:"worktree,omitempty"`
 	// Notes are the remarks on code not yet sent to the agent.
 	Notes []Note `json:"notes,omitempty"`
 	// Queue and Paused are the messages waiting to be sent and whether they

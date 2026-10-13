@@ -365,3 +365,41 @@ func Ignored(dir string, open []string) []string {
 	slices.Sort(paths)
 	return slices.Compact(paths)
 }
+
+// Main returns the main work tree of the repository of dir: the one the
+// others were added to. It is the first that git lists.
+func Main(dir string) (string, bool) {
+	out, err := run(dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", false
+	}
+	first, _, _ := strings.Cut(string(out), "\n")
+	path, ok := strings.CutPrefix(first, "worktree ")
+	return path, ok && path != ""
+}
+
+// AddWorktree adds a work tree at path to the repository of dir, on a new
+// branch that starts from the commit dir is on.
+func AddWorktree(dir, path, branch string) error {
+	_, err := run(dir, "worktree", "add", "-q", "-b", branch, path)
+	return err
+}
+
+// RemoveWorktree takes the work tree at path away from its repository. git
+// refuses when it holds changes that are not committed, and its branch is
+// left alone.
+func RemoveWorktree(path string) error {
+	main, ok := Main(path)
+	if !ok {
+		return errors.New("not a git repository")
+	}
+	_, err := run(main, "worktree", "remove", path)
+	return err
+}
+
+// Clean reports whether the work tree containing dir has nothing that is
+// not committed.
+func Clean(dir string) bool {
+	out, err := run(dir, "status", "--porcelain")
+	return err == nil && len(bytes.TrimSpace(out)) == 0
+}

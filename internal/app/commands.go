@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -248,8 +249,17 @@ func (m *Model) toggleSide(hide *bool) tea.Cmd {
 }
 
 // newSession creates a session of the given name for an agent working in
-// dir and puts it on screen.
-func (m *Model) newSession(a agent.Adapter, name, dir string) tea.Cmd {
+// dir and puts it on screen. With worktree, the session works in a git
+// worktree of its own instead, made for it from the commit dir is on.
+func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea.Cmd {
+	made := ""
+	if worktree {
+		var err error
+		if made, dir, err = addWorktree(name, dir); err != nil {
+			m.say(err.Error())
+			return nil
+		}
+	}
 	// One session to a directory is how the panels tell whose work is whose.
 	for _, other := range m.sessions {
 		if filepath.Clean(other.Dir) == filepath.Clean(dir) {
@@ -258,6 +268,7 @@ func (m *Model) newSession(a agent.Adapter, name, dir string) tea.Cmd {
 		}
 	}
 	s := session.New(session.NewID(), name, dir, a)
+	s.Worktree = made
 	s.Base, _ = git.Head(dir)
 	s.Uncommitted = m.cfg.Changes != config.ChangesSession
 	m.sessions = append(m.sessions, s)
@@ -282,21 +293,106 @@ func (m *Model) askDir(a agent.Adapter) tea.Cmd {
 			m.say(err.Error())
 			return nil
 		}
-		return m.askName(a, dir)
+		return m.askWorktree(a, dir)
 	}
 	m.prompt = p
 	return nil
 }
 
+// askWorktree offers a new session a git worktree of its own when another
+// session works in the work tree of dir, where their changes would be mixed.
+func (m *Model) askWorktree(a agent.Adapter, dir string) tea.Cmd {
+	other := m.sharing(dir)
+	// A worktree starts from a commit.
+	if _, ok := git.Head(dir); other == nil || !ok {
+		return m.askName(a, dir, false)
+	}
+	m.confirm = &confirm{
+		question: other.Name + " already works in this repository: give this session a worktree of its own?",
+		yes:      func() tea.Cmd { return m.askName(a, dir, true) },
+		no:       func() tea.Cmd { return m.askName(a, dir, false) },
+	}
+	return nil
+}
+
+// sharing returns a session that works in the git work tree of dir, if any.
+func (m *Model) sharing(dir string) *session.Session {
+	root, ok := git.Root(dir)
+	if !ok {
+		return nil
+	}
+	for _, s := range m.sessions {
+		if r, ok := git.Root(s.Dir); ok && r == root {
+			return s
+		}
+	}
+	return nil
+}
+
+var notSlug = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+
+// slug turns the name of a session into one for a directory and a branch.
+func slug(name string) string {
+	return notSlug.ReplaceAllString(name, "-")
+}
+
+// addWorktree makes a git worktree named after a session, next to the
+// repository of dir and on a branch of its own. It returns the top of the
+// worktree and the directory in it that stands for dir.
+func addWorktree(name, dir string) (top, in string, err error) {
+	root, ok := git.Root(dir)
+	main, isMain := git.Main(dir)
+	if !ok || !isMain {
+		return "", "", errors.New("not a git repository")
+	}
+	top = filepath.Join(main+".worktrees", slug(name))
+	if err := git.AddWorktree(dir, top, "cicoria/"+slug(name)); err != nil {
+		return "", "", err
+	}
+	// A directory git does not know of is not in the worktree.
+	in = top
+	if rel, err := filepath.Rel(root, dir); err == nil {
+		if st, err := os.Stat(filepath.Join(top, rel)); err == nil && st.IsDir() {
+			in = filepath.Join(top, rel)
+		}
+	}
+	return top, in, nil
+}
+
+// askRemoveWorktree offers to remove the worktree that was made for a
+// session that is now closed. One that holds work not committed is kept,
+// and so is one another session works in.
+func (m *Model) askRemoveWorktree(path string) {
+	if _, err := os.Stat(path); path == "" || err != nil {
+		return
+	}
+	for _, s := range m.sessions {
+		if rel, err := filepath.Rel(path, s.Dir); err == nil && filepath.IsLocal(rel) {
+			return
+		}
+	}
+	if !git.Clean(path) {
+		m.say("worktree kept at " + tilde(path) + ": it has changes that are not committed")
+		return
+	}
+	m.confirm = &confirm{
+		question: fmt.Sprintf("remove the worktree %s? the branch %s is kept", tilde(path), git.Branch(path)),
+		yes: func() tea.Cmd {
+			return func() tea.Msg { return removedMsg{path, git.RemoveWorktree(path)} }
+		},
+	}
+}
+
 // askName asks what to call a new session, offering a name that is free.
-func (m *Model) askName(a agent.Adapter, dir string) tea.Cmd {
+// With worktree, the name is also that of the worktree made for it.
+func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
 	p := &prompt{input: ui.Input{Prompt: "session name: "}}
 	p.input.Set(m.newName(a))
 	p.done = func(name string) tea.Cmd {
 		if name == "" {
 			name = m.newName(a)
 		}
-		return m.newSession(a, name, dir)
+		return m.newSession(a, name, dir, worktree)
 	}
 	m.prompt = p
 	return nil
@@ -439,6 +535,7 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	if i == m.active {
 		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
 	}
+	made := m.sessions[i].Worktree
 	m.sessions[i].Close()
 	m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
 	if m.active > i || m.active >= len(m.sessions) {
@@ -452,6 +549,7 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	m.resize()
 	m.seen()
 	m.save()
+	m.askRemoveWorktree(made)
 	return m.showProject()
 }
 

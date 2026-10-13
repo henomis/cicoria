@@ -52,6 +52,9 @@ type Session struct {
 	// Base is the commit the work tree was on when the session was created:
 	// what its changes are counted from. It is empty outside a repository.
 	Base string
+	// Worktree is the top of the git worktree that was made for the session,
+	// when one was: what to offer to remove when the session is closed.
+	Worktree string
 	// Uncommitted narrows the changes shown to what is not committed. It
 	// starts as the settings say.
 	Uncommitted bool
