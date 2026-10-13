@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -532,6 +533,45 @@ func TestSessionClosesWithItsAgent(t *testing.T) {
 	w.gone("shell-1")
 	w.see("claude-1 · claude")
 	w.quit()
+}
+
+// Quitting right after a session was closed still waits for its agent, and
+// kills one that does not end when told to.
+func TestQuitWhileSessionCloses(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+
+	// A command that stays when its terminal goes, and does not read from it.
+	w.newShell()
+	pidFile := filepath.Join(filepath.Dir(w.dir), "pid")
+	w.line(fmt.Sprintf("trap '' HUP; echo $$ > %s; exec sleep 300", pidFile))
+	var pid int
+	deadline := time.Now().Add(5 * time.Second)
+	for pid == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the command never said which process it is")
+		}
+		time.Sleep(20 * time.Millisecond)
+		out, _ := os.ReadFile(pidFile)
+		_, _ = fmt.Sscanf(string(out), "%d", &pid)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+
+	w.prefix('x')
+	w.see("close shell-1 and stop its agent?")
+	w.typeText("y")
+	w.gone("shell-1")
+	w.quit()
+
+	// A process that is gone cannot be signalled, once it has been reaped.
+	deadline = time.Now().Add(2 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the command outlived cicoria")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // What has left the agent's screen comes back with page up and the wheel.

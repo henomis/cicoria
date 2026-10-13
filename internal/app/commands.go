@@ -591,8 +591,9 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	m.save()
 	m.askRemoveWorktree(made)
 	// The agent is given a moment to end, which is not for the screen to
-	// wait for.
-	stop := func() tea.Msg { closed.Close(); return nil }
+	// wait for. Quitting in that moment waits for it.
+	m.stopping = append(m.stopping, closed)
+	stop := func() tea.Msg { closed.Close(); return stoppedMsg{closed} }
 	return tea.Batch(stop, m.showProject())
 }
 

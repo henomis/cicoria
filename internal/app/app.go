@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -95,6 +96,8 @@ type Model struct {
 
 	sessions []*session.Session
 	active   int
+	// stopping are the closed sessions whose agents are still ending.
+	stopping []*session.Session
 	// split is the ID of the session shown in the other pane, when the agent
 	// pane is split in two; below says the session with the keys is the
 	// lower one.
@@ -219,6 +222,8 @@ type (
 		path string
 		err  error
 	}
+	// stoppedMsg reports that the agent of a closed session has ended.
+	stoppedMsg struct{ s *session.Session }
 )
 
 // New returns a workspace opened on dir, with the sessions it had last time.
@@ -405,9 +410,10 @@ func (m *Model) Close() error {
 	if !m.declined {
 		m.save()
 	}
-	// Each agent is given a moment to end: all of them at once.
+	// Each agent is given a moment to end: all of them at once. One of a
+	// session closed just before is waited for as well.
 	var stopping sync.WaitGroup
-	for _, s := range m.sessions {
+	for _, s := range slices.Concat(m.sessions, m.stopping) {
 		stopping.Go(s.Close)
 	}
 	stopping.Wait()
@@ -608,6 +614,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			return m.closeSession(i)
 		}
 		s.Exit(m.watching(i))
+
+	case stoppedMsg:
+		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s })
 
 	case submitMsg:
 		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term && s.Status != agent.Exited {
