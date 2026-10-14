@@ -85,17 +85,33 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 	}
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		if i := int(key[0] - '1'); i < len(m.sessions) {
+			m.leaveView(key)
 			return m.switchTo(i)
 		}
 		return nil
 	}
 	for _, c := range commands {
 		if c.key == key {
+			m.leaveView(key)
 			return c.run(m)
 		}
 	}
 	m.say(fmt.Sprintf("%s %s is not a command (%s ? for help)", m.cfg.Prefix, key, m.cfg.Prefix))
 	return nil
+}
+
+// leaveView closes the full-screen view before a command that acts on the
+// workspace. Sending the notes and the palettes open on top of the view.
+func (m *Model) leaveView(key string) {
+	if m.mode != modeView {
+		return
+	}
+	switch key {
+	case "t", "o", "space":
+		return
+	}
+	m.mode = modeWorkspace
+	m.seen()
 }
 
 // switchTo puts session i on screen, wrapping around the list. The side

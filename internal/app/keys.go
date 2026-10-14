@@ -81,6 +81,17 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case modeView:
+		// The prefix works here too, except while a search is typed.
+		if m.view.search == nil {
+			if m.prefix {
+				m.prefix = false
+				return m.runPrefix(k)
+			}
+			if key == m.cfg.Prefix {
+				m.prefix = true
+				return nil
+			}
+		}
 		return m.viewKey(k)
 	}
 
@@ -322,7 +333,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case l.queue.contains(x, y):
 		if s := m.current(); isClick && s != nil {
 			m.focus = focusQueue
-			if row := y - l.queue.y - 1; row >= 0 && row < len(s.Queue) {
+			if row := m.queueTop(s, l.queue.h-2) + y - l.queue.y - 1; row >= 0 && row < len(s.Queue) && y > l.queue.y {
 				m.queueCursor = row
 			}
 		}

@@ -282,6 +282,13 @@ func (m *Model) askEdit(s *session.Session, i int) {
 	m.prompt = p
 }
 
+// queueTop is the first message the queue panel shows in height rows: the
+// cursor is kept in sight.
+func (m *Model) queueTop(s *session.Session, height int) int {
+	cursor := max(min(m.queueCursor, len(s.Queue)-1), 0)
+	return ui.Window(cursor, 0, height, len(s.Queue))
+}
+
 func (m *Model) renderQueue(r rect) []string {
 	s := m.current()
 	if s == nil {
@@ -291,7 +298,7 @@ func (m *Model) renderQueue(r rect) []string {
 	inner, height := r.w-2, r.h-2
 
 	cursor := max(min(m.queueCursor, len(s.Queue)-1), 0)
-	top := ui.Window(cursor, 0, height, len(s.Queue))
+	top := m.queueTop(s, height)
 	var lines []string
 	for i := top; i < min(top+height, len(s.Queue)); i++ {
 		lead := "  "

@@ -848,7 +848,9 @@ func TestNotes(t *testing.T) {
 	w.see("note on notes.txt:1:")
 	w.line("say hi properly")
 	w.see("1 note(s)", "*▌+hello from the agent")
-	w.typeText("q")
+	// The prefix works in the view too: ctrl+a g leaves it for the changes
+	// panel, where g alone would go to the top.
+	w.prefix('g')
 	w.see("Sessions")
 
 	// In a file, several lines are selected first.
@@ -1540,6 +1542,38 @@ func TestQueue(t *testing.T) {
 	w.prefix('u')
 	w.typeText("p")
 	w.see("got later")
+}
+
+// TestClickInScrolledQueue clicks a message of a queue too long for its
+// panel, scrolled down to the last one.
+func TestClickInScrolledQueue(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 20)
+	w.see("claude-1 · claude · idle")
+	w.line("work")
+	w.see("claude-1 · claude · working")
+	w.queue("msg-a", "msg-b", "msg-c", "msg-d", "msg-e", "msg-f")
+	w.see("Queue (6)")
+	w.prefix('u')
+	w.typeText("jjjjj")
+	w.see("msg-f")
+	w.gone("msg-a")
+	// The panel shows four messages from row 14: msg-c is the first.
+	w.tm.SendMouse(uv.MouseClickEvent{X: 120, Y: 14, Button: uv.MouseLeft})
+	w.typeText("x")
+	w.see("Queue (5)")
+	w.gone("msg-c")
+	w.typeText("q")
+	w.line("stop")
+	w.see("got msg-a")
+	w.line("stop")
+	w.see("got msg-b")
+	w.prefix('u')
+	w.typeText("p")
+	w.typeText("q")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.quit()
 }
 
 // A session created where another one works can have a git worktree of its
