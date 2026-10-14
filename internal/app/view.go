@@ -136,7 +136,11 @@ func (m *Model) View() tea.View {
 		rows = m.renderHelp()
 	default:
 		l := m.layout()
-		rows = m.renderWorkspace(l)
+		if m.mode == modePalette && m.paletteFrom == modeView {
+			rows = m.renderView()
+		} else {
+			rows = m.renderWorkspace(l)
+		}
 		if m.mode == modePalette {
 			w := min(m.width-4, 72)
 			h := min(l.body.h-2, 18)
@@ -318,8 +322,16 @@ func lasting(s *session.Session) string {
 
 func (m *Model) renderSessions(r rect) []string {
 	focused := m.focus == focusSessions
+	// The list scrolls to keep the cursor in sight, or the session on screen
+	// while the panel does not have the keys.
+	cursor := m.active
+	if focused {
+		cursor = m.sessionCursor
+	}
+	m.sessionTop = ui.Window(cursor, m.sessionTop, r.h-2, len(m.sessions))
 	var lines []string
-	for i, s := range m.sessions {
+	for i := m.sessionTop; i < len(m.sessions); i++ {
+		s := m.sessions[i]
 		num := " "
 		if i < 9 {
 			num = fmt.Sprint(i + 1)
@@ -494,11 +506,15 @@ func (m *Model) renderHelp() []string {
 		"",
 	}
 	for _, c := range commands {
-		lines = append(lines, fmt.Sprintf("    %s %-6s %s", ui.Accent.Render(p), ui.Accent.Render(c.key), c.name))
+		lines = append(lines, fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", c.key)), c.name))
 	}
 	lines = append(lines,
-		fmt.Sprintf("    %s %-6s %s", ui.Accent.Render(p), ui.Accent.Render("1-9"), "Go to session by number"),
-		fmt.Sprintf("    %s %-6s %s", ui.Accent.Render(p), ui.Accent.Render(p), "Send "+p+" to the agent"),
+		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", "1-9")), "Go to session by number"),
+		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", p)), "Send "+p+" to the agent"),
+		"    These work in a full-screen file or diff too. t, /, space and ? open",
+		"    over the file; a, r, x, q, , and m leave it on screen and d shows a",
+		"    diff in its place, unless they go to another session, close this one",
+		"    or quit.",
 		"",
 		ui.Bold.Render("  New session"),
 		"    pick the agent, the directory it works in and a name: tab completes the",
@@ -513,7 +529,7 @@ func (m *Model) renderHelp() []string {
 		ui.Bold.Render("  Workspaces"),
 		"    sessions are saved for the directory cicoria was opened on, wherever they",
 		"    work, and only come back when it is opened on that directory again.",
-		"    "+p+" w lists the other saved workspaces and opens one in place of this.",
+		"    "+p+" w opens another saved workspace in place of this one.",
 		"",
 		ui.Bold.Render("  Scrolling back"),
 		"    the mouse wheel and pgup/pgdn scroll through what has left the agent's",
@@ -521,43 +537,48 @@ func (m *Model) renderHelp() []string {
 		"    takes the whole screen, like an editor, scrolls by itself.",
 		"",
 		ui.Bold.Render("  Two sessions on screen"),
-		"    "+p+" - shows another session below the one on screen; again, and there is",
-		"    one pane. "+p+" tab or a click moves the keys from one pane to the other.",
-		"    Going to a session puts it in the pane that has the keys.",
+		"    "+p+" - shows another session below the one on screen; again, and",
+		"    there is one pane. "+p+" tab or a click moves the keys between the",
+		"    panes. Going to a session puts it in the pane that has the keys.",
 		"",
 		ui.Bold.Render("  Queue"),
-		"    messages wait in the queue and go to the agent one by one, each when it ends",
-		"    its turn; to an idle agent the first goes at once. Agents that do not report",
-		"    their status only get a message when you press enter in the queue panel.",
-		"    queue panel: enter send now · p pause · e edit · x delete · J/K reorder · a add",
-		"    "+p+" k queues a message for another session, or asks it: what its agent says",
-		"    at the end of that turn comes back to this session with your question, and",
-		"    with what you want done with the answer, if you say so. Claude Code and",
-		"    Codex CLI can be asked.",
+		"    messages wait in the queue and go to the agent one by one, each when it",
+		"    ends its turn; to an idle agent the first goes at once. Agents that do not",
+		"    report their status only get a message when you press enter in the queue.",
+		"    queue panel: enter send the next · p pause · e edit · x delete · m add",
+		"                 J/K move a message down/up",
+		"    "+p+" k queues a message for another session, or asks it: what its",
+		"    agent says at the end of that turn comes back to this session with your",
+		"    question, and with what you want done with the answer, if you say so.",
+		"    Claude Code and Codex CLI can be asked.",
 		"",
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
+		"    sessions: enter go to it · , rename · r restart · x close · c new",
 		"    files: h/l close/open folder · d diff · e editor · @ mention to the agent",
 		"           o open with the system, as an image or a web page wants",
 		"           i show ⇄ hide what git ignores, which is grey",
-		"    changes: enter diff · v file · e editor · o open · @ mention to the agent",
+		"    changes: enter/d diff · v file · e editor · o open · @ mention",
 		"             s what is not committed ⇄ everything since the session started",
 		"",
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
-		"    tab/shift+tab next/previous changed file · d file ⇄ diff · e editor · q back",
-		"    w wrap long lines ⇄ cut them · o open with the system",
+		"    tab/shift+tab next/previous changed file · d file ⇄ diff · q back",
+		"    e editor · o open with the system · @ mention to the agent",
+		"    w wrap long lines ⇄ cut them",
 		"    m a Markdown file as a document ⇄ its text · [ ] headings of a document",
-		"    v select lines · c write a note on them · x delete it · s send the notes",
+		"    v select lines · c write a note on them · x delete it · t send the notes",
 		"",
 		ui.Bold.Render("  Notes"),
-		"    a note is a remark on one or more lines of a file or diff. They wait, marked",
-		"    with * in the margin, until you send them: together, as one message with the",
-		"    file, the lines and their text, at once or through the queue.",
-		"",
-		ui.Dim.Render("  press any key to close"),
+		"    a note is a remark on one or more lines of a file or diff. They wait,",
+		"    marked with * in the margin, until you send them: together, as one",
+		"    message with the file, the lines and their text, at once or through the",
+		"    queue.",
 	)
-	return ui.Box("Help", lines, m.width, max(m.height-1, 2), true)
+	// The text scrolls when it is longer than the screen.
+	height := max(m.height-1, 2)
+	m.helpTop = max(min(m.helpTop, len(lines)-(height-2)), 0)
+	return ui.Box("Help", lines[m.helpTop:], m.width, height, true)
 }
 
 // renderStatus draws the bottom line.
@@ -576,6 +597,12 @@ func (m *Model) renderStatus() string {
 		return ui.Fit(" "+m.view.search.View(), m.width)
 	}
 
+	// A palette over the full-screen view leaves its status on screen.
+	under := m.mode
+	if under == modePalette {
+		under = m.paletteFrom
+	}
+
 	var left []string
 	if m.prefix {
 		left = append(left, ui.Reverse.Render(" "+m.cfg.Prefix+" "))
@@ -584,19 +611,24 @@ func (m *Model) renderStatus() string {
 		left = append(left, m.message)
 	}
 	for i, s := range m.sessions {
-		if s.Status == agent.NeedsInput && (i != m.active || m.mode != modeWorkspace) {
+		if s.Status == agent.NeedsInput && (i != m.active || under != modeWorkspace) {
 			left = append(left, ui.Warn.Render("▲ "+s.Name+" needs input"))
 		}
 	}
 
 	var right string
-	switch m.mode {
+	switch under {
 	case modeView:
 		left = append(left, m.view.pager.Status(m.viewHeight()))
 		if s := m.current(); s != nil && len(s.Notes) > 0 {
 			left = append(left, ui.Warn.Render(fmt.Sprintf("%d note(s)", len(s.Notes))))
 		}
-		right = "q back · / search · [ ] hunks · tab file · d diff · v select · c note · s send"
+		right = "q back · / search · [ ] hunks · tab file · d diff · v select · c note · t send"
+		if m.mode == modePalette {
+			right = "esc back"
+		}
+	case modeHelp:
+		right = "j/k space b g G scroll · any other key closes"
 	default:
 		if s := m.current(); s != nil {
 			if s.Status == agent.Exited {
@@ -612,6 +644,10 @@ func (m *Model) renderStatus() string {
 	text := " " + strings.Join(left, ui.Dim.Render(" · "))
 	right = ui.Dim.Render(right) + " "
 	gap := m.width - ansi.StringWidth(text) - ansi.StringWidth(right)
+	if gap < 1 && m.mode == modeHelp {
+		// The keys of help stay in sight.
+		return ui.Fit(text, m.width-ansi.StringWidth(right)) + right
+	}
 	if gap < 1 {
 		return ui.Fit(text, m.width)
 	}

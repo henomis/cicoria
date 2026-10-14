@@ -129,6 +129,23 @@ func TestScrollBack(t *testing.T) {
 	}
 }
 
+// A zsh prompt hides the cursor, saves and restores it, and shows it again.
+func TestCursorShowsAfterRestore(t *testing.T) {
+	tm, err := Start(exec.Command("sh", "-c", `printf '\0337\033[?25lhidden'; sleep 0.2; printf '\0338\033[?25hshown'; cat`), 40, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tm.Close() }()
+	waitFor(t, tm, "hidden")
+	if _, _, visible := tm.Cursor(); visible {
+		t.Error("the cursor shows while the command hides it")
+	}
+	waitFor(t, tm, "shown")
+	if _, _, visible := tm.Cursor(); !visible {
+		t.Error("the cursor stays hidden once the command shows it again")
+	}
+}
+
 func TestCommandThatReadsTheMouseOwnsScrolling(t *testing.T) {
 	tm, err := Start(exec.Command("sh", "-c", `echo plain; read x; printf '\033[?1000hmouse\n'; read x; printf '\033[?1000lnone\n'; cat`), 40, 5)
 	if err != nil {

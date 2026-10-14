@@ -44,7 +44,17 @@ func (m *Model) askQueue() tea.Cmd {
 		if s == nil || text == "" {
 			return nil
 		}
-		return m.enqueue(s, session.Message{Text: text})
+		cmd := m.enqueue(s, session.Message{Text: text})
+		// Over the full-screen view the queue is not on screen. A message
+		// goes out only once the queue before it has.
+		if m.mode == modeView {
+			if len(s.Queue) == 0 {
+				m.say("sent to " + s.Name)
+			} else {
+				m.say("queued for " + s.Name)
+			}
+		}
+		return cmd
 	}
 	m.prompt = p
 	return nil
@@ -241,7 +251,7 @@ func (m *Model) queueKey(key string) tea.Cmd {
 	case "K":
 		m.queueCursor = s.MoveQueued(i, -1)
 		m.save()
-	case "x", "d":
+	case "x":
 		s.RemoveQueued(i)
 		m.queueCursor = max(min(i, len(s.Queue)-1), 0)
 		m.save()
@@ -251,7 +261,7 @@ func (m *Model) queueKey(key string) tea.Cmd {
 		return m.trySend(s)
 	case "enter":
 		return m.sendNext(s)
-	case "a":
+	case "m":
 		return m.askQueue()
 	case "e":
 		switch {
@@ -282,6 +292,13 @@ func (m *Model) askEdit(s *session.Session, i int) {
 	m.prompt = p
 }
 
+// queueTop is the first message the queue panel shows in height rows: the
+// cursor is kept in sight.
+func (m *Model) queueTop(s *session.Session, height int) int {
+	cursor := max(min(m.queueCursor, len(s.Queue)-1), 0)
+	return ui.Window(cursor, 0, height, len(s.Queue))
+}
+
 func (m *Model) renderQueue(r rect) []string {
 	s := m.current()
 	if s == nil {
@@ -291,7 +308,7 @@ func (m *Model) renderQueue(r rect) []string {
 	inner, height := r.w-2, r.h-2
 
 	cursor := max(min(m.queueCursor, len(s.Queue)-1), 0)
-	top := ui.Window(cursor, 0, height, len(s.Queue))
+	top := m.queueTop(s, height)
 	var lines []string
 	for i := top; i < min(top+height, len(s.Queue)); i++ {
 		lead := "  "

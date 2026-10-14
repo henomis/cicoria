@@ -25,6 +25,7 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/henomis/cicoria/internal/term"
 )
@@ -231,6 +232,29 @@ func (w *workspace) gone(text string) {
 	}
 }
 
+// at returns the column and row where text is on the screen.
+func (w *workspace) at(text string) (int, int) {
+	w.t.Helper()
+	for y, line := range strings.Split(w.tm.String(), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			return ansi.StringWidth(line[:i]), y
+		}
+	}
+	w.t.Fatalf("%q is not on the screen:\n%s", text, w.tm.String())
+	return 0, 0
+}
+
+// openFile opens the file found by name in the full-screen view.
+func (w *workspace) openFile(name string) {
+	w.t.Helper()
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText(name)
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  " + name)
+	w.gone("file ›")
+}
+
 // typeText types characters; line also presses enter.
 func (w *workspace) typeText(text string) {
 	for _, r := range text {
@@ -333,7 +357,7 @@ func TestWorkspace(t *testing.T) {
 	w.see("Sessions")
 
 	// And by name, through the file finder.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("auth")
 	w.see("api/auth.go")
@@ -848,11 +872,15 @@ func TestNotes(t *testing.T) {
 	w.see("note on notes.txt:1:")
 	w.line("say hi properly")
 	w.see("1 note(s)", "*▌+hello from the agent")
-	w.typeText("q")
+	// The prefix works in the view too: ctrl+a g leaves it for the changes
+	// panel, where g alone would go to the top.
+	w.prefix('g')
 	w.see("Sessions")
+	w.prefix('o')
+	w.see("ctrl+a / finds a file now")
 
 	// In a file, several lines are selected first.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("main")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -863,13 +891,14 @@ func TestNotes(t *testing.T) {
 	w.see("2 note(s)", "* 1 package main", "*▌3 func main() {}")
 
 	// Leaving the question of how to send them goes back to the file.
-	w.typeText("s")
+	w.typeText("t")
 	w.see("send 2 note(s) to claude-1", "Send to the agent now", "Add to the queue")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
 	w.see("file  main.go", "2 note(s)")
+	w.gone("Send to the agent now")
 
 	// Sent at once, the agent gets one message with every note.
-	w.typeText("s")
+	w.typeText("t")
 	w.see("Send to the agent now")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("got Review", "got notes.txt:1", "got say", "got main.go:1-3", "got add")
@@ -877,7 +906,7 @@ func TestNotes(t *testing.T) {
 
 	// Through the queue, they wait for the end of the turn. A note can be
 	// rewritten and deleted before it goes.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("main")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -894,7 +923,7 @@ func TestNotes(t *testing.T) {
 	w.see("note on main.go:3: too short")
 	w.line("ly named")
 	w.see("1 note(s)")
-	w.typeText("s")
+	w.typeText("t")
 	w.see("Add to the queue")
 	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -917,7 +946,7 @@ func TestMarkdown(t *testing.T) {
 	w.see("agent ready", "Changes (1)")
 
 	// A Markdown file opens as the document it describes.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("guide")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -942,7 +971,7 @@ func TestMarkdown(t *testing.T) {
 	w.see("rendered  guide.md", "*▌Setup")
 	w.typeText("mq")
 	w.see("Sessions")
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("guide")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -1319,6 +1348,44 @@ func TestClickOnSession(t *testing.T) {
 	w.quit()
 }
 
+// TestSessionsPanelKeys renames and restarts from the sessions panel: the
+// session under the cursor, not the one on screen.
+func TestSessionsPanelKeys(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.newShell()
+	w.prefix('s')
+	w.typeText("k")
+	w.typeText(",")
+	w.see("rename session: claude-1")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.line("first-agent")
+	w.see("first-agent", "shell-1 · shell")
+	w.typeText("r")
+	w.see("first-agent is still running")
+
+	// Over a full-screen file the cursor of the panel is not on screen: the
+	// commands are for the session the file is shown for.
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  main.go")
+	w.prefix(',')
+	w.see("rename session: shell-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("rename session")
+
+	// Closing it asks over the file, and the file goes with the session.
+	w.prefix('x')
+	w.see("close shell-1", "file  main.go")
+	w.typeText("y")
+	w.see("first-agent · claude")
+	w.gone("file  main.go")
+	w.quit()
+}
+
 // The agent pane is split in two, and the keys go from one session to the
 // other.
 func TestSplit(t *testing.T) {
@@ -1385,13 +1452,18 @@ func TestSplit(t *testing.T) {
 	w.see("claude-1 · claude · working")
 	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
 	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	// Closed from a full-screen file, the file goes with it.
+	w.openFile("main")
 	w.prefix('x')
-	w.see("close claude-1 and stop its agent?")
+	w.see("close claude-1 and stop its agent?", "file  main.go")
 	w.typeText("y")
 	w.gone("claude-1")
+	w.gone("file  main.go")
 	w.see("claude-2 · claude · working")
+	// Quitting asks over the file.
+	w.openFile("main")
 	w.prefix('q')
-	w.see("still working")
+	w.see("still working", "file  main.go")
 	w.typeText("y")
 	select {
 	case <-w.tm.Done():
@@ -1488,11 +1560,18 @@ func TestQueue(t *testing.T) {
 	w.typeText("x") // deletes six, which the cursor followed
 	w.see("Queue (2)", "▸ seven", "eight")
 	w.gone("six")
+	w.typeText("d") // deletes nothing: d is for diffs
+	w.typeText("m") // adds, as ctrl+a m does
+	w.see("queue for ")
+	w.line("nine")
+	w.see("Queue (3)", "nine")
 	w.typeText("q")
 	w.line("stop")
 	w.see("got seven")
 	w.line("stop")
 	w.see("got eight")
+	w.line("stop")
+	w.see("got nine")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 
@@ -1540,6 +1619,220 @@ func TestQueue(t *testing.T) {
 	w.prefix('u')
 	w.typeText("p")
 	w.see("got later")
+}
+
+// TestSessionsPanelScrolls keeps the cursor of a list too long for its
+// panel in sight, and a click picks the session shown.
+func TestSessionsPanelScrolls(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 14)
+	w.see("claude-1 · claude · idle")
+	for i := 1; i <= 4; i++ {
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("shell")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("shell in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(fmt.Sprintf("session name: shell-%d", i))
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(fmt.Sprintf("shell-%d · shell", i))
+	}
+	// Four rows: the panel follows the session on screen, the last one.
+	w.gone("claude-1")
+	w.prefix('s')
+	w.typeText("kkkk")
+	w.see("claude-1")
+	x, y := w.at("shell-2")
+	w.tm.SendMouse(uv.MouseClickEvent{X: x, Y: y, Button: uv.MouseLeft})
+	w.see("shell-2 · shell")
+	w.quit()
+}
+
+// TestHelpScrolls scrolls a help screen longer than the terminal, and
+// closes it with any other key.
+func TestHelpScrolls(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 20)
+	w.see("claude-1 · claude · idle")
+	w.prefix('?')
+	w.see("starts a command:")
+	w.gone("a note is a remark")
+	w.typeText("G")
+	w.see("a note is a remark", "message with the file, the lines")
+	w.gone("starts a command:")
+	w.typeText("g")
+	w.see("starts a command:", "any other key closes")
+	x, y := w.at("starts a command:")
+	w.tm.SendMouse(uv.MouseWheelEvent{X: x, Y: y, Button: uv.MouseWheelDown})
+	w.gone("starts a command:")
+	w.typeText("g")
+	w.see("starts a command:")
+	w.typeText("jj") // past the blank line and the heading
+	w.gone("starts a command:")
+	w.typeText("z")
+	w.see("claude-1 · claude · idle")
+	w.gone("any other key closes")
+	w.quit()
+}
+
+// TestKeptCommandsInView restarts, queues and reviews from a full-screen
+// file, which stays on screen or gives way to the diff.
+func TestKeptCommandsInView(t *testing.T) {
+	w := newWorkspace(t)
+	w.set("close_on_exit = false")
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.line("edit kept.txt")
+	w.see("claude-1 · claude · working")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+
+	w.newShell()
+	w.line("exit")
+	w.see("shell-1 exited")
+	w.openFile("main")
+	w.prefix('r')
+	w.see("restarting shell-1", "file  main.go")
+	w.typeText("q")
+	w.gone("file  main.go")
+	w.gone("exited")
+
+	// To an idle agent a message queued from the file goes at once.
+	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.openFile("main")
+	w.prefix('m')
+	w.see("queue for claude-1:")
+	w.line("now")
+	w.see("sent to claude-1", "file  main.go")
+	w.typeText("q")
+	w.see("got now")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+
+	w.line("work")
+	w.see("claude-1 · claude · working")
+	w.openFile("main")
+	w.prefix('m')
+	w.see("queue for claude-1:")
+	w.line("later")
+	w.see("queued for claude-1", "file  main.go")
+
+	w.prefix('d')
+	w.see("diff  kept.txt")
+	w.typeText("q")
+	w.line("stop")
+	w.see("got later")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.quit()
+}
+
+// TestPrefixInView runs commands from a full-screen file: help and the
+// palettes open over it and go back to it, a reply keeps the file on screen,
+// and the commands that show the workspace leave it.
+func TestPrefixInView(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  main.go")
+
+	w.prefix('?')
+	w.see("starts a command:")
+	w.typeText("z")
+	w.see("file  main.go")
+	w.gone("starts a command:")
+
+	w.prefix(' ')
+	w.typeText("find")
+	// The palette is drawn over the file, whose status stays below.
+	w.see("Find a file by name", "file  main.go", "esc back")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.see("file  main.go")
+	w.gone("Find a file by name")
+
+	// A command picked in the palette runs as from the prefix.
+	w.prefix(' ')
+	w.typeText("find a file")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.see("file  main.go")
+	w.gone("file ›")
+
+	// A command that only replies, or asks for a line, keeps the file on
+	// screen.
+	w.prefix('a')
+	w.see("no session needs input", "file  main.go")
+	w.prefix(',')
+	w.see("rename session: claude-1", "file  main.go")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("rename session")
+	w.see("file  main.go")
+
+	// Review from here changes what the changes panel counts: it is shown.
+	w.prefix('h')
+	w.see("counted from here", "Sessions")
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  main.go")
+
+	// The prefix pressed twice goes to the agent, which is shown first.
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.see("Sessions")
+	w.quit()
+}
+
+// TestClickInScrolledQueue clicks a message of a queue too long for its
+// panel, scrolled down to the last one.
+func TestClickInScrolledQueue(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 20)
+	w.see("claude-1 · claude · idle")
+	w.line("work")
+	w.see("claude-1 · claude · working")
+	w.queue("msg-a", "msg-b", "msg-c", "msg-d", "msg-e", "msg-f")
+	w.see("Queue (6)")
+	w.prefix('u')
+	w.see("msg-d")
+	w.gone("msg-e")
+
+	// The bottom border is no message: the cursor stays on the first.
+	x, y := w.at("msg-d")
+	w.tm.SendMouse(uv.MouseClickEvent{X: x, Y: y + 1, Button: uv.MouseLeft})
+	w.typeText("x")
+	w.see("Queue (5)", "msg-e")
+	w.gone("msg-a")
+
+	// Scrolled down to the last message, a click picks the message shown.
+	w.typeText("jjjj")
+	w.see("msg-f")
+	w.gone("msg-b")
+	x, y = w.at("msg-c")
+	w.tm.SendMouse(uv.MouseClickEvent{X: x, Y: y, Button: uv.MouseLeft})
+	w.typeText("x")
+	w.see("Queue (4)")
+	w.gone("msg-c")
+
+	// The wheel moves the cursor: up to the first message.
+	x, y = w.at("msg-d")
+	w.tm.SendMouse(uv.MouseWheelEvent{X: x, Y: y, Button: uv.MouseWheelUp})
+	w.typeText("x")
+	w.see("Queue (3)", "msg-d")
+	w.gone("msg-b")
+	w.typeText("p")
+	w.typeText("q")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.quit()
 }
 
 // A session created where another one works can have a git worktree of its

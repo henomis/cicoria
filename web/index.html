@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cicoria: run a team of coding agents in your terminal</title>
+<title>cicoria: work with several coding agents in your terminal</title>
 <meta name="description" content="Run several coding agents in your terminal, each in its own session. See which one needs you, review everything they changed, and send your notes back.">
-<meta property="og:title" content="cicoria: run a team of coding agents in your terminal">
+<meta property="og:title" content="cicoria: work with several coding agents in your terminal">
 <meta property="og:description" content="Run several coding agents in your terminal, each in its own session. See which one needs you, review everything they changed, and send your notes back.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141834'/%3E%3Cg stroke='%238fa8ff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M16 5v22M5 16h22M8.2 8.2l15.6 15.6M23.8 8.2 8.2 23.8'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='4' fill='%23141834' stroke='%238fa8ff' stroke-width='2'/%3E%3C/svg%3E">
@@ -24,7 +24,7 @@
 
 <main>
   <div class="wrap hero">
-    <h1>Run a team of coding agents. Know which one needs you.</h1>
+    <h1>Work with several coding agents at once. Know which one needs you.</h1>
     <p class="lede">cicoria runs your coding agents in your terminal, each in a session of its own. It shows which session is waiting for you, keeps everything each one changed ready to review, and sends your notes on the code back as one message.</p>
 
     <div class="install">
@@ -48,7 +48,7 @@
 <span class="d">3</span> <span class="g">✓</span> docs-pass      <span class="d">12m site</span></pre>
         <div>
           <h3>Know which agent needs you, without checking</h3>
-          <p>Every session shows whether it is working, waiting for your answer, or finished while you were elsewhere, and for how long. <kbd>ctrl+a</kbd> <kbd>a</kbd> jumps to the next one that needs input, and a desktop notification tells you when one starts waiting in the background.</p>
+          <p>Every session shows whether it is working, waiting for your answer, or finished while you were elsewhere, and for how long. <kbd>ctrl+a</kbd> <kbd>a</kbd> jumps to the next one that needs input, and a desktop notification tells you when one you are not looking at starts waiting.</p>
         </div>
       </li>
       <li>
@@ -90,8 +90,8 @@
 
 Handle it in the client.</pre>
         <div>
-          <h3>Let one session ask another</h3>
-          <p><kbd>ctrl+a</kbd> <kbd>k</kbd> puts a question to another session. Its answer comes back to the one you asked from by itself, with your question and what to do next, so you stop copying between panes.</p>
+          <h3>Pass a question from one session to another</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>k</kbd> puts your question to another session. Its answer is handed back to the session you asked from, with your question and what to do next, so you stop copying between panes. The agents never contact each other on their own.</p>
         </div>
       </li>
       <li>
@@ -160,7 +160,7 @@ command = ["claude", "--model", "opus"]</pre>
     <h2>The first minute</h2>
     <ol class="steps">
       <li><div>
-        <p>Install it. You need git and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too. It runs on Linux, on macOS, and on Windows in WSL2.</p>
+        <p>Install it. You need git and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too. It is tested on Linux and runs on Windows in WSL2. There are builds for macOS, not yet tried on a Mac.</p>
         <pre>curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</pre>
       </div></li>
       <li><div>
@@ -178,7 +178,7 @@ cicoria</pre>
   </div>
 
   <div class="wrap section close">
-    <h2>Start the agents, go do something else, and come back when one calls you.</h2>
+    <h2>Start the agents, keep working, and switch to the one that needs you.</h2>
     <div class="install">
       <code id="install-again">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
       <button type="button" data-copy="install-again">Copy</button>
@@ -195,7 +195,7 @@ cicoria</pre>
 <span class="stem">      |/
      \|
       |</span></pre>
-  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start. The name turned up at 5:15 one October morning, and the first version was written by an agent while its author cooked chicory. Only the agent said when it needed attention.</p>
+  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start. The idea turned up at 5:15 one October morning; the name came later that morning, from the chicory its author was cooking while an agent wrote the first version. Only the agent said when it needed attention.</p>
   <nav aria-label="Footer"><a href="docs.html">Docs</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
 </footer>
 

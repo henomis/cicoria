@@ -41,6 +41,7 @@
   <main class="doc">
     <h1>Using cicoria</h1>
     <p>cicoria runs coding agents in terminal panes and shows, around the one on screen, its sessions, files and changes. This page covers everything it does.</p>
+    <p>cicoria is an interface for you, working with several coding agent sessions at once. It does not orchestrate agents, run workflows between them or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.</p>
 
     <section id="install">
       <h2>Install</h2>
@@ -81,7 +82,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>n, p</td><td>Next, previous session</td></tr>
           <tr><td>a</td><td>Go to the next session that needs input</td></tr>
           <tr><td>,</td><td>Rename the session</td></tr>
-          <tr><td>r</td><td>Restart a session whose agent has exited</td></tr>
+          <tr><td>r</td><td>Restart the session once its agent has exited</td></tr>
           <tr><td>x</td><td>Close the session</td></tr>
           <tr><td>-</td><td>Split: show another session below, or close the split</td></tr>
           <tr><td>tab</td><td>Go to the other pane of the split</td></tr>
@@ -93,15 +94,16 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>d</td><td>Review changes: open the diff of the selected file</td></tr>
           <tr><td>t</td><td>Send your review notes to the agent</td></tr>
           <tr><td>h</td><td>Review from here: count changes from the last commit</td></tr>
-          <tr><td>o</td><td>Open a file by name</td></tr>
+          <tr><td>/</td><td>Find a file by name</td></tr>
           <tr><td>b</td><td>Show or hide the side panels</td></tr>
           <tr><td>[, ]</td><td>Show or hide the left, the right panels</td></tr>
           <tr><td>space</td><td>Command palette: every command, by name</td></tr>
-          <tr><td>?</td><td>Help</td></tr>
+          <tr><td>?</td><td>Help. <kbd>j</kbd> <kbd>k</kbd> or the arrows, <kbd>space</kbd> <kbd>f</kbd> <kbd>pgdn</kbd> and <kbd>b</kbd> <kbd>pgup</kbd>, <kbd>g</kbd> <kbd>G</kbd> or <kbd>home</kbd> <kbd>end</kbd> and the mouse wheel scroll it, any other key closes it</td></tr>
           <tr><td>q</td><td>Quit</td></tr>
           <tr><td>ctrl+a</td><td>Send <kbd>ctrl+a</kbd> itself to the agent</td></tr>
         </tbody>
       </table></div>
+      <p>These work in a full-screen file or diff too. <kbd>t</kbd>, <kbd>/</kbd>, <kbd>space</kbd> and <kbd>?</kbd> open over the file. <kbd>a</kbd>, <kbd>d</kbd>, <kbd>r</kbd>, <kbd>x</kbd>, <kbd>q</kbd>, <kbd>,</kbd> and <kbd>m</kbd> keep it on screen while they reply, ask, restart the session or, for <kbd>d</kbd>, show a diff in its place; going to another session, closing the one on screen or quitting leaves it. The other commands go back to the workspace.</p>
     </section>
 
     <section id="sessions">
@@ -149,9 +151,9 @@ cicoria -version   <span class="c"># which version this is</span></pre>
       <div class="table"><table>
         <thead><tr><th>Panel</th><th>Keys</th></tr></thead>
         <tbody>
-          <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>x</kbd> close it, <kbd>c</kbd> new session</td></tr>
+          <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>,</kbd> rename it, <kbd>r</kbd> restart it, <kbd>x</kbd> close it, <kbd>c</kbd> new session. They act on the session under the cursor</td></tr>
           <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention the file to the agent, <kbd>i</kbd> show or hide what git ignores</td></tr>
-          <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
+          <tr><td>Changes</td><td><kbd>enter</kbd> or <kbd>d</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
@@ -185,10 +187,11 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>e</td><td>Open the file in <code>$VISUAL</code> or <code>$EDITOR</code></td></tr>
           <tr><td>o</td><td>Open the file with the system: an image in the viewer, a web page in the browser</td></tr>
           <tr><td>@</td><td>Mention the file to the agent</td></tr>
-          <tr><td>v, c, x, s</td><td>Select lines, write a note, delete it, send the notes</td></tr>
+          <tr><td>v, c, x, t</td><td>Select lines, write a note, delete it, send the notes</td></tr>
           <tr><td>q</td><td>Back to the workspace</td></tr>
         </tbody>
       </table></div>
+      <p>The commands of the prefix work in the view too, such as <kbd>ctrl+a</kbd> <kbd>/</kbd> to open another file.</p>
       <p>A Markdown file opened from the file tree or by its name is shown as the document it describes: headings, lists, tables and coloured code, wrapped to the screen. <kbd>m</kbd> shows its text instead, at the same place, and the choice holds for the files opened after it. Notes are written on the text, and the document marks the passages that have one. A file opened from the changes panel, or next to its diff, is always text.</p>
     </section>
 
@@ -200,7 +203,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
         <li><kbd>c</kbd> on a line that has a note rewrites it. <kbd>x</kbd> deletes it.</li>
         <li>Lines with a note carry a <code>*</code> in the margin.</li>
       </ul>
-      <p>Notes wait until you send them with <kbd>s</kbd>, or <kbd>ctrl+a</kbd> <kbd>t</kbd> from the workspace. You choose whether they go to the agent at once or through the queue. They go together, as one message:</p>
+      <p>Notes wait until you send them with <kbd>t</kbd>, in the view or after <kbd>ctrl+a</kbd>. You choose whether they go to the agent at once or through the queue. They go together, as one message:</p>
       <pre>Review notes:
 
 api/auth.go:42-43
@@ -223,7 +226,7 @@ make this a duration</pre>
         <tbody>
           <tr><td>enter</td><td>Send the next message now</td></tr>
           <tr><td>p</td><td>Pause and resume. Pause when a turn ends with a question you want to answer first</td></tr>
-          <tr><td>a, e, x</td><td>Add, edit, delete a message</td></tr>
+          <tr><td>m, e, x</td><td>Add, edit, delete a message</td></tr>
           <tr><td>J, K</td><td>Move a message down, up</td></tr>
         </tbody>
       </table></div>
@@ -268,7 +271,7 @@ Update the client to handle it.</pre>
         <tbody>
           <tr><td>prefix</td><td><code>"ctrl+a"</code></td><td>The key that starts a command</td></tr>
           <tr><td>default_agent</td><td><code>"claude"</code></td><td>The agent of the first session of a new workspace</td></tr>
-          <tr><td>notify</td><td><code>true</code></td><td>Desktop notification when a background session needs input</td></tr>
+          <tr><td>notify</td><td><code>true</code></td><td>Desktop notification when a session not on screen needs input</td></tr>
           <tr><td>left_panel</td><td><code>true</code></td><td>Open with sessions and files shown</td></tr>
           <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
           <tr><td>changes</td><td><code>"uncommitted"</code></td><td>What the changes panel opens on: what is not committed, or with <code>"session"</code> everything a session changed since it started</td></tr>
@@ -310,17 +313,19 @@ command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]</pre>
       <h2>Develop</h2>
       <pre>git clone https://github.com/henomis/cicoria
 cd cicoria
-go test ./...
-
-<span class="c"># drives the real Claude Code; needs a folder it already trusts</span>
-CICORIA_E2E_REAL=$PWD go test -run TestRealAgent -v .</pre>
+make build      <span class="c"># build ./cicoria</span>
+make check      <span class="c"># formatting, vet and tests: run it before a commit</span>
+make lint       <span class="c"># golangci-lint, as the CI runs it</span>
+make test-real  <span class="c"># the test that drives the real Claude Code; needs a folder it already trusts</span>
+make site       <span class="c"># serve the website in web/ on http://localhost:8000</span>
+make help       <span class="c"># every target</span></pre>
       <p>The end-to-end tests in <code>e2e_test.go</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
     </section>
   </main>
 </div>
 
 <footer class="wrap foot">
-  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start. The name turned up at 5:15 one October morning, and the first version was written by an agent while its author cooked chicory. Only the agent said when it needed attention.</p>
+  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start. The idea turned up at 5:15 one October morning; the name came later that morning, from the chicory its author was cooking while an agent wrote the first version. Only the agent said when it needed attention.</p>
   <nav aria-label="Footer"><a href="./">Home</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
 </footer>
 

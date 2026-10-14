@@ -15,6 +15,7 @@
 package app
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -69,7 +70,24 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 
 	switch m.mode {
 	case modeHelp:
-		m.mode = modeWorkspace
+		// The keys that scroll elsewhere scroll help; any other closes it.
+		page := max(m.height-4, 1)
+		switch key {
+		case "j", "down":
+			m.helpTop++
+		case "k", "up":
+			m.helpTop = max(m.helpTop-1, 0)
+		case "space", " ", "f", "pgdown":
+			m.helpTop += page
+		case "b", "pgup":
+			m.helpTop = max(m.helpTop-page, 0)
+		case "g", "home":
+			m.helpTop = 0
+		case "G", "end":
+			m.helpTop = math.MaxInt32
+		default:
+			m.mode = m.helpFrom
+		}
 		return nil
 	case modePalette:
 		if key == "esc" {
@@ -81,6 +99,17 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case modeView:
+		// The prefix works here too, except while a search is typed.
+		if m.view.search == nil {
+			if m.prefix {
+				m.prefix = false
+				return m.runPrefix(k)
+			}
+			if key == m.cfg.Prefix {
+				m.prefix = true
+				return nil
+			}
+		}
 		return m.viewKey(k)
 	}
 
@@ -146,6 +175,10 @@ func (m *Model) sessionsKey(key string) tea.Cmd {
 		m.sessionCursor = max(m.sessionCursor-1, 0)
 	case "enter", "l", "right":
 		return m.switchTo(m.sessionCursor)
+	case ",":
+		return m.askRename()
+	case "r":
+		return m.restart()
 	case "x":
 		return m.askClose()
 	case "c":
@@ -271,7 +304,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			m.view.pager.SetCursor(m.view.pager.LineAt(mouse.Y-1, m.viewHeight()), m.viewHeight())
 		}
 		return nil
-	case modePalette, modeHelp:
+	case modeHelp:
+		m.helpTop = max(m.helpTop+wheel, 0)
+		return nil
+	case modePalette:
 		return nil
 	}
 
@@ -294,7 +330,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 
 	case l.sessions.contains(x, y):
-		if row := y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) {
+		if row := m.sessionTop + y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) && y > l.sessions.y && y < l.sessions.y+l.sessions.h-1 {
 			cmd := m.switchTo(row)
 			m.focus = focusSessions
 			return cmd
@@ -304,7 +340,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		if isClick {
 			m.focus = focusFiles
 			tree := m.tree()
-			if row := tree.Top + y - l.files.y - 1; row >= 0 && row < len(tree.Rows()) && y > l.files.y {
+			if row := tree.Top + y - l.files.y - 1; row >= 0 && row < len(tree.Rows()) && y > l.files.y && y < l.files.y+l.files.h-1 {
 				tree.Cursor = row
 			}
 		}
@@ -313,7 +349,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case l.changes.contains(x, y):
 		if isClick {
 			m.focus = focusChanges
-			if row := m.changeTop + y - l.changes.y - 1; row >= 0 && row < len(m.changes) && y > l.changes.y {
+			if row := m.changeTop + y - l.changes.y - 1; row >= 0 && row < len(m.changes) && y > l.changes.y && y < l.changes.y+l.changes.h-1 {
 				m.changeCursor = row
 			}
 		}
@@ -322,9 +358,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case l.queue.contains(x, y):
 		if s := m.current(); isClick && s != nil {
 			m.focus = focusQueue
-			if row := y - l.queue.y - 1; row >= 0 && row < len(s.Queue) {
+			if row := m.queueTop(s, l.queue.h-2) + y - l.queue.y - 1; row >= 0 && row < len(s.Queue) && y > l.queue.y && y < l.queue.y+l.queue.h-1 {
 				m.queueCursor = row
 			}
+		}
+		if s := m.current(); s != nil {
+			m.queueCursor = max(min(m.queueCursor+wheel, len(s.Queue)-1), 0)
 		}
 	}
 	return nil

@@ -2,7 +2,9 @@
 
 ![cicoria: a robot made of chicory leaves and flowers at a keyboard, with terminal windows around it](assets/cover.jpg)
 
-A terminal workspace for the AI-first engineer: run several coding agents side by side, see which one needs you, and review what they changed, without leaving the terminal.
+Work with several coding agents at once, in your terminal: see which one needs you, review what each one changed, and send your notes back.
+
+cicoria is an interface for you, not an orchestrator. It does not run workflows between agents or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.
 
 ```
 ╭─ Sessions ───────────────╮╭─ auth-refactor · claude · working ─────╮╭─ Changes (3) ─────────╮
@@ -25,13 +27,13 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Shows a status for every session**: working, needs input, or finished while you were elsewhere. One key jumps to the next session that needs you, and a desktop notification tells you when one starts waiting.
 - **Keeps the changes of a session reviewable**: what is not committed or, one key away, everything since the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
 - **Lets you write notes on lines of code** and send them to the agent as one message.
+- **Gives a session a git worktree of its own** when another one already works in its directory, so their changes are not mixed.
+- **Shows two sessions at once**, one above the other.
 - **Queues messages** and sends each one when the agent ends its turn.
-- **Lets one session ask another**: the answer comes back by itself, with what to do next.
+- **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
-Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
-
-Codex CLI asks you to trust the hooks cicoria gives it, the first time it runs with them: pick "Trust all and continue". Until then it works, but reports nothing.
+Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, which cicoria gives the agents it launches without touching your settings, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
 
 ## Install
 
@@ -64,14 +66,14 @@ cicoria ~/src/app  # or on another one
 cicoria -version   # which version this is
 ```
 
-Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all.
+Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all, in a help screen that `j`/`k` or the arrows, `space`/`f`/`pgdn` and `b`/`pgup`, `g`/`G` or `home`/`end` and the mouse wheel scroll, and any other key closes.
 
 | Key | Command |
 |---|---|
 | `c` | New session: pick the agent, its directory and a name |
 | `1`-`9`, `n`, `p` | Go to a session |
 | `a` | Go to the next session that needs input |
-| `,` `r` `x` | Rename, restart, close the session |
+| `,` `r` `x` | Rename the session, restart it once its agent has exited, close it |
 | `-` | Split: show another session below, or close the split |
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
@@ -79,10 +81,10 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `m` | Queue a message for the agent |
 | `k` | Send a message to another session, or ask it and get the answer here |
 | `u` | Focus the queue panel |
-| `d` | Review changes (full-screen diff) |
+| `d` | Review changes: open the diff of the selected file |
 | `t` | Send review notes to the agent |
 | `h` | Review from here: count changes from the last commit |
-| `o` | Open a file by name |
+| `/` | Find a file by name |
 | `b` | Show or hide the side panels |
 | `[` `]` | Show or hide the left, right panels |
 | `space` | Command palette |
@@ -90,7 +92,11 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `q` | Quit |
 | `ctrl+a` | Send `ctrl+a` to the agent |
 
-In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
+These work in a full-screen file or diff too. `t`, `/`, `space` and `?` open over the file. `a`, `d`, `r`, `x`, `q`, `,` and `m` keep it on screen while they reply, ask, restart the session or, for `d`, show a diff in its place; going to another session, closing the one on screen or quitting leaves it. The other commands go back to the workspace.
+
+The first time a Codex CLI session starts, Codex asks you to trust the hooks cicoria gives it: pick "Trust all and continue". Until then it works, but reports nothing.
+
+In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too. In the sessions panel, `,` renames, `r` restarts, `x` closes the session under the cursor, and `c` creates one.
 
 The title of the agent pane names the session, its agent, its status, its directory and the git branch that directory is on, or the commit when it is on no branch. It follows a branch the agent switches to.
 
@@ -138,7 +144,7 @@ A session closes when its agent or shell exits. It is kept, marked `✕`, when t
 
 The changes panel shows what is not committed. In it, `s` switches to everything the session changed since the commit it started on, committed or not, and back; the panel then says how many commits were made since, and `ctrl+a h` starts the count again from the last commit, once you have looked. With `changes = "session"` in the settings, sessions open on that view.
 
-Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `m` switches a Markdown file between the document and its text, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back.
+Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `m` switches a Markdown file between the document and its text, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back. The commands of the prefix work there too.
 
 A Markdown file opened from the file tree or by its name is shown as the document it describes: headings, lists, tables and coloured code, wrapped to the screen, where `[` `]` jump between headings. `m` shows its text instead, at the same place, and the choice holds for the files opened after it. Notes are written on the text, and the document marks where they are; a file opened from the changes panel, or next to its diff, is always text.
 
@@ -146,13 +152,13 @@ A Markdown file opened from the file tree or by its name is shown as the documen
 
 A note is a remark on one or more lines of a file or diff. In the full-screen view, move to a line (or press `v` and move to select several) and press `c` to write one; `c` on a line that has a note rewrites it, `x` deletes it. Lines with a note carry a `*` in the margin.
 
-Notes wait until you send them with `s` (or `ctrl+a t`): all together, as one message that names each file and its lines, quotes them and gives your text. You choose whether it goes to the agent at once or through the queue.
+Notes wait until you send them with `t`, in the view or after `ctrl+a`: all together, as one message that names each file and its lines, quotes them and gives your text. You choose whether it goes to the agent at once or through the queue.
 
 ## Queue
 
 While an agent works you can line up what to tell it next. `ctrl+a m` asks for a message; the line can be edited with the arrows, `ctrl+w`, `ctrl+u` and the like. Messages wait in a panel under the changes and go to the agent one by one, each when it ends its turn; an idle agent gets the first at once. Nothing is sent while the agent waits for a permission.
 
-In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses and resumes, `e` edits, `x` deletes, `J`/`K` reorder, `a` adds. Pause when a turn ends with a question you want to answer first.
+In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses and resumes, `e` edits, `x` deletes, `J`/`K` reorder, `m` adds. Pause when a turn ends with a question you want to answer first.
 
 Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
 
@@ -184,7 +190,7 @@ Neither agent knows of the other: one gets a message, the other a message with a
 ```toml
 prefix = "ctrl+a"
 default_agent = "claude"
-notify = true            # desktop notification when a background session needs input
+notify = true            # desktop notification when a session not on screen needs input
 left_panel = true        # false opens with sessions and files hidden; ctrl+a [ shows them
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
 changes = "uncommitted"  # "session" opens on everything a session changed since it started
@@ -223,6 +229,8 @@ A session belongs to the workspace it was created in, wherever it works: one cre
 ## Develop
 
 ```sh
+git clone https://github.com/henomis/cicoria
+cd cicoria
 make build      # build ./cicoria
 make check      # formatting, vet and tests: run it before a commit
 make lint       # golangci-lint, as the CI runs it
@@ -237,4 +245,4 @@ The website lives in `web/` and is plain HTML, CSS and JavaScript, with no build
 
 Cicoria is Italian for chicory. One grows in the agent pane each time you start.
 
-The name turned up uninvited at 5:15 in the morning of 11 October 2026. The idea took shape over the rest of the morning, and then its author went to cook chicory while an agent implemented the plan. So cicoria was built the way it is meant to be used: the agent works and you watch the pan. Only one of the two tells you when it needs you.
+The idea turned up uninvited at 5:15 in the morning of 11 October 2026 and took shape over the rest of the morning. Then its author went to cook chicory while an agent implemented the plan, and the project took its name from the pan. So cicoria was built the way it is meant to be used: the agent works and you watch the pan. Only one of the two tells you when it needs you.

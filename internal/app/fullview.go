@@ -491,8 +491,7 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		fallthrough
 	case "q":
-		m.mode = modeWorkspace
-		m.seen()
+		m.closeView()
 	case "j", "down":
 		p.Move(1, h)
 	case "k", "up":
@@ -503,7 +502,7 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		m.askNote()
 	case "x":
 		m.dropNote()
-	case "s":
+	case "t":
 		return m.askSendNotes()
 	case "space", " ", "f", "pgdown":
 		p.Scroll(h-1, h)
@@ -552,7 +551,7 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 	case "o":
 		return m.open(m.view.path)
 	case "@":
-		m.mode = modeWorkspace
+		m.closeView()
 		m.mention(m.view.path)
 	}
 	return nil

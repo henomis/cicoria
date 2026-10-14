@@ -117,6 +117,7 @@ type Model struct {
 	// Left and right panels. The files and changes are those of the project
 	// of the session on screen; shown is the directory they were read from.
 	sessionCursor int
+	sessionTop    int
 	trees         map[string]*ui.Tree
 	shown         string
 	loading       bool
@@ -147,8 +148,11 @@ type Model struct {
 
 	view    fullView
 	palette *ui.Palette
-	// paletteFrom is what was on screen when the palette was opened.
-	paletteFrom mode
+	// paletteFrom and helpFrom are what was on screen when the palette or
+	// help was opened.
+	paletteFrom, helpFrom mode
+	// helpTop is the first line of help on screen.
+	helpTop int
 
 	// One-line interactions in the status bar.
 	prompt    *prompt
@@ -341,6 +345,20 @@ func (m *Model) current() *session.Session {
 		return nil
 	}
 	return m.sessions[m.active]
+}
+
+// target returns the session a command on one session is for: the one
+// under the cursor while the sessions panel has the keys, else the one on
+// screen.
+func (m *Model) target() *session.Session {
+	i := m.active
+	if m.focus == focusSessions {
+		i = m.sessionCursor
+	}
+	if i < 0 || i >= len(m.sessions) {
+		return nil
+	}
+	return m.sessions[i]
 }
 
 // byID returns a session and its position.
@@ -614,6 +632,13 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			return m.closeSession(i)
 		}
 		s.Exit(m.watching(i))
+		// Over the full-screen view the status of the session is not on
+		// screen; in the workspace it is, and a restart said there is over.
+		if m.mode != modeWorkspace {
+			m.say(s.Name + " exited")
+		} else if m.message == "restarting "+s.Name {
+			m.message = ""
+		}
 
 	case stoppedMsg:
 		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s })
