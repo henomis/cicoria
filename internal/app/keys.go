@@ -157,6 +157,10 @@ func (m *Model) sessionsKey(key string) tea.Cmd {
 		m.sessionCursor = max(m.sessionCursor-1, 0)
 	case "enter", "l", "right":
 		return m.switchTo(m.sessionCursor)
+	case ",":
+		return m.askRename()
+	case "r":
+		return m.restart()
 	case "x":
 		return m.askClose()
 	case "c":

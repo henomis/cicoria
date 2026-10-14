@@ -333,7 +333,7 @@ func TestWorkspace(t *testing.T) {
 	w.see("Sessions")
 
 	// And by name, through the file finder.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("auth")
 	w.see("api/auth.go")
@@ -852,9 +852,11 @@ func TestNotes(t *testing.T) {
 	// panel, where g alone would go to the top.
 	w.prefix('g')
 	w.see("Sessions")
+	w.prefix('o')
+	w.see("ctrl+a / finds a file now")
 
 	// In a file, several lines are selected first.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("main")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -865,13 +867,13 @@ func TestNotes(t *testing.T) {
 	w.see("2 note(s)", "* 1 package main", "*▌3 func main() {}")
 
 	// Leaving the question of how to send them goes back to the file.
-	w.typeText("s")
+	w.typeText("t")
 	w.see("send 2 note(s) to claude-1", "Send to the agent now", "Add to the queue")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
 	w.see("file  main.go", "2 note(s)")
 
 	// Sent at once, the agent gets one message with every note.
-	w.typeText("s")
+	w.typeText("t")
 	w.see("Send to the agent now")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("got Review", "got notes.txt:1", "got say", "got main.go:1-3", "got add")
@@ -879,7 +881,7 @@ func TestNotes(t *testing.T) {
 
 	// Through the queue, they wait for the end of the turn. A note can be
 	// rewritten and deleted before it goes.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("main")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -896,7 +898,7 @@ func TestNotes(t *testing.T) {
 	w.see("note on main.go:3: too short")
 	w.line("ly named")
 	w.see("1 note(s)")
-	w.typeText("s")
+	w.typeText("t")
 	w.see("Add to the queue")
 	w.tm.SendKey(uv.Key{Code: uv.KeyDown})
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -919,7 +921,7 @@ func TestMarkdown(t *testing.T) {
 	w.see("agent ready", "Changes (1)")
 
 	// A Markdown file opens as the document it describes.
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("guide")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -944,7 +946,7 @@ func TestMarkdown(t *testing.T) {
 	w.see("rendered  guide.md", "*▌Setup")
 	w.typeText("mq")
 	w.see("Sessions")
-	w.prefix('o')
+	w.prefix('/')
 	w.see("file ›")
 	w.typeText("guide")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -1321,6 +1323,26 @@ func TestClickOnSession(t *testing.T) {
 	w.quit()
 }
 
+// TestSessionsPanelKeys renames and restarts from the sessions panel: the
+// session under the cursor, not the one on screen.
+func TestSessionsPanelKeys(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.newShell()
+	w.prefix('s')
+	w.typeText("k")
+	w.typeText(",")
+	w.see("rename session: claude-1")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.line("api")
+	w.see("api", "shell-1 · shell")
+	w.typeText("r")
+	w.see("api is still running")
+	w.typeText("q")
+	w.quit()
+}
+
 // The agent pane is split in two, and the keys go from one session to the
 // other.
 func TestSplit(t *testing.T) {
@@ -1490,11 +1512,18 @@ func TestQueue(t *testing.T) {
 	w.typeText("x") // deletes six, which the cursor followed
 	w.see("Queue (2)", "▸ seven", "eight")
 	w.gone("six")
+	w.typeText("d") // deletes nothing: d is for diffs
+	w.typeText("m") // adds, as ctrl+a m does
+	w.see("queue for ")
+	w.line("nine")
+	w.see("Queue (3)", "nine")
 	w.typeText("q")
 	w.line("stop")
 	w.see("got seven")
 	w.line("stop")
 	w.see("got eight")
+	w.line("stop")
+	w.see("got nine")
 	w.line("stop")
 	w.see("claude-1 · claude · idle")
 

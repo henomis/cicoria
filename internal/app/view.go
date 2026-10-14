@@ -499,6 +499,7 @@ func (m *Model) renderHelp() []string {
 	lines = append(lines,
 		fmt.Sprintf("    %s %-6s %s", ui.Accent.Render(p), ui.Accent.Render("1-9"), "Go to session by number"),
 		fmt.Sprintf("    %s %-6s %s", ui.Accent.Render(p), ui.Accent.Render(p), "Send "+p+" to the agent"),
+		"    These work in a full-screen file or diff too.",
 		"",
 		ui.Bold.Render("  New session"),
 		"    pick the agent, the directory it works in and a name: tab completes the",
@@ -529,7 +530,7 @@ func (m *Model) renderHelp() []string {
 		"    messages wait in the queue and go to the agent one by one, each when it ends",
 		"    its turn; to an idle agent the first goes at once. Agents that do not report",
 		"    their status only get a message when you press enter in the queue panel.",
-		"    queue panel: enter send now · p pause · e edit · x delete · J/K reorder · a add",
+		"    queue panel: enter send next · p pause · e edit · x delete · J/K reorder · m add",
 		"    "+p+" k queues a message for another session, or asks it: what its agent says",
 		"    at the end of that turn comes back to this session with your question, and",
 		"    with what you want done with the answer, if you say so. Claude Code and",
@@ -537,18 +538,19 @@ func (m *Model) renderHelp() []string {
 		"",
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
+		"    sessions: enter go to it · , rename · r restart · x close · c new",
 		"    files: h/l close/open folder · d diff · e editor · @ mention to the agent",
 		"           o open with the system, as an image or a web page wants",
 		"           i show ⇄ hide what git ignores, which is grey",
-		"    changes: enter diff · v file · e editor · o open · @ mention to the agent",
+		"    changes: enter/d diff · v file · e editor · o open · @ mention to the agent",
 		"             s what is not committed ⇄ everything since the session started",
 		"",
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
 		"    tab/shift+tab next/previous changed file · d file ⇄ diff · e editor · q back",
-		"    w wrap long lines ⇄ cut them · o open with the system",
+		"    w wrap long lines ⇄ cut them · o open with the system · @ mention to the agent",
 		"    m a Markdown file as a document ⇄ its text · [ ] headings of a document",
-		"    v select lines · c write a note on them · x delete it · s send the notes",
+		"    v select lines · c write a note on them · x delete it · t send the notes",
 		"",
 		ui.Bold.Render("  Notes"),
 		"    a note is a remark on one or more lines of a file or diff. They wait, marked",
@@ -596,7 +598,7 @@ func (m *Model) renderStatus() string {
 		if s := m.current(); s != nil && len(s.Notes) > 0 {
 			left = append(left, ui.Warn.Render(fmt.Sprintf("%d note(s)", len(s.Notes))))
 		}
-		right = "q back · / search · [ ] hunks · tab file · d diff · v select · c note · s send"
+		right = "q back · / search · [ ] hunks · tab file · d diff · v select · c note · t send"
 	default:
 		if s := m.current(); s != nil {
 			if s.Status == agent.Exited {

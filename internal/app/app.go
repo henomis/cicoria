@@ -343,6 +343,20 @@ func (m *Model) current() *session.Session {
 	return m.sessions[m.active]
 }
 
+// target returns the session a command on one session is for: the one
+// under the cursor while the sessions panel has the keys, else the one on
+// screen.
+func (m *Model) target() *session.Session {
+	i := m.active
+	if m.focus == focusSessions {
+		i = m.sessionCursor
+	}
+	if i < 0 || i >= len(m.sessions) {
+		return nil
+	}
+	return m.sessions[i]
+}
+
 // byID returns a session and its position.
 func (m *Model) byID(id string) (*session.Session, int) {
 	for i, s := range m.sessions {

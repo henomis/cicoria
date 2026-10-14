@@ -241,7 +241,7 @@ func (m *Model) queueKey(key string) tea.Cmd {
 	case "K":
 		m.queueCursor = s.MoveQueued(i, -1)
 		m.save()
-	case "x", "d":
+	case "x":
 		s.RemoveQueued(i)
 		m.queueCursor = max(min(i, len(s.Queue)-1), 0)
 		m.save()
@@ -251,7 +251,7 @@ func (m *Model) queueKey(key string) tea.Cmd {
 		return m.trySend(s)
 	case "enter":
 		return m.sendNext(s)
-	case "a":
+	case "m":
 		return m.askQueue()
 	case "e":
 		switch {

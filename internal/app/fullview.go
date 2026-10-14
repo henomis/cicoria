@@ -503,7 +503,7 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		m.askNote()
 	case "x":
 		m.dropNote()
-	case "s":
+	case "t":
 		return m.askSendNotes()
 	case "space", " ", "f", "pgdown":
 		p.Scroll(h-1, h)

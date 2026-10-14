@@ -49,7 +49,7 @@ func init() {
 		{"p", "Previous session", func(m *Model) tea.Cmd { return m.switchTo(m.active - 1) }},
 		{"a", "Go to the next session that needs input", (*Model).nextAttention},
 		{",", "Rename session", (*Model).askRename},
-		{"r", "Restart session", (*Model).restart},
+		{"r", "Restart an exited session", (*Model).restart},
 		{"x", "Close session", (*Model).askClose},
 		{"-", "Split: show another session below, or close the split", (*Model).askSplit},
 		{"tab", "Go to the other pane of the split", (*Model).focusOther},
@@ -63,7 +63,7 @@ func init() {
 		{"d", "Review changes", (*Model).review},
 		{"t", "Send review notes to the agent", (*Model).askSendNotes},
 		{"h", "Review from here: count changes from the last commit", (*Model).rebase},
-		{"o", "Open file…", (*Model).askFile},
+		{"/", "Find a file by name…", (*Model).askFile},
 		{"b", "Show or hide side panels", (*Model).togglePanels},
 		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }},
 		{"]", "Show or hide the right panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideRight) }},
@@ -96,6 +96,11 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 			return c.run(m)
 		}
 	}
+	// Finding a file was on o until v0.0.6: say where it went for a while.
+	if key == "o" {
+		m.say(fmt.Sprintf("%s / finds a file now", m.cfg.Prefix))
+		return nil
+	}
 	m.say(fmt.Sprintf("%s %s is not a command (%s ? for help)", m.cfg.Prefix, key, m.cfg.Prefix))
 	return nil
 }
@@ -107,7 +112,7 @@ func (m *Model) leaveView(key string) {
 		return
 	}
 	switch key {
-	case "t", "o", "space":
+	case "t", "/", "space":
 		return
 	}
 	m.mode = modeWorkspace
@@ -527,7 +532,7 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 }
 
 func (m *Model) askRename() tea.Cmd {
-	s := m.current()
+	s := m.target()
 	if s == nil {
 		m.say(errNoSession.Error())
 		return nil
@@ -547,7 +552,7 @@ func (m *Model) askRename() tea.Cmd {
 }
 
 func (m *Model) restart() tea.Cmd {
-	s := m.current()
+	s := m.target()
 	if s == nil {
 		m.say(errNoSession.Error())
 		return nil
@@ -560,15 +565,11 @@ func (m *Model) restart() tea.Cmd {
 }
 
 func (m *Model) askClose() tea.Cmd {
-	i := m.active
-	if m.focus == focusSessions {
-		i = m.sessionCursor
-	}
-	if i < 0 || i >= len(m.sessions) {
+	s := m.target()
+	if s == nil {
 		m.say(errNoSession.Error())
 		return nil
 	}
-	s := m.sessions[i]
 	id := s.ID
 	closeIt := func() tea.Cmd {
 		if s, i := m.byID(id); s != nil {

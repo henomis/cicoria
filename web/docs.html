@@ -82,7 +82,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>n, p</td><td>Next, previous session</td></tr>
           <tr><td>a</td><td>Go to the next session that needs input</td></tr>
           <tr><td>,</td><td>Rename the session</td></tr>
-          <tr><td>r</td><td>Restart a session whose agent has exited</td></tr>
+          <tr><td>r</td><td>Restart the session once its agent has exited</td></tr>
           <tr><td>x</td><td>Close the session</td></tr>
           <tr><td>-</td><td>Split: show another session below, or close the split</td></tr>
           <tr><td>tab</td><td>Go to the other pane of the split</td></tr>
@@ -94,7 +94,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>d</td><td>Review changes: open the diff of the selected file</td></tr>
           <tr><td>t</td><td>Send your review notes to the agent</td></tr>
           <tr><td>h</td><td>Review from here: count changes from the last commit</td></tr>
-          <tr><td>o</td><td>Open a file by name</td></tr>
+          <tr><td>/</td><td>Find a file by name</td></tr>
           <tr><td>b</td><td>Show or hide the side panels</td></tr>
           <tr><td>[, ]</td><td>Show or hide the left, the right panels</td></tr>
           <tr><td>space</td><td>Command palette: every command, by name</td></tr>
@@ -103,6 +103,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>ctrl+a</td><td>Send <kbd>ctrl+a</kbd> itself to the agent</td></tr>
         </tbody>
       </table></div>
+      <p>These work in a full-screen file or diff too.</p>
     </section>
 
     <section id="sessions">
@@ -150,9 +151,9 @@ cicoria -version   <span class="c"># which version this is</span></pre>
       <div class="table"><table>
         <thead><tr><th>Panel</th><th>Keys</th></tr></thead>
         <tbody>
-          <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>x</kbd> close it, <kbd>c</kbd> new session</td></tr>
+          <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>,</kbd> rename it, <kbd>r</kbd> restart it, <kbd>x</kbd> close it, <kbd>c</kbd> new session. They act on the session under the cursor</td></tr>
           <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention the file to the agent, <kbd>i</kbd> show or hide what git ignores</td></tr>
-          <tr><td>Changes</td><td><kbd>enter</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
+          <tr><td>Changes</td><td><kbd>enter</kbd> or <kbd>d</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
@@ -186,10 +187,11 @@ cicoria -version   <span class="c"># which version this is</span></pre>
           <tr><td>e</td><td>Open the file in <code>$VISUAL</code> or <code>$EDITOR</code></td></tr>
           <tr><td>o</td><td>Open the file with the system: an image in the viewer, a web page in the browser</td></tr>
           <tr><td>@</td><td>Mention the file to the agent</td></tr>
-          <tr><td>v, c, x, s</td><td>Select lines, write a note, delete it, send the notes</td></tr>
+          <tr><td>v, c, x, t</td><td>Select lines, write a note, delete it, send the notes</td></tr>
           <tr><td>q</td><td>Back to the workspace</td></tr>
         </tbody>
       </table></div>
+      <p>The commands of the prefix work in the view too, such as <kbd>ctrl+a</kbd> <kbd>/</kbd> to open another file.</p>
       <p>A Markdown file opened from the file tree or by its name is shown as the document it describes: headings, lists, tables and coloured code, wrapped to the screen. <kbd>m</kbd> shows its text instead, at the same place, and the choice holds for the files opened after it. Notes are written on the text, and the document marks the passages that have one. A file opened from the changes panel, or next to its diff, is always text.</p>
     </section>
 
@@ -201,7 +203,7 @@ cicoria -version   <span class="c"># which version this is</span></pre>
         <li><kbd>c</kbd> on a line that has a note rewrites it. <kbd>x</kbd> deletes it.</li>
         <li>Lines with a note carry a <code>*</code> in the margin.</li>
       </ul>
-      <p>Notes wait until you send them with <kbd>s</kbd>, or <kbd>ctrl+a</kbd> <kbd>t</kbd> from the workspace. You choose whether they go to the agent at once or through the queue. They go together, as one message:</p>
+      <p>Notes wait until you send them with <kbd>t</kbd>, in the view or after <kbd>ctrl+a</kbd>. You choose whether they go to the agent at once or through the queue. They go together, as one message:</p>
       <pre>Review notes:
 
 api/auth.go:42-43
@@ -224,7 +226,7 @@ make this a duration</pre>
         <tbody>
           <tr><td>enter</td><td>Send the next message now</td></tr>
           <tr><td>p</td><td>Pause and resume. Pause when a turn ends with a question you want to answer first</td></tr>
-          <tr><td>a, e, x</td><td>Add, edit, delete a message</td></tr>
+          <tr><td>m, e, x</td><td>Add, edit, delete a message</td></tr>
           <tr><td>J, K</td><td>Move a message down, up</td></tr>
         </tbody>
       </table></div>

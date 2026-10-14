@@ -73,7 +73,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `c` | New session: pick the agent, its directory and a name |
 | `1`-`9`, `n`, `p` | Go to a session |
 | `a` | Go to the next session that needs input |
-| `,` `r` `x` | Rename, restart, close the session |
+| `,` `r` `x` | Rename the session, restart it once its agent has exited, close it |
 | `-` | Split: show another session below, or close the split |
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
@@ -81,10 +81,10 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `m` | Queue a message for the agent |
 | `k` | Send a message to another session, or ask it and get the answer here |
 | `u` | Focus the queue panel |
-| `d` | Review changes (full-screen diff) |
+| `d` | Review changes: open the diff of the selected file |
 | `t` | Send review notes to the agent |
 | `h` | Review from here: count changes from the last commit |
-| `o` | Open a file by name |
+| `/` | Find a file by name |
 | `b` | Show or hide the side panels |
 | `[` `]` | Show or hide the left, right panels |
 | `space` | Command palette |
@@ -92,9 +92,11 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `q` | Quit |
 | `ctrl+a` | Send `ctrl+a` to the agent |
 
+These work in a full-screen file or diff too.
+
 The first time a Codex CLI session starts, Codex asks you to trust the hooks cicoria gives it: pick "Trust all and continue". Until then it works, but reports nothing.
 
-In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
+In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too. In the sessions panel, `,` renames, `r` restarts, `x` closes the session under the cursor, and `c` creates one.
 
 The title of the agent pane names the session, its agent, its status, its directory and the git branch that directory is on, or the commit when it is on no branch. It follows a branch the agent switches to.
 
@@ -142,7 +144,7 @@ A session closes when its agent or shell exits. It is kept, marked `✕`, when t
 
 The changes panel shows what is not committed. In it, `s` switches to everything the session changed since the commit it started on, committed or not, and back; the panel then says how many commits were made since, and `ctrl+a h` starts the count again from the last commit, once you have looked. With `changes = "session"` in the settings, sessions open on that view.
 
-Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `m` switches a Markdown file between the document and its text, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back.
+Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `m` switches a Markdown file between the document and its text, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back. The commands of the prefix work there too.
 
 A Markdown file opened from the file tree or by its name is shown as the document it describes: headings, lists, tables and coloured code, wrapped to the screen, where `[` `]` jump between headings. `m` shows its text instead, at the same place, and the choice holds for the files opened after it. Notes are written on the text, and the document marks where they are; a file opened from the changes panel, or next to its diff, is always text.
 
@@ -150,13 +152,13 @@ A Markdown file opened from the file tree or by its name is shown as the documen
 
 A note is a remark on one or more lines of a file or diff. In the full-screen view, move to a line (or press `v` and move to select several) and press `c` to write one; `c` on a line that has a note rewrites it, `x` deletes it. Lines with a note carry a `*` in the margin.
 
-Notes wait until you send them with `s` (or `ctrl+a t`): all together, as one message that names each file and its lines, quotes them and gives your text. You choose whether it goes to the agent at once or through the queue.
+Notes wait until you send them with `t`, in the view or after `ctrl+a`: all together, as one message that names each file and its lines, quotes them and gives your text. You choose whether it goes to the agent at once or through the queue.
 
 ## Queue
 
 While an agent works you can line up what to tell it next. `ctrl+a m` asks for a message; the line can be edited with the arrows, `ctrl+w`, `ctrl+u` and the like. Messages wait in a panel under the changes and go to the agent one by one, each when it ends its turn; an idle agent gets the first at once. Nothing is sent while the agent waits for a permission.
 
-In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses and resumes, `e` edits, `x` deletes, `J`/`K` reorder, `a` adds. Pause when a turn ends with a question you want to answer first.
+In the queue panel (`ctrl+a u`): `enter` sends the next message now, `p` pauses and resumes, `e` edits, `x` deletes, `J`/`K` reorder, `m` adds. Pause when a turn ends with a question you want to answer first.
 
 Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, but each message is sent when you press `enter` in the panel. Queues are remembered across restarts and come back paused.
 
