@@ -572,9 +572,12 @@ func (m *Model) renderHelp() []string {
 		"    message with the file, the lines and their text, at once or through the",
 		"    queue.",
 		"",
-		ui.Dim.Render("  press any key to close"),
+		ui.Dim.Render("  j/k space b g G scroll · any other key closes"),
 	)
-	return ui.Box("Help", lines, m.width, max(m.height-1, 2), true)
+	// The text scrolls when it is longer than the screen.
+	height := max(m.height-1, 2)
+	m.helpTop = max(min(m.helpTop, len(lines)-(height-2)), 0)
+	return ui.Box("Help", lines[m.helpTop:], m.width, height, true)
 }
 
 // renderStatus draws the bottom line.

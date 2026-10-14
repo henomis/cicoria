@@ -15,6 +15,7 @@
 package app
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -69,7 +70,24 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 
 	switch m.mode {
 	case modeHelp:
-		m.mode = m.helpFrom
+		// The keys that scroll elsewhere scroll help; any other closes it.
+		page := max(m.height-4, 1)
+		switch key {
+		case "j", "down":
+			m.helpTop++
+		case "k", "up":
+			m.helpTop = max(m.helpTop-1, 0)
+		case "space", " ", "f", "pgdown":
+			m.helpTop += page
+		case "b", "pgup":
+			m.helpTop = max(m.helpTop-page, 0)
+		case "g", "home":
+			m.helpTop = 0
+		case "G", "end":
+			m.helpTop = math.MaxInt32
+		default:
+			m.mode = m.helpFrom
+		}
 		return nil
 	case modePalette:
 		if key == "esc" {
@@ -286,7 +304,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			m.view.pager.SetCursor(m.view.pager.LineAt(mouse.Y-1, m.viewHeight()), m.viewHeight())
 		}
 		return nil
-	case modePalette, modeHelp:
+	case modeHelp:
+		m.helpTop = max(m.helpTop+wheel, 0)
+		return nil
+	case modePalette:
 		return nil
 	}
 
@@ -340,6 +361,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			if row := m.queueTop(s, l.queue.h-2) + y - l.queue.y - 1; row >= 0 && row < len(s.Queue) && y > l.queue.y && y < l.queue.y+l.queue.h-1 {
 				m.queueCursor = row
 			}
+		}
+		if s := m.current(); s != nil {
+			m.queueCursor = max(min(m.queueCursor+wheel, len(s.Queue)-1), 0)
 		}
 	}
 	return nil

@@ -68,7 +68,7 @@ func init() {
 		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }},
 		{"]", "Show or hide the right panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideRight) }},
 		{"space", "Command palette", (*Model).askCommand},
-		{"?", "Help", func(m *Model) tea.Cmd { m.helpFrom, m.mode = m.mode, modeHelp; return nil }},
+		{"?", "Help", func(m *Model) tea.Cmd { m.helpFrom, m.mode, m.helpTop = m.mode, modeHelp, 0; return nil }},
 		{"q", "Quit", (*Model).askQuit},
 	}
 }
@@ -112,12 +112,44 @@ func (m *Model) runCommand(key string, run func(m *Model) tea.Cmd) tea.Cmd {
 		switch key {
 		case "t", "/", "space", "?":
 		default:
-			// The cursor of the sessions panel was not on screen.
-			m.sessionCursor = m.active
-			m.closeView()
+			return m.runFromView(run)
 		}
 	}
 	return run(m)
+}
+
+// runFromView runs a command over the full-screen view with the workspace
+// on screen. A command that only replies in the status bar, asks a
+// question or asks for a line changes nothing there, and the view comes
+// back: a question answered yes leaves it again.
+func (m *Model) runFromView(run func(m *Model) tea.Cmd) tea.Cmd {
+	// The cursor of the sessions panel was not on screen.
+	m.sessionCursor = m.active
+	before, said := m.layoutState(), m.messageAt
+	m.closeView()
+	cmd := run(m)
+	replied := m.messageAt != said || m.prompt != nil || m.confirm != nil
+	if cmd != nil || m.mode != modeWorkspace || m.layoutState() != before || !replied {
+		return cmd
+	}
+	m.mode = modeView
+	if c := m.confirm; c != nil {
+		yes := c.yes
+		c.yes = func() tea.Cmd { m.closeView(); return yes() }
+	}
+	return nil
+}
+
+// layoutState is what a command can change of the workspace on screen.
+type layoutState struct {
+	active, sessions    int
+	focus               focus
+	split               string
+	hideLeft, hideRight bool
+}
+
+func (m *Model) layoutState() layoutState {
+	return layoutState{m.active, len(m.sessions), m.focus, m.split, m.hideLeft, m.hideRight}
 }
 
 // closeView goes back from the full-screen view to the workspace.

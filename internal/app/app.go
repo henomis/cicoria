@@ -151,6 +151,8 @@ type Model struct {
 	// paletteFrom and helpFrom are what was on screen when the palette or
 	// help was opened.
 	paletteFrom, helpFrom mode
+	// helpTop is the first line of help on screen.
+	helpTop int
 
 	// One-line interactions in the status bar.
 	prompt    *prompt

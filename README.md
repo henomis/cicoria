@@ -66,7 +66,7 @@ cicoria ~/src/app  # or on another one
 cicoria -version   # which version this is
 ```
 
-Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all.
+Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all, in a help screen that `j`/`k`, `space`/`b` and `g`/`G` scroll and any other key closes.
 
 | Key | Command |
 |---|---|

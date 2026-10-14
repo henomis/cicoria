@@ -1626,6 +1626,28 @@ func TestSessionsPanelScrolls(t *testing.T) {
 	w.quit()
 }
 
+// TestHelpScrolls scrolls a help screen longer than the terminal, and
+// closes it with any other key.
+func TestHelpScrolls(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 20)
+	w.see("claude-1 · claude · idle")
+	w.prefix('?')
+	w.see("starts a command:")
+	w.gone("a note is a remark")
+	w.typeText("G")
+	w.see("a note is a remark", "any other key closes")
+	w.gone("starts a command:")
+	w.typeText("g")
+	w.see("starts a command:")
+	w.typeText("jj") // past the blank line and the heading
+	w.gone("starts a command:")
+	w.typeText("z")
+	w.see("claude-1 · claude · idle")
+	w.gone("any other key closes")
+	w.quit()
+}
+
 // TestPrefixInView runs commands from a full-screen file: help and the
 // palettes open over it and go back to it, the others leave it.
 func TestPrefixInView(t *testing.T) {
@@ -1660,6 +1682,15 @@ func TestPrefixInView(t *testing.T) {
 	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
 	w.see("file  main.go")
 	w.gone("file ›")
+
+	// A command that only replies, or asks for a line, leaves the view.
+	w.prefix('a')
+	w.see("no session needs input", "file  main.go")
+	w.prefix(',')
+	w.see("rename session: claude-1", "file  main.go")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("rename session")
+	w.see("file  main.go")
 
 	// The prefix pressed twice goes to the agent, which is shown first.
 	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
@@ -1698,6 +1729,13 @@ func TestClickInScrolledQueue(t *testing.T) {
 	w.typeText("x")
 	w.see("Queue (4)")
 	w.gone("msg-c")
+
+	// The wheel moves the cursor: up to the first message.
+	x, y = w.at("msg-d")
+	w.tm.SendMouse(uv.MouseWheelEvent{X: x, Y: y, Button: uv.MouseWheelUp})
+	w.typeText("x")
+	w.see("Queue (3)", "msg-d")
+	w.gone("msg-b")
 	w.typeText("p")
 	w.typeText("q")
 	w.line("stop")
