@@ -632,6 +632,13 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			return m.closeSession(i)
 		}
 		s.Exit(m.watching(i))
+		// Over the full-screen view the status of the session is not on
+		// screen; in the workspace it is, and a restart said there is over.
+		if m.mode != modeWorkspace {
+			m.say(s.Name + " exited")
+		} else if m.message == "restarting "+s.Name {
+			m.message = ""
+		}
 
 	case stoppedMsg:
 		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s })

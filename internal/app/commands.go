@@ -82,20 +82,20 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
 	if key == m.cfg.Prefix {
 		// The agent that gets the key is shown, whatever the prefix is.
-		return m.runCommand("", func(m *Model) tea.Cmd { m.send(k); return nil })
+		return m.runCommand(false, func(m *Model) tea.Cmd { m.send(k); return nil })
 	}
 	if key == " " {
 		key = "space"
 	}
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		if i := int(key[0] - '1'); i < len(m.sessions) {
-			return m.runCommand(key, func(m *Model) tea.Cmd { return m.switchTo(i) })
+			return m.runCommand(false, func(m *Model) tea.Cmd { return m.switchTo(i) })
 		}
 		return nil
 	}
 	for _, c := range commands {
 		if c.key == key {
-			return m.runCommand(c.key, c.run)
+			return m.runCommand(c.keepsView, c.run)
 		}
 	}
 	// Finding a file was on o until v0.0.6: say where it went for a while.
@@ -107,30 +107,18 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// runCommand runs the command bound to key, from the prefix or the palette.
-// Over the full-screen view it is for the session on screen, and the view
-// stays for the commands that keep it; the others go back to the workspace
-// first.
-func (m *Model) runCommand(key string, run func(m *Model) tea.Cmd) tea.Cmd {
+// runCommand runs a command from the prefix or the palette. Over the
+// full-screen view it is for the session on screen, and the view stays when
+// the command keeps it; otherwise the workspace comes back first.
+func (m *Model) runCommand(keepsView bool, run func(m *Model) tea.Cmd) tea.Cmd {
 	if m.mode == modeView {
 		// The cursor of the sessions panel is not on screen.
 		m.sessionCursor = m.active
-		if !keepsView(key) {
+		if !keepsView {
 			m.closeView()
 		}
 	}
 	return run(m)
-}
-
-// keepsView reports whether the command bound to key runs over the
-// full-screen view.
-func keepsView(key string) bool {
-	for _, c := range commands {
-		if c.key == key {
-			return c.keepsView
-		}
-	}
-	return false
 }
 
 // closeView goes back from the full-screen view to the workspace.
@@ -532,7 +520,7 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 	// A command runs as from the prefix, over what the palette was opened on.
 	m.mode, m.palette = m.paletteFrom, nil
 	if c, ok := it.Value.(command); ok {
-		return m.runCommand(c.key, c.run)
+		return m.runCommand(c.keepsView, c.run)
 	}
 	if m.mode == modeView {
 		m.closeView()

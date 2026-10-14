@@ -252,6 +252,7 @@ func (w *workspace) openFile(name string) {
 	w.typeText(name)
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("file  " + name)
+	w.gone("file ›")
 }
 
 // typeText types characters; line also presses enter.
@@ -1688,17 +1689,28 @@ func TestKeptCommandsInView(t *testing.T) {
 	w.see("claude-1 · claude · idle")
 
 	w.newShell()
-	time.Sleep(4 * time.Second)
 	w.line("exit")
 	w.see("shell-1 exited")
 	w.openFile("main")
 	w.prefix('r')
 	w.see("restarting shell-1", "file  main.go")
 	w.typeText("q")
-	w.see("shell-1 · shell")
+	w.gone("file  main.go")
 	w.gone("exited")
 
+	// To an idle agent a message queued from the file goes at once.
 	w.prefix('1')
+	w.see("claude-1 · claude · idle")
+	w.openFile("main")
+	w.prefix('m')
+	w.see("queue for claude-1:")
+	w.line("now")
+	w.see("sent to claude-1", "file  main.go")
+	w.typeText("q")
+	w.see("got now")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+
 	w.line("work")
 	w.see("claude-1 · claude · working")
 	w.openFile("main")

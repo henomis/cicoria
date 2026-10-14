@@ -512,8 +512,9 @@ func (m *Model) renderHelp() []string {
 		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", "1-9")), "Go to session by number"),
 		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", p)), "Send "+p+" to the agent"),
 		"    These work in a full-screen file or diff too. t, /, space and ? open",
-		"    over the file, and a, d, r, x, q, , and m leave it on screen unless",
-		"    they go to another session, close this one or quit; d shows a diff.",
+		"    over the file; a, r, x, q, , and m leave it on screen and d shows a",
+		"    diff in its place, unless they go to another session, close this one",
+		"    or quit.",
 		"",
 		ui.Bold.Render("  New session"),
 		"    pick the agent, the directory it works in and a name: tab completes the",
@@ -643,6 +644,10 @@ func (m *Model) renderStatus() string {
 	text := " " + strings.Join(left, ui.Dim.Render(" · "))
 	right = ui.Dim.Render(right) + " "
 	gap := m.width - ansi.StringWidth(text) - ansi.StringWidth(right)
+	if gap < 1 && m.mode == modeHelp {
+		// The keys of help stay in sight.
+		return ui.Fit(text, m.width-ansi.StringWidth(right)) + right
+	}
 	if gap < 1 {
 		return ui.Fit(text, m.width)
 	}

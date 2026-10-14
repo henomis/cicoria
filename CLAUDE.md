@@ -68,7 +68,7 @@ The changes panel shows either what is not committed or everything since `Sessio
 
 ## Conventions
 
-- **A command is one entry in the `commands` table** in `internal/app/commands.go`; the prefix key and the command palette both read it.
+- **A command is one entry in the `commands` table** in `internal/app/commands.go`; the prefix key and the command palette both read it, and its `keepsView` says whether it runs over the full-screen view.
 - **Keys**: the prefix works on every screen, the full-screen view included, except while text is typed (a prompt, the palette, a search) or a question or help is open. An action offered both after the prefix and in a panel or the view uses the same letter in both (`m` queues a message, `t` sends the notes, `,` renames, `r` restarts). A letter does not mean opposite things in two places: `d` opens a diff, `x` deletes or closes, `o` opens with the system's program. Moving follows vim and less, which is why `q` and `esc` both go back. In a list `c` creates (the queue adds with `m`, as `ctrl+a m` does) and `x` deletes; `enter` acts on the row, except in the queue, where it sends the next message.
 - **A user-visible change is documented in four places**: the help screen in `internal/app/view.go`, `README.md`, `web/docs.html` and, for headline features, `web/index.html`. The website is plain HTML, CSS and JavaScript with no build step.
 - **Settings**: a new key goes in `config.Config` with its default in `Default()`, and in the README and `web/docs.html` tables. `Load` rejects unknown keys and invalid values, so every key is a compatibility promise; keep the list short.
