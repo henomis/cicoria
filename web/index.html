@@ -33,16 +33,10 @@
     </div>
     <p class="next"><a href="docs.html">Read the docs</a><a href="https://github.com/henomis/cicoria">Source on GitHub</a></p>
 
-    <div class="screen-box">
-      <div class="screen" id="screen" tabindex="0" role="img" aria-label="A drawing of the cicoria workspace"><pre aria-hidden="true"></pre></div>
-      <p class="screen-note">A drawing, not a recording. Click a session, or focus it and press 1, 2, 3 as you would after ctrl+a.</p>
+    <div class="demo">
+      <video src="demo.mp4" poster="demo.jpg" width="1600" height="900" autoplay muted loop playsinline controls preload="metadata" aria-label="A recorded cicoria session"></video>
+      <p class="demo-note">A real session, one minute long. Claude Code writes a small Go HTTP server while a README waits in the queue. A second session, split below, counts the lines of main.go. A note on the diff then asks the first session for a new endpoint, and it adds it.</p>
     </div>
-  </div>
-
-  <div class="wrap section demo">
-    <h2>A real session, one minute long</h2>
-    <video src="demo.mp4" poster="demo.jpg" width="1600" height="900" autoplay muted loop playsinline controls preload="metadata" aria-label="A recorded cicoria session"></video>
-    <p class="screen-note">Claude Code writes a small Go HTTP server while a README waits in the queue. A second session, split below, counts the lines of main.go. A note on the diff then asks the first session for a new endpoint, and it adds it.</p>
   </div>
 
   <div class="wrap section">
@@ -205,7 +199,7 @@ cicoria</pre>
   <nav aria-label="Footer"><a href="docs.html">Docs</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
 </footer>
 
-<script src="hero.js"></script>
+<script src="cells.js"></script>
 <script>
   // Symbols a fallback font might draw wider each get a cell of their own.
   for (const pre of document.querySelectorAll(".abilities pre")) {

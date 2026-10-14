@@ -8,19 +8,6 @@ cicoria is an interface for you, not an orchestrator. It does not run workflows 
 
 [![A recorded cicoria session: Claude Code writes a Go HTTP server while a README waits in the queue, a second session in a split pane counts the lines of main.go, and a note on the diff asks the first one for a new endpoint](assets/demo.gif)](https://henomis.github.io/cicoria/demo.mp4)
 
-```
-╭─ Sessions ───────────────╮╭─ auth-refactor · claude · working ─────╮╭─ Changes (3) ─────────╮
-│1 ● auth-refactor   3m app││                                        ││M api/auth.go   +42 -3 │
-│2 ▲ fix-flaky-test        ││   the agent's own interface, running   ││A api/token.go     +18 │
-│3 ✓ docs-pass             ││   in a real terminal                   ││M go.mod            +1 │
-╰──────────────────────────╯│                                        ││                       │
-╭─ Files · app ────────────╮│                                        │╰───────────────────────╯
-│▾ api/                   •││                                        │╭─ Queue (1) ───────────╮
-│   auth.go               M││                                        ││▸ then run the linter  │
-╰──────────────────────────╯╰────────────────────────────────────────╯╰───────────────────────╯
- ▲ fix-flaky-test needs input                                       queue 1 · ctrl+a ? help
-```
-
 Website and full documentation: <https://henomis.github.io/cicoria/>
 
 ## What it does
