@@ -68,7 +68,7 @@ func init() {
 		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }},
 		{"]", "Show or hide the right panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideRight) }},
 		{"space", "Command palette", (*Model).askCommand},
-		{"?", "Help", func(m *Model) tea.Cmd { m.mode = modeHelp; return nil }},
+		{"?", "Help", func(m *Model) tea.Cmd { m.helpFrom, m.mode = m.mode, modeHelp; return nil }},
 		{"q", "Quit", (*Model).askQuit},
 	}
 }
@@ -77,23 +77,21 @@ func init() {
 func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
 	if key == m.cfg.Prefix {
-		m.send(k)
-		return nil
+		// The agent that gets the key is shown, whatever the prefix is.
+		return m.runCommand("", func(m *Model) tea.Cmd { m.send(k); return nil })
 	}
 	if key == " " {
 		key = "space"
 	}
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		if i := int(key[0] - '1'); i < len(m.sessions) {
-			m.leaveView(key)
-			return m.switchTo(i)
+			return m.runCommand(key, func(m *Model) tea.Cmd { return m.switchTo(i) })
 		}
 		return nil
 	}
 	for _, c := range commands {
 		if c.key == key {
-			m.leaveView(key)
-			return c.run(m)
+			return m.runCommand(c.key, c.run)
 		}
 	}
 	// Finding a file was on o until v0.0.6: say where it went for a while.
@@ -105,16 +103,25 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// leaveView closes the full-screen view before a command that acts on the
-// workspace. Sending the notes and the palettes open on top of the view.
-func (m *Model) leaveView(key string) {
-	if m.mode != modeView {
-		return
+// runCommand runs the command bound to key, from the prefix or the palette.
+// Over the full-screen view it is for the session on screen, and the view is
+// closed first, except for the commands that open on top of it: sending the
+// notes, the command palette, finding a file and help.
+func (m *Model) runCommand(key string, run func(m *Model) tea.Cmd) tea.Cmd {
+	if m.mode == modeView {
+		switch key {
+		case "t", "/", "space", "?":
+		default:
+			// The cursor of the sessions panel was not on screen.
+			m.sessionCursor = m.active
+			m.closeView()
+		}
 	}
-	switch key {
-	case "t", "/", "space":
-		return
-	}
+	return run(m)
+}
+
+// closeView goes back from the full-screen view to the workspace.
+func (m *Model) closeView() {
 	m.mode = modeWorkspace
 	m.seen()
 }
@@ -499,19 +506,22 @@ func (m *Model) askFile() tea.Cmd {
 func (m *Model) openPalette(prompt string, items []ui.Item) {
 	m.palette = ui.NewPalette(prompt, items)
 	// Leaving it without a choice goes back to where it was opened from.
-	if m.mode != modePalette {
-		m.paletteFrom = m.mode
-	}
-	m.mode = modePalette
+	// A palette is never opened from another: choose puts back what was
+	// under it first.
+	m.paletteFrom, m.mode = m.mode, modePalette
 }
 
 // choose acts on the palette entry the user picked.
 func (m *Model) choose(it ui.Item) tea.Cmd {
-	m.mode = modeWorkspace
-	m.palette = nil
+	// A command runs as from the prefix, over what the palette was opened on.
+	m.mode, m.palette = m.paletteFrom, nil
+	if c, ok := it.Value.(command); ok {
+		return m.runCommand(c.key, c.run)
+	}
+	if m.mode == modeView {
+		m.closeView()
+	}
 	switch v := it.Value.(type) {
-	case command:
-		return v.run(m)
 	case agent.Adapter:
 		return m.askDir(v)
 	case sendNotes:

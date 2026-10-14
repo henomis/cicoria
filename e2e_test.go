@@ -25,6 +25,7 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/henomis/cicoria/internal/term"
 )
@@ -229,6 +230,18 @@ func (w *workspace) gone(text string) {
 			w.t.Fatalf("screen still shows %q:\n%s", text, w.tm.String())
 		}
 	}
+}
+
+// at returns the column and row where text is on the screen.
+func (w *workspace) at(text string) (int, int) {
+	w.t.Helper()
+	for y, line := range strings.Split(w.tm.String(), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			return ansi.StringWidth(line[:i]), y
+		}
+	}
+	w.t.Fatalf("%q is not on the screen:\n%s", text, w.tm.String())
+	return 0, 0
 }
 
 // typeText types characters; line also presses enter.
@@ -871,6 +884,7 @@ func TestNotes(t *testing.T) {
 	w.see("send 2 note(s) to claude-1", "Send to the agent now", "Add to the queue")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
 	w.see("file  main.go", "2 note(s)")
+	w.gone("Send to the agent now")
 
 	// Sent at once, the agent gets one message with every note.
 	w.typeText("t")
@@ -1335,11 +1349,22 @@ func TestSessionsPanelKeys(t *testing.T) {
 	w.typeText(",")
 	w.see("rename session: claude-1")
 	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
-	w.line("api")
-	w.see("api", "shell-1 · shell")
+	w.line("first-agent")
+	w.see("first-agent", "shell-1 · shell")
 	w.typeText("r")
-	w.see("api is still running")
-	w.typeText("q")
+	w.see("first-agent is still running")
+
+	// Over a full-screen file the cursor of the panel is not on screen: the
+	// commands are for the session the file is shown for.
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  main.go")
+	w.prefix(',')
+	w.see("rename session: shell-1")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("rename session")
 	w.quit()
 }
 
@@ -1573,6 +1598,76 @@ func TestQueue(t *testing.T) {
 	w.see("got later")
 }
 
+// TestSessionsPanelScrolls keeps the cursor of a list too long for its
+// panel in sight, and a click picks the session shown.
+func TestSessionsPanelScrolls(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 14)
+	w.see("claude-1 · claude · idle")
+	for i := 1; i <= 4; i++ {
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("shell")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("shell in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(fmt.Sprintf("session name: shell-%d", i))
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(fmt.Sprintf("shell-%d · shell", i))
+	}
+	// Four rows: the panel follows the session on screen, the last one.
+	w.gone("claude-1")
+	w.prefix('s')
+	w.typeText("kkkk")
+	w.see("claude-1")
+	x, y := w.at("shell-2")
+	w.tm.SendMouse(uv.MouseClickEvent{X: x, Y: y, Button: uv.MouseLeft})
+	w.see("shell-2 · shell")
+	w.quit()
+}
+
+// TestPrefixInView runs commands from a full-screen file: help and the
+// palettes open over it and go back to it, the others leave it.
+func TestPrefixInView(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  main.go")
+
+	w.prefix('?')
+	w.see("starts a command:")
+	w.typeText("z")
+	w.see("file  main.go")
+	w.gone("starts a command:")
+
+	w.prefix(' ')
+	w.typeText("find")
+	// The palette is drawn over the file, whose status stays below.
+	w.see("Find a file by name", "file  main.go", "esc back")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.see("file  main.go")
+	w.gone("Find a file by name")
+
+	// A command picked in the palette runs as from the prefix.
+	w.prefix(' ')
+	w.typeText("find a file")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file ›")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.see("file  main.go")
+	w.gone("file ›")
+
+	// The prefix pressed twice goes to the agent, which is shown first.
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
+	w.see("Sessions")
+	w.quit()
+}
+
 // TestClickInScrolledQueue clicks a message of a queue too long for its
 // panel, scrolled down to the last one.
 func TestClickInScrolledQueue(t *testing.T) {
@@ -1584,20 +1679,25 @@ func TestClickInScrolledQueue(t *testing.T) {
 	w.queue("msg-a", "msg-b", "msg-c", "msg-d", "msg-e", "msg-f")
 	w.see("Queue (6)")
 	w.prefix('u')
-	w.typeText("jjjjj")
-	w.see("msg-f")
-	w.gone("msg-a")
-	// The panel shows four messages from row 14: msg-c is the first.
-	w.tm.SendMouse(uv.MouseClickEvent{X: 120, Y: 14, Button: uv.MouseLeft})
+	w.see("msg-d")
+	w.gone("msg-e")
+
+	// The bottom border is no message: the cursor stays on the first.
+	x, y := w.at("msg-d")
+	w.tm.SendMouse(uv.MouseClickEvent{X: x, Y: y + 1, Button: uv.MouseLeft})
 	w.typeText("x")
-	w.see("Queue (5)")
+	w.see("Queue (5)", "msg-e")
+	w.gone("msg-a")
+
+	// Scrolled down to the last message, a click picks the message shown.
+	w.typeText("jjjj")
+	w.see("msg-f")
+	w.gone("msg-b")
+	x, y = w.at("msg-c")
+	w.tm.SendMouse(uv.MouseClickEvent{X: x, Y: y, Button: uv.MouseLeft})
+	w.typeText("x")
+	w.see("Queue (4)")
 	w.gone("msg-c")
-	w.typeText("q")
-	w.line("stop")
-	w.see("got msg-a")
-	w.line("stop")
-	w.see("got msg-b")
-	w.prefix('u')
 	w.typeText("p")
 	w.typeText("q")
 	w.line("stop")

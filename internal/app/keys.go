@@ -69,7 +69,7 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 
 	switch m.mode {
 	case modeHelp:
-		m.mode = modeWorkspace
+		m.mode = m.helpFrom
 		return nil
 	case modePalette:
 		if key == "esc" {
@@ -309,7 +309,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 
 	case l.sessions.contains(x, y):
-		if row := y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) {
+		if row := m.sessionTop + y - l.sessions.y - 1; isClick && row >= 0 && row < len(m.sessions) && y > l.sessions.y && y < l.sessions.y+l.sessions.h-1 {
 			cmd := m.switchTo(row)
 			m.focus = focusSessions
 			return cmd
@@ -319,7 +319,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		if isClick {
 			m.focus = focusFiles
 			tree := m.tree()
-			if row := tree.Top + y - l.files.y - 1; row >= 0 && row < len(tree.Rows()) && y > l.files.y {
+			if row := tree.Top + y - l.files.y - 1; row >= 0 && row < len(tree.Rows()) && y > l.files.y && y < l.files.y+l.files.h-1 {
 				tree.Cursor = row
 			}
 		}
@@ -328,7 +328,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case l.changes.contains(x, y):
 		if isClick {
 			m.focus = focusChanges
-			if row := m.changeTop + y - l.changes.y - 1; row >= 0 && row < len(m.changes) && y > l.changes.y {
+			if row := m.changeTop + y - l.changes.y - 1; row >= 0 && row < len(m.changes) && y > l.changes.y && y < l.changes.y+l.changes.h-1 {
 				m.changeCursor = row
 			}
 		}
@@ -337,7 +337,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case l.queue.contains(x, y):
 		if s := m.current(); isClick && s != nil {
 			m.focus = focusQueue
-			if row := m.queueTop(s, l.queue.h-2) + y - l.queue.y - 1; row >= 0 && row < len(s.Queue) && y > l.queue.y {
+			if row := m.queueTop(s, l.queue.h-2) + y - l.queue.y - 1; row >= 0 && row < len(s.Queue) && y > l.queue.y && y < l.queue.y+l.queue.h-1 {
 				m.queueCursor = row
 			}
 		}

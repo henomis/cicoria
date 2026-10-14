@@ -117,6 +117,7 @@ type Model struct {
 	// Left and right panels. The files and changes are those of the project
 	// of the session on screen; shown is the directory they were read from.
 	sessionCursor int
+	sessionTop    int
 	trees         map[string]*ui.Tree
 	shown         string
 	loading       bool
@@ -147,8 +148,9 @@ type Model struct {
 
 	view    fullView
 	palette *ui.Palette
-	// paletteFrom is what was on screen when the palette was opened.
-	paletteFrom mode
+	// paletteFrom and helpFrom are what was on screen when the palette or
+	// help was opened.
+	paletteFrom, helpFrom mode
 
 	// One-line interactions in the status bar.
 	prompt    *prompt
