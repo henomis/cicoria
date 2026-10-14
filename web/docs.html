@@ -311,10 +311,12 @@ command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]</pre>
       <h2>Develop</h2>
       <pre>git clone https://github.com/henomis/cicoria
 cd cicoria
-go test ./...
-
-<span class="c"># drives the real Claude Code; needs a folder it already trusts</span>
-CICORIA_E2E_REAL=$PWD go test -run TestRealAgent -v .</pre>
+make build      <span class="c"># build ./cicoria</span>
+make check      <span class="c"># formatting, vet and tests: run it before a commit</span>
+make lint       <span class="c"># golangci-lint, as the CI runs it</span>
+make test-real  <span class="c"># the test that drives the real Claude Code; needs a folder it already trusts</span>
+make site       <span class="c"># serve the website in web/ on http://localhost:8000</span>
+make help       <span class="c"># every target</span></pre>
       <p>The end-to-end tests in <code>e2e_test.go</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
     </section>
   </main>

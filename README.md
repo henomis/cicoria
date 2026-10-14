@@ -2,9 +2,9 @@
 
 ![cicoria: a robot made of chicory leaves and flowers at a keyboard, with terminal windows around it](assets/cover.jpg)
 
-A terminal workspace for the AI-first engineer: run several coding agents side by side, see which one needs you, and review what they changed, without leaving the terminal.
+Work with several coding agents at once, in your terminal: see which one needs you, review what each one changed, and send your notes back.
 
-cicoria is an interface for you, working with several coding agent sessions at once. It does not orchestrate agents, run workflows between them or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.
+cicoria is an interface for you, not an orchestrator. It does not run workflows between agents or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.
 
 ```
 ╭─ Sessions ───────────────╮╭─ auth-refactor · claude · working ─────╮╭─ Changes (3) ─────────╮
@@ -27,13 +27,13 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Shows a status for every session**: working, needs input, or finished while you were elsewhere. One key jumps to the next session that needs you, and a desktop notification tells you when one starts waiting.
 - **Keeps the changes of a session reviewable**: what is not committed or, one key away, everything since the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
 - **Lets you write notes on lines of code** and send them to the agent as one message.
+- **Gives a session a git worktree of its own** when another one already works in its directory, so their changes are not mixed.
+- **Shows two sessions at once**, one above the other.
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
-Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
-
-Codex CLI asks you to trust the hooks cicoria gives it, the first time it runs with them: pick "Trust all and continue". Until then it works, but reports nothing.
+Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, which cicoria gives the agents it launches without touching your settings, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
 
 ## Install
 
@@ -91,6 +91,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `?` | Help |
 | `q` | Quit |
 | `ctrl+a` | Send `ctrl+a` to the agent |
+
+The first time a Codex CLI session starts, Codex asks you to trust the hooks cicoria gives it: pick "Trust all and continue". Until then it works, but reports nothing.
 
 In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too.
 
@@ -225,6 +227,8 @@ A session belongs to the workspace it was created in, wherever it works: one cre
 ## Develop
 
 ```sh
+git clone https://github.com/henomis/cicoria
+cd cicoria
 make build      # build ./cicoria
 make check      # formatting, vet and tests: run it before a commit
 make lint       # golangci-lint, as the CI runs it
