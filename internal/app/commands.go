@@ -37,6 +37,10 @@ type command struct {
 	key  string
 	name string
 	run  func(m *Model) tea.Cmd
+	// keepsView is true for the commands that run over the full-screen
+	// view: those that open on top of it, and those that reply, ask or show
+	// something in its place there, which leave it when they go elsewhere.
+	keepsView bool
 }
 
 // commands lists what the prefix key and the command palette offer.
@@ -44,32 +48,32 @@ var commands []command
 
 func init() {
 	commands = []command{
-		{"c", "New session", (*Model).askNewSession},
-		{"n", "Next session", func(m *Model) tea.Cmd { return m.switchTo(m.active + 1) }},
-		{"p", "Previous session", func(m *Model) tea.Cmd { return m.switchTo(m.active - 1) }},
-		{"a", "Go to the next session that needs input", (*Model).nextAttention},
-		{",", "Rename session", (*Model).askRename},
-		{"r", "Restart an exited session", (*Model).restart},
-		{"x", "Close session", (*Model).askClose},
-		{"-", "Split: show another session below, or close the split", (*Model).askSplit},
-		{"tab", "Go to the other pane of the split", (*Model).focusOther},
-		{"w", "Open another workspace…", (*Model).askWorkspace},
-		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }},
-		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }},
-		{"g", "Focus changes", func(m *Model) tea.Cmd { return m.setFocus(focusChanges) }},
-		{"m", "Queue a message for the agent", (*Model).askQueue},
-		{"k", "Send a message to another session, or ask it", (*Model).askSession},
-		{"u", "Focus queue", func(m *Model) tea.Cmd { return m.setFocus(focusQueue) }},
-		{"d", "Review changes", (*Model).review},
-		{"t", "Send review notes to the agent", (*Model).askSendNotes},
-		{"h", "Review from here: count changes from the last commit", (*Model).rebase},
-		{"/", "Find a file by name…", (*Model).askFile},
-		{"b", "Show or hide side panels", (*Model).togglePanels},
-		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }},
-		{"]", "Show or hide the right panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideRight) }},
-		{"space", "Command palette", (*Model).askCommand},
-		{"?", "Help", func(m *Model) tea.Cmd { m.helpFrom, m.mode, m.helpTop = m.mode, modeHelp, 0; return nil }},
-		{"q", "Quit", (*Model).askQuit},
+		{"c", "New session", (*Model).askNewSession, false},
+		{"n", "Next session", func(m *Model) tea.Cmd { return m.switchTo(m.active + 1) }, false},
+		{"p", "Previous session", func(m *Model) tea.Cmd { return m.switchTo(m.active - 1) }, false},
+		{"a", "Go to the next session that needs input", (*Model).nextAttention, true},
+		{",", "Rename session", (*Model).askRename, true},
+		{"r", "Restart an exited session", (*Model).restart, true},
+		{"x", "Close session", (*Model).askClose, true},
+		{"-", "Split: show another session below, or close the split", (*Model).askSplit, false},
+		{"tab", "Go to the other pane of the split", (*Model).focusOther, false},
+		{"w", "Open another workspace…", (*Model).askWorkspace, false},
+		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
+		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
+		{"g", "Focus changes", func(m *Model) tea.Cmd { return m.setFocus(focusChanges) }, false},
+		{"m", "Queue a message for the agent", (*Model).askQueue, true},
+		{"k", "Send a message to another session, or ask it", (*Model).askSession, false},
+		{"u", "Focus queue", func(m *Model) tea.Cmd { return m.setFocus(focusQueue) }, false},
+		{"d", "Review changes", (*Model).review, true},
+		{"t", "Send review notes to the agent", (*Model).askSendNotes, true},
+		{"h", "Review from here: count changes from the last commit", (*Model).rebase, false},
+		{"/", "Find a file by name…", (*Model).askFile, true},
+		{"b", "Show or hide side panels", (*Model).togglePanels, false},
+		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }, false},
+		{"]", "Show or hide the right panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideRight) }, false},
+		{"space", "Command palette", (*Model).askCommand, true},
+		{"?", "Help", func(m *Model) tea.Cmd { m.helpFrom, m.mode, m.helpTop = m.mode, modeHelp, 0; return nil }, true},
+		{"q", "Quit", (*Model).askQuit, true},
 	}
 }
 
@@ -105,7 +109,7 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 
 // runCommand runs the command bound to key, from the prefix or the palette.
 // Over the full-screen view it is for the session on screen, and the view
-// stays for the commands in keepsView; the others go back to the workspace
+// stays for the commands that keep it; the others go back to the workspace
 // first.
 func (m *Model) runCommand(key string, run func(m *Model) tea.Cmd) tea.Cmd {
 	if m.mode == modeView {
@@ -119,12 +123,12 @@ func (m *Model) runCommand(key string, run func(m *Model) tea.Cmd) tea.Cmd {
 }
 
 // keepsView reports whether the command bound to key runs over the
-// full-screen view: those that open on top of it, and those that only
-// reply or ask there unless they go somewhere else, which leave it then.
+// full-screen view.
 func keepsView(key string) bool {
-	switch key {
-	case "t", "/", "space", "?", "a", "d", "r", "x", "q", ",", "m":
-		return true
+	for _, c := range commands {
+		if c.key == key {
+			return c.keepsView
+		}
 	}
 	return false
 }
@@ -583,6 +587,7 @@ func (m *Model) restart() tea.Cmd {
 		m.say(s.Name + " is still running")
 		return nil
 	}
+	m.say("restarting " + s.Name)
 	return m.start(s)
 }
 

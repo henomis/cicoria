@@ -244,6 +244,16 @@ func (w *workspace) at(text string) (int, int) {
 	return 0, 0
 }
 
+// openFile opens the file found by name in the full-screen view.
+func (w *workspace) openFile(name string) {
+	w.t.Helper()
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText(name)
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("file  " + name)
+}
+
 // typeText types characters; line also presses enter.
 func (w *workspace) typeText(text string) {
 	for _, r := range text {
@@ -1441,13 +1451,18 @@ func TestSplit(t *testing.T) {
 	w.see("claude-1 · claude · working")
 	w.tm.SendKey(uv.Key{Code: 'a', Mod: uv.ModCtrl})
 	w.tm.SendKey(uv.Key{Code: uv.KeyTab})
+	// Closed from a full-screen file, the file goes with it.
+	w.openFile("main")
 	w.prefix('x')
-	w.see("close claude-1 and stop its agent?")
+	w.see("close claude-1 and stop its agent?", "file  main.go")
 	w.typeText("y")
 	w.gone("claude-1")
+	w.gone("file  main.go")
 	w.see("claude-2 · claude · working")
+	// Quitting asks over the file.
+	w.openFile("main")
 	w.prefix('q')
-	w.see("still working")
+	w.see("still working", "file  main.go")
 	w.typeText("y")
 	select {
 	case <-w.tm.Done():
@@ -1643,7 +1658,7 @@ func TestHelpScrolls(t *testing.T) {
 	w.see("starts a command:")
 	w.gone("a note is a remark")
 	w.typeText("G")
-	w.see("a note is a remark", "any other key closes")
+	w.see("a note is a remark", "message with the file, the lines")
 	w.gone("starts a command:")
 	w.typeText("g")
 	w.see("starts a command:", "any other key closes")
@@ -1660,8 +1675,51 @@ func TestHelpScrolls(t *testing.T) {
 	w.quit()
 }
 
+// TestKeptCommandsInView restarts, queues and reviews from a full-screen
+// file, which stays on screen or gives way to the diff.
+func TestKeptCommandsInView(t *testing.T) {
+	w := newWorkspace(t)
+	w.set("close_on_exit = false")
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+	w.line("edit kept.txt")
+	w.see("claude-1 · claude · working")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+
+	w.newShell()
+	time.Sleep(4 * time.Second)
+	w.line("exit")
+	w.see("shell-1 exited")
+	w.openFile("main")
+	w.prefix('r')
+	w.see("restarting shell-1", "file  main.go")
+	w.typeText("q")
+	w.see("shell-1 · shell")
+	w.gone("exited")
+
+	w.prefix('1')
+	w.line("work")
+	w.see("claude-1 · claude · working")
+	w.openFile("main")
+	w.prefix('m')
+	w.see("queue for claude-1:")
+	w.line("later")
+	w.see("queued for claude-1", "file  main.go")
+
+	w.prefix('d')
+	w.see("diff  kept.txt")
+	w.typeText("q")
+	w.line("stop")
+	w.see("got later")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	w.quit()
+}
+
 // TestPrefixInView runs commands from a full-screen file: help and the
-// palettes open over it and go back to it, the others leave it.
+// palettes open over it and go back to it, a reply keeps the file on screen,
+// and the commands that show the workspace leave it.
 func TestPrefixInView(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(140, 40)
@@ -1695,7 +1753,8 @@ func TestPrefixInView(t *testing.T) {
 	w.see("file  main.go")
 	w.gone("file ›")
 
-	// A command that only replies, or asks for a line, leaves the view.
+	// A command that only replies, or asks for a line, keeps the file on
+	// screen.
 	w.prefix('a')
 	w.see("no session needs input", "file  main.go")
 	w.prefix(',')

@@ -511,8 +511,9 @@ func (m *Model) renderHelp() []string {
 	lines = append(lines,
 		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", "1-9")), "Go to session by number"),
 		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", p)), "Send "+p+" to the agent"),
-		"    These work in a full-screen file or diff too. The file stays on screen",
-		"    for t / space ? and for a d r x q , m unless they go somewhere else.",
+		"    These work in a full-screen file or diff too. t, /, space and ? open",
+		"    over the file, and a, d, r, x, q, , and m leave it on screen unless",
+		"    they go to another session, close this one or quit; d shows a diff.",
 		"",
 		ui.Bold.Render("  New session"),
 		"    pick the agent, the directory it works in and a name: tab completes the",
@@ -572,8 +573,6 @@ func (m *Model) renderHelp() []string {
 		"    marked with * in the margin, until you send them: together, as one",
 		"    message with the file, the lines and their text, at once or through the",
 		"    queue.",
-		"",
-		ui.Dim.Render("  j/k space b g G scroll · any other key closes"),
 	)
 	// The text scrolls when it is longer than the screen.
 	height := max(m.height-1, 2)
