@@ -112,6 +112,13 @@ p code, li code, td code, dd code { background: var(--paper); border-radius: 4px
 .screen .pick:hover { background: rgb(143 168 255 / 0.16); }
 .screen-note { font-family: var(--mono); font-size: 0.8125rem; color: var(--soft); margin: 0.9rem 0 0; max-width: none; }
 
+/* The recording of a real session. */
+.demo { padding-bottom: 0; }
+.demo video {
+  display: block; width: 100%; height: auto; background: var(--night); border-radius: 12px;
+  box-shadow: 0 1.5rem 3rem -1.5rem rgb(20 24 52 / 0.55);
+}
+
 /* What it does: each ability next to the piece of the interface that shows it */
 .section { padding-block: clamp(2.5rem, 7vw, 5rem); }
 .section > h2 { margin-bottom: clamp(1.5rem, 4vw, 2.75rem); max-width: 26em; }
