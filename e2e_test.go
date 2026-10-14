@@ -1365,6 +1365,13 @@ func TestSessionsPanelKeys(t *testing.T) {
 	w.see("rename session: shell-1")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
 	w.gone("rename session")
+
+	// Closing it asks over the file, and the file goes with the session.
+	w.prefix('x')
+	w.see("close shell-1", "file  main.go")
+	w.typeText("y")
+	w.see("first-agent · claude")
+	w.gone("file  main.go")
 	w.quit()
 }
 
@@ -1639,6 +1646,11 @@ func TestHelpScrolls(t *testing.T) {
 	w.see("a note is a remark", "any other key closes")
 	w.gone("starts a command:")
 	w.typeText("g")
+	w.see("starts a command:", "any other key closes")
+	x, y := w.at("starts a command:")
+	w.tm.SendMouse(uv.MouseWheelEvent{X: x, Y: y, Button: uv.MouseWheelDown})
+	w.gone("starts a command:")
+	w.typeText("g")
 	w.see("starts a command:")
 	w.typeText("jj") // past the blank line and the heading
 	w.gone("starts a command:")
@@ -1690,6 +1702,15 @@ func TestPrefixInView(t *testing.T) {
 	w.see("rename session: claude-1", "file  main.go")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
 	w.gone("rename session")
+	w.see("file  main.go")
+
+	// Review from here changes what the changes panel counts: it is shown.
+	w.prefix('h')
+	w.see("counted from here", "Sessions")
+	w.prefix('/')
+	w.see("file ›")
+	w.typeText("main")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("file  main.go")
 
 	// The prefix pressed twice goes to the agent, which is shown first.

@@ -66,7 +66,7 @@ cicoria ~/src/app  # or on another one
 cicoria -version   # which version this is
 ```
 
-Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all, in a help screen that `j`/`k`, `space`/`b` and `g`/`G` scroll and any other key closes.
+Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria command; `ctrl+a ?` lists them all, in a help screen that `j`/`k` or the arrows, `space`/`b` or `pgup`/`pgdn`, `g`/`G` or `home`/`end` and the mouse wheel scroll, and any other key closes.
 
 | Key | Command |
 |---|---|
@@ -92,7 +92,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `q` | Quit |
 | `ctrl+a` | Send `ctrl+a` to the agent |
 
-These work in a full-screen file or diff too.
+These work in a full-screen file or diff too. The file stays on screen for `t`, `/`, `space` and `?`, which open over it, and for `a`, `d`, `r`, `x`, `q`, `,` and `m` as long as they only reply or ask: going to another session, closing the one on screen or quitting leaves it. The other commands go back to the workspace.
 
 The first time a Codex CLI session starts, Codex asks you to trust the hooks cicoria gives it: pick "Trust all and continue". Until then it works, but reports nothing.
 

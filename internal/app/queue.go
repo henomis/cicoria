@@ -44,7 +44,17 @@ func (m *Model) askQueue() tea.Cmd {
 		if s == nil || text == "" {
 			return nil
 		}
-		return m.enqueue(s, session.Message{Text: text})
+		queued := len(s.Queue)
+		cmd := m.enqueue(s, session.Message{Text: text})
+		// Over the full-screen view the queue is not on screen.
+		if m.mode == modeView {
+			if len(s.Queue) > queued {
+				m.say("queued for " + s.Name)
+			} else {
+				m.say("sent to " + s.Name)
+			}
+		}
+		return cmd
 	}
 	m.prompt = p
 	return nil

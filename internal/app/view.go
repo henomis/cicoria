@@ -511,7 +511,8 @@ func (m *Model) renderHelp() []string {
 	lines = append(lines,
 		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", "1-9")), "Go to session by number"),
 		fmt.Sprintf("    %s %s %s", ui.Accent.Render(p), ui.Accent.Render(fmt.Sprintf("%-6s", p)), "Send "+p+" to the agent"),
-		"    These work in a full-screen file or diff too.",
+		"    These work in a full-screen file or diff too. The file stays on screen",
+		"    for t / space ? and for a d r x q , m unless they go somewhere else.",
 		"",
 		ui.Bold.Render("  New session"),
 		"    pick the agent, the directory it works in and a name: tab completes the",
@@ -626,6 +627,8 @@ func (m *Model) renderStatus() string {
 		if m.mode == modePalette {
 			right = "esc back"
 		}
+	case modeHelp:
+		right = "j/k space b g G scroll · any other key closes"
 	default:
 		if s := m.current(); s != nil {
 			if s.Status == agent.Exited {

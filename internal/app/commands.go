@@ -104,52 +104,29 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 }
 
 // runCommand runs the command bound to key, from the prefix or the palette.
-// Over the full-screen view it is for the session on screen, and the view is
-// closed first, except for the commands that open on top of it: sending the
-// notes, the command palette, finding a file and help.
+// Over the full-screen view it is for the session on screen, and the view
+// stays for the commands in keepsView; the others go back to the workspace
+// first.
 func (m *Model) runCommand(key string, run func(m *Model) tea.Cmd) tea.Cmd {
 	if m.mode == modeView {
-		switch key {
-		case "t", "/", "space", "?":
-		default:
-			return m.runFromView(run)
+		// The cursor of the sessions panel is not on screen.
+		m.sessionCursor = m.active
+		if !keepsView(key) {
+			m.closeView()
 		}
 	}
 	return run(m)
 }
 
-// runFromView runs a command over the full-screen view with the workspace
-// on screen. A command that only replies in the status bar, asks a
-// question or asks for a line changes nothing there, and the view comes
-// back: a question answered yes leaves it again.
-func (m *Model) runFromView(run func(m *Model) tea.Cmd) tea.Cmd {
-	// The cursor of the sessions panel was not on screen.
-	m.sessionCursor = m.active
-	before, said := m.layoutState(), m.messageAt
-	m.closeView()
-	cmd := run(m)
-	replied := m.messageAt != said || m.prompt != nil || m.confirm != nil
-	if cmd != nil || m.mode != modeWorkspace || m.layoutState() != before || !replied {
-		return cmd
+// keepsView reports whether the command bound to key runs over the
+// full-screen view: those that open on top of it, and those that only
+// reply or ask there unless they go somewhere else, which leave it then.
+func keepsView(key string) bool {
+	switch key {
+	case "t", "/", "space", "?", "a", "d", "r", "x", "q", ",", "m":
+		return true
 	}
-	m.mode = modeView
-	if c := m.confirm; c != nil {
-		yes := c.yes
-		c.yes = func() tea.Cmd { m.closeView(); return yes() }
-	}
-	return nil
-}
-
-// layoutState is what a command can change of the workspace on screen.
-type layoutState struct {
-	active, sessions    int
-	focus               focus
-	split               string
-	hideLeft, hideRight bool
-}
-
-func (m *Model) layoutState() layoutState {
-	return layoutState{m.active, len(m.sessions), m.focus, m.split, m.hideLeft, m.hideRight}
+	return false
 }
 
 // closeView goes back from the full-screen view to the workspace.
@@ -254,6 +231,9 @@ func (m *Model) nextAttention() tea.Cmd {
 	for step := 1; step <= len(m.sessions); step++ {
 		i := (m.active + step) % len(m.sessions)
 		if m.sessions[i].Status == agent.NeedsInput {
+			if m.mode == modeView {
+				m.closeView()
+			}
 			return m.switchTo(i)
 		}
 	}
@@ -631,6 +611,10 @@ func (m *Model) askClose() tea.Cmd {
 }
 
 func (m *Model) closeSession(i int) tea.Cmd {
+	// The file of a session that goes is not left on screen.
+	if i == m.active && m.mode == modeView {
+		m.closeView()
+	}
 	if i == m.active {
 		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
 	}
@@ -673,6 +657,10 @@ func (m *Model) askLeave(question, next string) tea.Cmd {
 	}
 	// Any key cuts the goodbye short.
 	quit := func() tea.Cmd {
+		// The goodbye plays in the workspace.
+		if m.mode == modeView {
+			m.closeView()
+		}
 		m.next = next
 		return m.play(ui.Wilt, "ciao", tea.Quit)
 	}
