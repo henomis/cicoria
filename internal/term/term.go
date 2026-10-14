@@ -80,11 +80,10 @@ func Start(cmd *exec.Cmd, width, height int) (*Terminal, error) {
 		done:    make(chan struct{}),
 	}
 	t.emu.SetCallbacks(vt.Callbacks{
-		Bell:             func() { t.bell.Store(true) },
-		CursorVisibility: func(visible bool) { t.cursorHidden.Store(!visible) },
+		Bell: func() { t.bell.Store(true) },
 		// The emulator calls these while it is written to, with mu held.
-		EnableMode:  func(mode ansi.Mode) { t.setMouse(mode, true) },
-		DisableMode: func(mode ansi.Mode) { t.setMouse(mode, false) },
+		EnableMode:  func(mode ansi.Mode) { t.setMode(mode, true) },
+		DisableMode: func(mode ansi.Mode) { t.setMode(mode, false) },
 	})
 
 	go t.readOutput()
@@ -166,9 +165,14 @@ func (t *Terminal) Render() string {
 	return strings.Join(lines, "\n")
 }
 
-// setMouse records that the command turned a mouse mode on or off.
-func (t *Terminal) setMouse(mode ansi.Mode, on bool) {
+// setMode records that the command showed or hid the cursor, or turned a
+// mouse mode on or off. The cursor is followed here rather than through the
+// emulator's CursorVisibility callback, which misses a hidden cursor made
+// visible again by a restore of the cursor (ESC 8), as zsh prompts do.
+func (t *Terminal) setMode(mode ansi.Mode, on bool) {
 	switch mode {
+	case ansi.ModeTextCursorEnable:
+		t.cursorHidden.Store(!on)
 	case ansi.ModeMouseX10, ansi.ModeMouseNormal, ansi.ModeMouseHighlight, ansi.ModeMouseButtonEvent, ansi.ModeMouseAnyEvent:
 		if on {
 			t.mouse[mode] = true
