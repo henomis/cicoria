@@ -237,4 +237,4 @@ The website lives in `web/` and is plain HTML, CSS and JavaScript, with no build
 
 Cicoria is Italian for chicory. One grows in the agent pane each time you start.
 
-The name turned up uninvited at 5:15 in the morning of 11 October 2026. The idea took shape over the rest of the morning, and then its author went to cook chicory while an agent implemented the plan. So cicoria was built the way it is meant to be used: the agent works and you watch the pan. Only one of the two tells you when it needs you.
+The idea turned up uninvited at 5:15 in the morning of 11 October 2026 and took shape over the rest of the morning. Then its author went to cook chicory while an agent implemented the plan, and the project took its name from the pan. So cicoria was built the way it is meant to be used: the agent works and you watch the pan. Only one of the two tells you when it needs you.
