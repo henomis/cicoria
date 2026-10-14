@@ -4,6 +4,8 @@
 
 A terminal workspace for the AI-first engineer: run several coding agents side by side, see which one needs you, and review what they changed, without leaving the terminal.
 
+cicoria is an interface for you, working with several coding agent sessions at once. It does not orchestrate agents, run workflows between them or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.
+
 ```
 ╭─ Sessions ───────────────╮╭─ auth-refactor · claude · working ─────╮╭─ Changes (3) ─────────╮
 │1 ● auth-refactor   3m app││                                        ││M api/auth.go   +42 -3 │
@@ -26,7 +28,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Keeps the changes of a session reviewable**: what is not committed or, one key away, everything since the commit it started on, so work the agent has already committed is still there. Diffs open full screen, with search and hunk navigation.
 - **Lets you write notes on lines of code** and send them to the agent as one message.
 - **Queues messages** and sends each one when the agent ends its turn.
-- **Lets one session ask another**: the answer comes back by itself, with what to do next.
+- **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
 Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
@@ -184,7 +186,7 @@ Neither agent knows of the other: one gets a message, the other a message with a
 ```toml
 prefix = "ctrl+a"
 default_agent = "claude"
-notify = true            # desktop notification when a background session needs input
+notify = true            # desktop notification when a session not on screen needs input
 left_panel = true        # false opens with sessions and files hidden; ctrl+a [ shows them
 right_panel = true       # false opens with changes and the queue hidden; ctrl+a ] shows them
 changes = "uncommitted"  # "session" opens on everything a session changed since it started

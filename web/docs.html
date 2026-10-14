@@ -41,6 +41,7 @@
   <main class="doc">
     <h1>Using cicoria</h1>
     <p>cicoria runs coding agents in terminal panes and shows, around the one on screen, its sessions, files and changes. This page covers everything it does.</p>
+    <p>cicoria is an interface for you, working with several coding agent sessions at once. It does not orchestrate agents, run workflows between them or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.</p>
 
     <section id="install">
       <h2>Install</h2>
@@ -268,7 +269,7 @@ Update the client to handle it.</pre>
         <tbody>
           <tr><td>prefix</td><td><code>"ctrl+a"</code></td><td>The key that starts a command</td></tr>
           <tr><td>default_agent</td><td><code>"claude"</code></td><td>The agent of the first session of a new workspace</td></tr>
-          <tr><td>notify</td><td><code>true</code></td><td>Desktop notification when a background session needs input</td></tr>
+          <tr><td>notify</td><td><code>true</code></td><td>Desktop notification when a session not on screen needs input</td></tr>
           <tr><td>left_panel</td><td><code>true</code></td><td>Open with sessions and files shown</td></tr>
           <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
           <tr><td>changes</td><td><code>"uncommitted"</code></td><td>What the changes panel opens on: what is not committed, or with <code>"session"</code> everything a session changed since it started</td></tr>
