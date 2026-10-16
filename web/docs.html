@@ -219,6 +219,7 @@ cicoria -version                     <span class="c"># which version this is</sp
         </tbody>
       </table></div>
       <p>Each row shows for how long the session has had its status. A session that needs input and is not on screen is named in the status bar and raises a desktop notification when <code>notify</code> is on.</p>
+      <p>The window title, set with the xterm escape <code>OSC 2</code>, names the session on screen and its status, after a <code>▲ name</code> for each other session that needs input: <code>▲ api · web · idle · cicoria</code>. A tab or a window in the background tells you that way too. cicoria saves the title it found with <code>CSI 22 t</code> and puts it back with <code>CSI 23 t</code> when it quits; a terminal without that stack ignores both, and the shell's prompt usually sets its own title again.</p>
       <p>An integrated agent that says it is working but shows no sign of life for 30 seconds reads <code>working?</code>, with its mark dimmed. That happens after you interrupt a turn, and when a Copilot CLI or Codex CLI turn fails, since neither runs a hook then.</p>
     </section>
 

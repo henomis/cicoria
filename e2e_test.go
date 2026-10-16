@@ -218,6 +218,20 @@ func (w *workspace) see(wants ...string) {
 	}
 }
 
+// title waits until the window title is want.
+func (w *workspace) title(want string) {
+	w.t.Helper()
+	deadline := time.After(10 * time.Second)
+	for w.tm.Title() != want {
+		select {
+		case <-w.tm.Updates():
+		case <-time.After(50 * time.Millisecond):
+		case <-deadline:
+			w.t.Fatalf("window title never became %q; it is %q", want, w.tm.Title())
+		}
+	}
+}
+
 // gone waits until the screen no longer shows text.
 func (w *workspace) gone(text string) {
 	w.t.Helper()
@@ -394,10 +408,14 @@ func TestWorkspace(t *testing.T) {
 	w.line("ask")
 	w.prefix('1')
 	w.see("▲ claude-2 needs input")
+	// The window title tells it too, for a terminal in the background.
+	w.title("▲ claude-2 · claude-1 · idle · cicoria")
 	w.prefix('a')
 	w.see("claude-2 · claude · needs input")
+	w.title("claude-2 · needs input · cicoria")
 	w.line("stop")
 	w.see("claude-2 · claude · idle")
+	w.title("claude-2 · idle · cicoria")
 
 	// Sessions are remembered across runs.
 	w.quit()

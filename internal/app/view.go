@@ -125,13 +125,33 @@ func (m *Model) layout() layout {
 	return m.divide(l)
 }
 
+// windowTitle names the session on screen and its status in the terminal's
+// title, after the sessions that wait for input elsewhere, so that a tab in
+// the background tells when one needs you.
+func (m *Model) windowTitle() string {
+	var parts []string
+	for i, s := range m.sessions {
+		if s.Status == agent.NeedsInput && i != m.active {
+			parts = append(parts, "▲ "+s.Name)
+		}
+	}
+	if s := m.current(); s != nil {
+		status := s.Status.String()
+		if s.Stalled(time.Now()) {
+			status += "?"
+		}
+		parts = append(parts, s.Name, status)
+	}
+	return strings.Join(append(parts, "cicoria"), " · ")
+}
+
 // View implements tea.Model.
 func (m *Model) View() tea.View {
 	var v tea.View
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	v.ReportFocus = true
-	v.WindowTitle = "cicoria"
+	v.WindowTitle = m.windowTitle()
 	if m.width == 0 || m.height == 0 {
 		return v
 	}
