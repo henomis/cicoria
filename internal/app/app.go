@@ -61,6 +61,7 @@ const (
 	focusSessions
 	focusFiles
 	focusChanges
+	focusCommits
 	focusQueue
 )
 
@@ -134,8 +135,14 @@ type Model struct {
 	branch       string
 	changeCursor int
 	changeTop    int
-	queueCursor  int
-	repo         bool
+	// log is the commits made since changesBase, the newest first; commit is
+	// the one the changes are narrowed to, or empty for all of them.
+	log         []git.Commit
+	logCursor   int
+	logTop      int
+	commit      string
+	queueCursor int
+	repo        bool
 	// refreshing says a look at the project is under way, and stale that it
 	// began before something it depends on changed.
 	refreshing bool
@@ -207,8 +214,13 @@ type (
 		ignored []string
 		changes []git.Change
 		commits int
-		branch  string
-		repo    bool
+		// log is the commits since the session started, from since in both
+		// views, and commit the one the changes were narrowed to.
+		since  string
+		log    []git.Commit
+		commit string
+		branch string
+		repo   bool
 	}
 	// submitMsg is the time to press enter on a message that was pasted to
 	// an agent.
@@ -497,6 +509,15 @@ func (m *Model) reviewBase() string {
 	return ""
 }
 
+// sessionBase returns the commit the session on screen started from, which
+// its commits are listed since in either view.
+func (m *Model) sessionBase() string {
+	if s := m.current(); s != nil {
+		return s.Base
+	}
+	return ""
+}
+
 // refreshNow looks at the project on screen again after a change to what is
 // shown of it, even when a look is already under way.
 func (m *Model) refreshNow() tea.Cmd {
@@ -510,11 +531,11 @@ func (m *Model) refresh() tea.Cmd {
 		return nil
 	}
 	m.refreshing = true
-	dir, base := m.project(), m.reviewBase()
+	dir, base, since, commit := m.project(), m.reviewBase(), m.sessionBase(), m.commit
 	// What an ignored directory holds is only read while it is open.
 	ignored, open := m.showIgnored, m.tree().Open()
 	return func() tea.Msg {
-		msg := refreshMsg{dir: dir, base: base}
+		msg := refreshMsg{dir: dir, base: base, since: since, commit: commit}
 		msg.files, _ = git.Files(dir)
 		if ignored {
 			msg.ignored = git.Ignored(dir, open)
@@ -525,7 +546,18 @@ func (m *Model) refresh() tea.Cmd {
 		if base != "" {
 			msg.commits = git.Commits(dir, base)
 		}
-		if changes, err := git.Status(dir, base); err == nil {
+		if since != "" && git.Exists(dir, since) {
+			msg.log, _ = git.Log(dir, since)
+		}
+		// A commit that is no longer since base is not narrowed to.
+		if commit != "" && !slices.ContainsFunc(msg.log, func(c git.Commit) bool { return c.Hash == commit }) {
+			commit = ""
+		}
+		changes, err := git.Status(dir, base)
+		if commit != "" {
+			changes, err = git.CommitStatus(dir, commit)
+		}
+		if err == nil {
 			msg.changes, msg.repo = changes, true
 			msg.branch = git.Branch(dir)
 		}
@@ -567,8 +599,12 @@ func (m *Model) resize() {
 // Update implements tea.Model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
-	// The queue panel goes away with its last message.
+	// The queue panel goes away with its last message, and the commits
+	// panel with the last commit.
 	if s := m.current(); m.focus == focusQueue && (s == nil || len(s.Queue) == 0) {
+		m.focus = focusAgent
+	}
+	if m.focus == focusCommits && !m.showsLog() {
 		m.focus = focusAgent
 	}
 	if m.anim != nil && !m.animating {
@@ -658,7 +694,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.refreshing = false
 		// A look at a project that is no longer on screen is of no use, and
 		// the one that is on screen has not been looked at yet.
-		if msg.dir != m.project() || msg.base != m.reviewBase() || m.stale {
+		if msg.dir != m.project() || msg.base != m.reviewBase() || msg.since != m.sessionBase() || msg.commit != m.commit || m.stale {
 			m.stale = false
 			return m.refresh()
 		}
@@ -772,6 +808,7 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 	if msg.lost {
 		m.changesBase = ""
 	}
+	m.applyLog(msg.log)
 
 	// Keep the cursor on the same file while the list changes around it,
 	// unless this is another project altogether.
@@ -788,6 +825,40 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 		}
 	}
 	m.changeCursor = max(min(m.changeCursor, len(m.changes)-1), 0)
+}
+
+// applyLog takes a fresh list of the commits, keeping the cursor on the same
+// commit, and lets go of the one the changes were narrowed to when it is gone.
+func (m *Model) applyLog(log []git.Commit) {
+	var selected string
+	if m.logCursor < len(m.log) {
+		selected = m.log[m.logCursor].Hash
+	}
+	m.log = log
+	found := false
+	for i, c := range m.log {
+		if c.Hash == selected {
+			m.logCursor = i
+		}
+		found = found || c.Hash == m.commit
+	}
+	m.logCursor = max(min(m.logCursor, len(m.log)-1), 0)
+	if m.commit != "" && !found {
+		m.commit = ""
+		m.say("the commit the changes were narrowed to is gone: showing them all")
+	}
+}
+
+// narrow shows the changes of one commit only, or all of them again when it
+// is empty. A commit is part of everything since the session started, so
+// that is the view it is shown in.
+func (m *Model) narrow(hash string) tea.Cmd {
+	if s := m.current(); hash != "" && s != nil {
+		s.Uncommitted = false
+	}
+	m.commit = hash
+	m.changeCursor, m.changeTop = 0, 0
+	return m.refreshNow()
 }
 
 // change returns the change of a file, if it has one.

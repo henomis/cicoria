@@ -851,6 +851,76 @@ func TestReviewSinceTheStart(t *testing.T) {
 	w.quit()
 }
 
+// The commits made since a session started are listed under its changes,
+// and the changes can be narrowed to one of them.
+func TestCommitsPanel(t *testing.T) {
+	w := newWorkspace(t)
+	w.set(`changes = "session"`)
+	w.launch(140, 40)
+	w.see("agent ready", "working tree clean")
+	w.gone("Commits (")
+
+	commit := func(subject string) {
+		t.Helper()
+		for _, args := range [][]string{
+			{"add", "-A"},
+			{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", subject},
+		} {
+			if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+	}
+	w.line("edit notes.txt")
+	w.see("? notes.txt")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	commit("write the notes")
+	w.line("edit later.txt")
+	w.see("? later.txt")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	commit("write later")
+	w.see("Changes (2) · 2 commits", "Commits (2)", "write later", "write the notes")
+
+	// The older commit narrows the changes to its own file.
+	w.prefix('l')
+	w.typeText("j")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("changes of", "A notes.txt")
+	w.see("Changes (1) · ")
+	w.gone("A later.txt")
+
+	// Its diff is that commit's, and enter on it again shows them all.
+	w.prefix('l')
+	w.typeText("d")
+	w.see("diff  notes.txt", "+hello from the agent")
+	w.typeText("q")
+	w.see("Commits (2)")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Changes (2) · 2 commits", "A later.txt")
+
+	// The commits stay listed with what is not committed, and narrowing to
+	// one goes back to everything since the session started.
+	w.prefix('g')
+	w.typeText("s")
+	w.see("what is not committed", "working tree clean", "Commits (2)")
+	w.prefix('l')
+	w.typeText("k")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Changes (1) · ", "A later.txt")
+	w.gone("A notes.txt")
+	w.prefix('l')
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Changes (2) · 2 commits")
+
+	// Once it has been looked at, the list starts again.
+	w.prefix('h')
+	w.see("counted from here")
+	w.gone("Commits (")
+	w.quit()
+}
+
 // Notes are written on lines of a diff or a file and reach the agent as one
 // message, at once or through the queue.
 func TestNotes(t *testing.T) {

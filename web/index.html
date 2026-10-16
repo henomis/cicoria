@@ -165,12 +165,14 @@ this session a worktree of its own?</span> [y/N] y</pre>
       <div class="ability">
         <div>
           <h3>Everything it changed, commits included</h3>
-          <p>The changes panel shows what is not committed, or with one key everything since the commit the session started on, so work the agent already committed is still there to read. Diffs open on the whole screen, with search and jumps between hunks.</p>
+          <p>The changes panel shows what is not committed, or with one key everything since the commit the session started on, so work the agent already committed is still there to read. Under it, the commits it made, each one a key away from its own diff. Diffs open on the whole screen, with search and jumps between hunks.</p>
         </div>
         <div class="term">
           <div class="tp"><span class="tp-t">Changes (3) · 2 commits</span><pre><span class="w">M</span> api/orders.go          <span class="g">+42</span> <span class="r">-3</span>
 <span class="g">A</span> api/receipt_test.go    <span class="g">+58</span>
 <span class="w">M</span> openapi.yaml           <span class="g">+24</span></pre></div>
+          <div class="tp lit"><span class="tp-t">Commits (2)</span><pre><span class="hl"><span class="d">e41a07c</span> Document the receipt endpoint  <span class="d">4m</span></span>
+<span class="d">9b2f3d1</span> Add GET /orders/{id}/receipt   <span class="d">9m</span></pre></div>
         </div>
       </div>
 

@@ -45,7 +45,7 @@ type layout struct {
 	// sessions, files, changes and queue are the side panels, borders
 	// included. queue is empty unless the session on screen has messages
 	// waiting.
-	sessions, files, changes, queue rect
+	sessions, files, changes, log, queue rect
 	// agentBox is the agent pane with its border; agent is the terminal
 	// inside it. Without side panels there is no border and they are equal,
 	// unless the pane is split.
@@ -106,10 +106,18 @@ func (m *Model) layout() layout {
 	}
 	if l.right {
 		l.changes = rect{m.width - right, 0, right, l.body.h}
+		queueH := 0
 		if s := m.current(); s != nil && len(s.Queue) > 0 {
-			queueH := max(min(len(s.Queue)+2, l.body.h/3), 3)
+			queueH = max(min(len(s.Queue)+2, l.body.h/3), 3)
 			l.changes.h -= queueH
-			l.queue = rect{l.changes.x, l.changes.h, right, queueH}
+		}
+		if m.showsLog() {
+			logH := max(min(len(m.log)+2, l.body.h/4), 3)
+			l.changes.h -= logH
+			l.log = rect{l.changes.x, l.changes.h, right, logH}
+		}
+		if queueH > 0 {
+			l.queue = rect{l.changes.x, l.body.h - queueH, right, queueH}
 		}
 	}
 	l.agentBox = rect{left, 0, m.width - left - right, l.body.h}
@@ -183,6 +191,9 @@ func (m *Model) renderWorkspace(l layout) []string {
 	}
 	if l.right {
 		right := m.renderChanges(l.changes)
+		if l.log.h > 0 {
+			right = append(right, m.renderLog(l.log)...)
+		}
 		if l.queue.h > 0 {
 			right = append(right, m.renderQueue(l.queue)...)
 		}
@@ -307,10 +318,14 @@ func badge(s *session.Session) string {
 
 // lasting tells for how long a session has been in its status, once that is
 // a minute or more.
-func lasting(s *session.Session) string {
-	d := time.Since(s.Since)
+func lasting(s *session.Session) string { return ago(s.Since) }
+
+// ago tells how long ago a time was, in its largest unit, once that is a
+// minute or more.
+func ago(t time.Time) string {
+	d := time.Since(t)
 	switch {
-	case s.Since.IsZero() || d < time.Minute:
+	case t.IsZero() || d < time.Minute:
 		return ""
 	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
@@ -470,9 +485,11 @@ func (m *Model) renderChanges(r rect) []string {
 		title = fmt.Sprintf("Changes (%d)", len(m.changes))
 	}
 	// How many commits the changes span, when they are counted from where
-	// the session started.
+	// the session started, or the one commit they are narrowed to.
 	if s := m.current(); !m.loading && m.repo && s != nil && s.Base != "" && !s.Uncommitted {
 		switch {
+		case m.commit != "":
+			title += " · " + m.shortCommit()
 		case m.commits == 1:
 			title += " · 1 commit"
 		case m.commits > 1:
@@ -480,6 +497,47 @@ func (m *Model) renderChanges(r rect) []string {
 		}
 	}
 	return ui.Box(title, lines, r.w, r.h, focused)
+}
+
+// showsLog reports whether the commits panel is on screen: commits were made
+// since the session started.
+func (m *Model) showsLog() bool {
+	s := m.current()
+	return s != nil && s.Base != "" && m.repo && !m.loading && len(m.log) > 0
+}
+
+// shortCommit names the commit the changes are narrowed to.
+func (m *Model) shortCommit() string {
+	for _, c := range m.log {
+		if c.Hash == m.commit {
+			return c.Short
+		}
+	}
+	return m.commit[:min(len(m.commit), 7)]
+}
+
+func (m *Model) renderLog(r rect) []string {
+	focused := m.focus == focusCommits
+	inner, height := r.w-2, r.h-2
+	m.logTop = ui.Window(m.logCursor, m.logTop, height, len(m.log))
+
+	var lines []string
+	for i := m.logTop; i < min(m.logTop+height, len(m.log)); i++ {
+		c := m.log[i]
+		age := ""
+		if a := ago(c.When); a != "" {
+			age = " " + a
+		}
+		mark := " "
+		if c.Hash == m.commit {
+			mark = "▸"
+		}
+		head := mark + ui.Dim.Render(c.Short) + " "
+		room := max(inner-ansi.StringWidth(head)-ansi.StringWidth(age), 1)
+		text := head + ui.Fit(c.Subject, room) + ui.Dim.Render(age)
+		lines = append(lines, ui.Selected(text, inner, i == m.logCursor, focused))
+	}
+	return ui.Box(fmt.Sprintf("Commits (%d)", len(m.log)), lines, r.w, r.h, focused)
 }
 
 func (m *Model) renderView() []string {
@@ -560,6 +618,9 @@ func (m *Model) renderHelp() []string {
 		"           i show ⇄ hide what git ignores, which is grey",
 		"    changes: enter/d diff · v file · e editor · o open · @ mention",
 		"             s what is not committed ⇄ everything since the session started",
+		"    commits: the ones made since the session started",
+		"             enter narrow the changes to the commit ⇄ show them all again",
+		"             d its diff · @ mention the commit to the agent",
 		"",
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",

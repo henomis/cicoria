@@ -148,6 +148,7 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>tab</td><td>Go to the other pane of the split</td></tr>
           <tr><td>w</td><td>Open another saved workspace in place of this one</td></tr>
           <tr><td>s f g</td><td>Focus the sessions, files, changes panel</td></tr>
+          <tr><td>l</td><td>Focus the commits panel</td></tr>
           <tr><td>u</td><td>Focus the queue panel</td></tr>
           <tr><td>m</td><td>Queue a message for the agent</td></tr>
           <tr><td>k</td><td>Send a message to another session, or ask it and get the answer here</td></tr>
@@ -230,6 +231,7 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>Sessions</td><td><kbd>enter</kbd> go, <kbd>,</kbd> rename, <kbd>r</kbd> restart, <kbd>x</kbd> close, <kbd>c</kbd> new session</td></tr>
           <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention to the agent, <kbd>i</kbd> show or hide ignored files</td></tr>
           <tr><td>Changes</td><td><kbd>enter</kbd> or <kbd>d</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted or since the session started</td></tr>
+          <tr><td>Commits</td><td><kbd>enter</kbd> narrow the changes to the commit, or show them all again, <kbd>d</kbd> its diff, <kbd>@</kbd> mention the commit to the agent</td></tr>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
@@ -246,6 +248,14 @@ cicoria -version                     <span class="c"># which version this is</sp
         <li><code>changes = "session"</code> opens sessions on the second view.</li>
       </ul>
       <p>Outside a git repository the panel says so and the file tree lists the directory as it is.</p>
+      <h3>Commits</h3>
+      <p>In either view, the commits panel under the changes lists the commits made since the base, newest first: short hash, subject and age. It is there only once there is one, and takes at most a quarter of the column. It reads <code>git log base..HEAD</code>, up to 200 commits, and is not a history browser: other branches and older commits are not listed.</p>
+      <ul>
+        <li><kbd>enter</kbd> narrows the changes panel to the files of that commit, and its diffs to what the commit did against its first parent, switching to the second view if need be. The title then names the commit. <kbd>enter</kbd> on it again shows all the changes.</li>
+        <li><kbd>d</kbd> narrows the same way and opens the diff of the first file; <kbd>tab</kbd> in the view goes through the others.</li>
+        <li><kbd>@</kbd> types the short hash at the agent's prompt, for a message such as <q>revert a1b2c3d</q>.</li>
+      </ul>
+      <p>Switching the view or the session, or <kbd>ctrl+a</kbd> <kbd>h</kbd>, shows all the changes again, and so does a commit that is no longer since the base, after an amend or a reset: the status bar says so. Notes on a commit's diff are notes like any other: they quote the lines, so they read right even once the file has moved on.</p>
       <h3>The full-screen view</h3>
       <div class="table"><table>
         <thead><tr><th>Key</th><th>What it does</th></tr></thead>

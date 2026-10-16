@@ -61,6 +61,7 @@ func init() {
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
 		{"g", "Focus changes", func(m *Model) tea.Cmd { return m.setFocus(focusChanges) }, false},
+		{"l", "Focus commits", func(m *Model) tea.Cmd { return m.setFocus(focusCommits) }, false},
 		{"m", "Queue a message for the agent", (*Model).askQueue, true},
 		{"k", "Send a message to another session, or ask it", (*Model).askSession, false},
 		{"u", "Focus queue", func(m *Model) tea.Cmd { return m.setFocus(focusQueue) }, false},
@@ -149,6 +150,8 @@ func (m *Model) switchTo(i int) tea.Cmd {
 func (m *Model) shownNow() tea.Cmd {
 	m.sessionCursor = m.active
 	m.focus = focusAgent
+	// The commits are those of the session on screen.
+	m.commit, m.log, m.logCursor, m.logTop = "", nil, 0, 0
 	// A session that came on screen takes the size of its pane.
 	m.resize()
 	m.seen()
@@ -236,7 +239,7 @@ func (m *Model) nextAttention() tea.Cmd {
 func (m *Model) setFocus(f focus) tea.Cmd {
 	// A panel that is asked for comes back, with its side.
 	hide, shown := &m.hideLeft, func() bool { return m.layout().left }
-	if f == focusChanges || f == focusQueue {
+	if f == focusChanges || f == focusCommits || f == focusQueue {
 		hide, shown = &m.hideRight, func() bool { return m.layout().right }
 	}
 	if !shown() {
@@ -254,6 +257,17 @@ func (m *Model) setFocus(f focus) tea.Cmd {
 	}
 	if s := m.current(); f == focusQueue && (s == nil || len(s.Queue) == 0) {
 		m.say(fmt.Sprintf("the queue is empty — %s m adds a message", m.cfg.Prefix))
+		return nil
+	}
+	if s := m.current(); f == focusCommits && !m.showsLog() {
+		switch {
+		case s == nil:
+			m.say(errNoSession.Error())
+		case s.Base == "" || !m.repo:
+			m.say("this session has no commit to count its changes from")
+		default:
+			m.say("no commits since " + s.Name + " started")
+		}
 		return nil
 	}
 	m.focus = f
@@ -696,6 +710,7 @@ func (m *Model) rebase() tea.Cmd {
 		return nil
 	}
 	s.Base = head
+	m.commit = ""
 	m.save()
 	m.say("changes of " + s.Name + " are counted from here")
 	return m.refresh()

@@ -68,6 +68,9 @@ func (m *Model) openDiff(c git.Change) {
 	m.mode = modeView
 
 	diff, err := git.Diff(m.view.dir, c, m.changesBase)
+	if m.commit != "" {
+		diff, err = git.CommitDiff(m.view.dir, m.commit, c.Path)
+	}
 	switch {
 	case err != nil:
 		m.view.pager.SetContent([]string{ui.Bad.Render(err.Error())}, nil)

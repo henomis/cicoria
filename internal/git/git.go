@@ -26,6 +26,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // maxWalk bounds how many files are listed outside of a repository, and how
@@ -131,6 +132,80 @@ func Commits(dir, base string) int {
 	return n
 }
 
+// Commit is one commit of the history.
+type Commit struct {
+	Hash, Short, Subject string
+	When                 time.Time
+}
+
+// maxLog bounds how many commits Log returns.
+const maxLog = 200
+
+// Log lists the commits made since base on the branch dir is on, the newest
+// first.
+func Log(dir, base string) ([]Commit, error) {
+	out, err := run(dir, "log", "-z", fmt.Sprintf("--max-count=%d", maxLog), "--format=%H%x1f%h%x1f%ct%x1f%s", base+"..HEAD")
+	if err != nil {
+		return nil, err
+	}
+	return parseLog(out), nil
+}
+
+// parseLog reads the output of Log's "git log": one record per commit, its
+// fields apart by a unit separator.
+func parseLog(out []byte) []Commit {
+	var commits []Commit
+	for _, rec := range strings.Split(string(out), "\x00") {
+		f := strings.SplitN(strings.TrimPrefix(rec, "\n"), "\x1f", 4)
+		if len(f) != 4 {
+			continue
+		}
+		c := Commit{Hash: f[0], Short: f[1], Subject: f[3]}
+		if sec, err := strconv.ParseInt(f[2], 10, 64); err == nil {
+			c.When = time.Unix(sec, 0)
+		}
+		commits = append(commits, c)
+	}
+	return commits
+}
+
+// parent returns what a commit is compared against: its first parent, or the
+// empty tree for the first commit of a repository.
+func parent(dir, hash string) string {
+	if _, err := run(dir, "rev-parse", "--verify", "--quiet", hash+"^1"); err == nil {
+		return hash + "^1"
+	}
+	// With nothing on its standard input, this names the empty tree in the
+	// repository's own hash.
+	if out, err := run(dir, "hash-object", "-t", "tree", "--stdin"); err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	return hash + "^1"
+}
+
+// CommitStatus lists the files a commit changed, as Status does for the work
+// tree.
+func CommitStatus(dir, hash string) ([]Change, error) {
+	root, ok := Root(dir)
+	if !ok {
+		return nil, errors.New("not a git repository")
+	}
+	against := []string{parent(dir, hash), hash, "--no-renames"}
+	out, err := run(dir, append([]string{"diff", "--name-status", "-z"}, against...)...)
+	if err != nil {
+		return nil, err
+	}
+	changes := parseNameStatus(out)
+	count(dir, root, changes, against)
+	return changes, nil
+}
+
+// CommitDiff returns the unified diff of one file in a commit.
+func CommitDiff(dir, hash, path string) (string, error) {
+	out, err := run(dir, "diff", parent(dir, hash), hash, "--", path)
+	return string(out), err
+}
+
 // Status lists the changed files of the work tree containing dir: what is
 // not committed or, when base is a commit, everything that is different
 // from it, committed or not.
@@ -161,6 +236,13 @@ func Status(dir, base string) ([]Change, error) {
 		}
 		changes = append(parseNameStatus(out), slices.DeleteFunc(changes, func(c Change) bool { return !c.Untracked() })...)
 	}
+	count(dir, root, changes, against)
+	return changes, nil
+}
+
+// count fills in the line counts of changes taken against a commit, or two,
+// and makes their paths relative to dir, sorted.
+func count(dir, root string, changes []Change, against []string) {
 	// Line counts are a nicety: without them the list is still right.
 	stats := map[string][2]int{}
 	if out, err := run(dir, append([]string{"diff", "--numstat", "-z"}, against...)...); err == nil {
@@ -181,7 +263,6 @@ func Status(dir, base string) ([]Change, error) {
 	}
 
 	slices.SortFunc(changes, func(a, b Change) int { return strings.Compare(a.Path, b.Path) })
-	return changes, nil
 }
 
 // parseStatus reads the output of "git status --porcelain=v1 -z".
