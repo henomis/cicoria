@@ -74,6 +74,14 @@ func version() string {
 	return "(unknown)"
 }
 
+// pushTitle and popTitle save the terminal's window and icon titles and
+// put them back, as xterm defines them; a terminal without the stack
+// ignores both.
+const (
+	pushTitle = "\x1b[22;0t"
+	popTitle  = "\x1b[23;0t"
+)
+
 func run(args []string) error {
 	flags := flag.NewFlagSet("cicoria", flag.ExitOnError)
 	configPath := flags.String("config", config.Path(), "path of the config file")
@@ -117,6 +125,10 @@ func run(args []string) error {
 	// One workspace after the other, for as long as the user asks for another.
 	// A workspace picked from inside cicoria was asked about there, when
 	// another cicoria has it open.
+	// The title cicoria sets is taken back when it quits: the terminal's own
+	// is saved here and restored, where the terminal keeps a stack of them.
+	fmt.Print(pushTitle)
+	defer fmt.Print(popTitle)
 	for agreed := false; dir != ""; agreed = true {
 		m, err := app.New(cfg, dir, dark, agreed)
 		if err != nil {

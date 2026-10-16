@@ -54,7 +54,9 @@ type Terminal struct {
 
 	cursorHidden atomic.Bool
 	bell         atomic.Bool
-	closeOnce    sync.Once
+	// title is the window title the command last set.
+	title     atomic.Value
+	closeOnce sync.Once
 }
 
 // Start launches cmd in a PTY of the given size.
@@ -80,7 +82,8 @@ func Start(cmd *exec.Cmd, width, height int) (*Terminal, error) {
 		done:    make(chan struct{}),
 	}
 	t.emu.SetCallbacks(vt.Callbacks{
-		Bell: func() { t.bell.Store(true) },
+		Bell:  func() { t.bell.Store(true) },
+		Title: func(title string) { t.title.Store(title) },
 		// The emulator calls these while it is written to, with mu held.
 		EnableMode:  func(mode ansi.Mode) { t.setMode(mode, true) },
 		DisableMode: func(mode ansi.Mode) { t.setMode(mode, false) },
@@ -229,6 +232,12 @@ func (t *Terminal) Cursor() (x, y int, visible bool) {
 	p, back := t.emu.CursorPosition(), t.scrolled()
 	t.mu.Unlock()
 	return p.X, p.Y, back == 0 && !t.cursorHidden.Load()
+}
+
+// Title returns the window title the command last set, if any.
+func (t *Terminal) Title() string {
+	title, _ := t.title.Load().(string)
+	return title
 }
 
 // TakeBell reports whether the command rang the bell since the last call.

@@ -3,216 +3,285 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cicoria: work with several coding agents in your terminal</title>
-<meta name="description" content="Run several coding agents in your terminal, each in its own session. See which one needs you, review everything they changed, and send your notes back.">
-<meta property="og:title" content="cicoria: work with several coding agents in your terminal">
-<meta property="og:description" content="Run several coding agents in your terminal, each in its own session. See which one needs you, review everything they changed, and send your notes back.">
+<title>cicoria: several coding agents, one terminal</title>
+<meta name="description" content="Run Claude Code, Copilot CLI, Codex CLI or any agent side by side in your terminal. See which one needs you, review what each one changed, and send your notes back.">
+<meta property="og:title" content="cicoria: several coding agents, one terminal">
+<meta property="og:description" content="Run several coding agents side by side in your terminal. See which one needs you, review what each one changed, and send your notes back.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141834'/%3E%3Cg stroke='%238fa8ff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M16 5v22M5 16h22M8.2 8.2l15.6 15.6M23.8 8.2 8.2 23.8'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='4' fill='%23141834' stroke='%238fa8ff' stroke-width='2'/%3E%3C/svg%3E">
+<meta property="og:image" content="https://henomis.github.io/cicoria/demo.jpg">
+<meta name="theme-color" content="#4f63e8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f63e8'/%3E%3Cg fill='%23fff'%3E%3Cpath id='p' d='M14.5 12.5 14.2 4.6 15.1 3.6 16 4.4 16.9 3.6 17.8 4.6 17.5 12.5z'/%3E%3Cuse href='%23p' transform='rotate(40 16 16)'/%3E%3Cuse href='%23p' transform='rotate(80 16 16)'/%3E%3Cuse href='%23p' transform='rotate(120 16 16)'/%3E%3Cuse href='%23p' transform='rotate(160 16 16)'/%3E%3Cuse href='%23p' transform='rotate(200 16 16)'/%3E%3Cuse href='%23p' transform='rotate(240 16 16)'/%3E%3Cuse href='%23p' transform='rotate(280 16 16)'/%3E%3Cuse href='%23p' transform='rotate(320 16 16)'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%231e1f2e'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,300..800&family=Schibsted+Grotesk:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="site.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="flower" viewBox="0 0 32 32">
+    <g fill="currentColor">
+      <path id="petal" d="M14.5 12.5 14.2 4.6 15.1 3.6 16 4.4 16.9 3.6 17.8 4.6 17.5 12.5z"/>
+      <use href="#petal" transform="rotate(40 16 16)"/><use href="#petal" transform="rotate(80 16 16)"/>
+      <use href="#petal" transform="rotate(120 16 16)"/><use href="#petal" transform="rotate(160 16 16)"/>
+      <use href="#petal" transform="rotate(200 16 16)"/><use href="#petal" transform="rotate(240 16 16)"/>
+      <use href="#petal" transform="rotate(280 16 16)"/><use href="#petal" transform="rotate(320 16 16)"/>
+    </g>
+    <circle cx="16" cy="16" r="3.2" fill="#1e1f2e"/>
+  </symbol>
+</svg>
+<a class="skip" href="#main">Skip to the content</a>
 
-<header class="wrap top">
-  <a class="name" href="./" aria-current="page"><span>✽</span> cicoria</a>
-  <a href="docs.html">Docs</a>
-  <a href="https://github.com/henomis/cicoria">GitHub</a>
-</header>
+<header class="hero">
+  <div class="wrap">
+    <nav class="bar" aria-label="Site">
+      <a class="mark" href="./" aria-current="page"><svg aria-hidden="true"><use href="#flower"/></svg>cicoria</a>
+      <a href="docs.html">Guide</a>
+      <a href="https://github.com/henomis/cicoria">GitHub</a>
+    </nav>
 
-<main>
-  <div class="wrap hero">
-    <h1>Work with several coding agents at once. Know which one needs you.</h1>
-    <p class="lede">cicoria runs your coding agents in your terminal, each in a session of its own. It shows which session is waiting for you, keeps everything each one changed ready to review, and sends your notes on the code back as one message.</p>
+    <h1><span class="squeeze">Work with several coding agents at once.</span> <span class="spread">Know which one needs you.</span></h1>
+    <p class="lede">cicoria is a terminal workspace for the coding agents you already use. Each one runs in a session of its own. cicoria tells you which one is waiting, shows what each one changed, and sends your review back as one message.</p>
 
     <div class="install">
       <code id="install">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
       <button type="button" data-copy="install">Copy</button>
     </div>
-    <p class="next"><a href="docs.html">Read the docs</a><a href="https://github.com/henomis/cicoria">Source on GitHub</a></p>
+    <p class="links"><a href="docs.html">Read the guide</a><a href="https://github.com/henomis/cicoria">Source on GitHub</a></p>
 
-    <div class="demo">
-      <video src="demo.mp4" poster="demo.jpg" width="1600" height="900" autoplay muted loop playsinline controls preload="metadata" aria-label="A recorded cicoria session"></video>
-      <p class="demo-note">A real session, one minute long. Claude Code writes a small Go HTTP server while a README waits in the queue. A second session, split below, counts the lines of main.go. A note on the diff then asks the first session for a new endpoint, and it adds it.</p>
+    <div class="live">
+      <div class="ws" id="ws" tabindex="0" role="group" aria-label="A cicoria workspace you can try: four sessions at work">
+        <div class="ws-grid">
+          <div class="ws-col ws-left">
+            <div class="tp"><span class="tp-t">Sessions</span><ul class="ws-sessions"></ul></div>
+            <div class="tp"><span class="tp-t ws-tree">Files</span><pre class="s-idle">▾ api/
+  orders.go
+  receipt_test.go
+▸ web/
+  openapi.yaml</pre></div>
+          </div>
+          <div class="tp lit ws-pane"><span class="tp-t">session</span><div class="ws-out" aria-live="polite"></div><div class="ws-prompt">›</div></div>
+          <div class="ws-col ws-right">
+            <div class="tp ws-changes"><span class="tp-t">Changes</span><ul class="ws-files"></ul></div>
+            <div class="tp"><span class="tp-t ws-queue-t">Queue</span><ul class="ws-files ws-queue"></ul></div>
+          </div>
+        </div>
+        <div class="ws-status"><span class="need" role="status"></span><span class="keys">ctrl+a a  next that needs you</span></div>
+      </div>
+      <p class="ws-hint">This workspace is running. When a session turns ▲, press <kbd>ctrl+a</kbd> then <kbd>a</kbd> to go to it, or click it, and answer. <kbd>ctrl+a</kbd> <kbd>1</kbd>–<kbd>4</kbd> goes to a session by its number.</p>
     </div>
   </div>
+</header>
 
-  <div class="wrap section">
-    <h2>What cicoria adds to the agent you already use</h2>
-    <ul class="abilities">
-      <li>
-        <pre><span class="d">1</span> <span class="g">●</span> auth-refactor   <span class="d">3m app</span>
-<span class="d">2</span> <span class="w">▲</span> fix-flaky-test  <span class="d">6m worker</span>
-<span class="d">3</span> <span class="g">✓</span> docs-pass      <span class="d">12m site</span></pre>
-        <div>
-          <h3>Know which agent needs you, without checking</h3>
-          <p>Every session shows whether it is working, waiting for your answer, or finished while you were elsewhere, and for how long. <kbd>ctrl+a</kbd> <kbd>a</kbd> jumps to the next one that needs input, and a desktop notification tells you when one you are not looking at starts waiting.</p>
-        </div>
-      </li>
-      <li>
-        <pre><span class="d">╭─ Changes (3) · 2 commits ──╮</span>
-<span class="d">│</span><span class="w">M</span> api/auth.go       <span class="g">+42</span> <span class="r">-3</span>  <span class="d">│</span>
-<span class="d">│</span><span class="g">A</span> api/token.go         <span class="g">+18</span>  <span class="d">│</span>
-<span class="d">╰────────────────────────────╯</span></pre>
-        <div>
-          <h3>Review everything it did, commits included</h3>
-          <p>Work the agent has already committed is still there to review: one key counts the changes from the commit the session started on. Diffs open on the whole screen, with search and jumps between hunks, Markdown files as the documents they describe, and <kbd>ctrl+a</kbd> <kbd>h</kbd> starts the count again once you have looked.</p>
-        </div>
-      </li>
-      <li>
-        <pre><span class="d"> </span><span class="b">▌</span>41     if tok == "" {
-<span class="w">*</span><span class="b">▌</span>42         return nil
-<span class="w">*</span> 43     }
- note on api/auth.go:42-43: <span class="d">█</span></pre>
-        <div>
-          <h3>Review the agent like a pull request</h3>
-          <p>Select the lines you mean in a file or a diff and write what you think. When you are done, all your notes go to the agent as one message that names each file and its lines and quotes them.</p>
-        </div>
-      </li>
-      <li>
-        <pre><span class="d">╭─ Queue (2) ────────────────╮</span>
-<span class="d">│</span><span class="b">▸ </span>then run the linter       <span class="d">│</span>
-<span class="d">│</span>  update the changelog      <span class="d">│</span>
-<span class="d">╰────────────────────────────╯</span></pre>
-        <div>
-          <h3>Line up the next three instructions now</h3>
-          <p>Stop waiting for a turn to end before you type the next thing. <kbd>ctrl+a</kbd> <kbd>m</kbd> queues a message, and each one goes out when the agent ends its turn. Nothing is sent while it waits for a permission.</p>
-        </div>
-      </li>
-      <li>
-        <pre><span class="d">I asked the session "api":</span>
-<span class="b">&gt;</span> what does /orders return?
+<main id="main">
+  <section class="band">
+    <div class="wrap">
+      <div class="intro">
+        <h2>A real session, one minute long</h2>
+        <p>Recorded in a terminal, with the real Claude Code running inside cicoria.</p>
+      </div>
+      <figure class="recording" style="margin:0">
+        <video src="demo.mp4" poster="demo.jpg" width="1600" height="900" muted loop playsinline controls preload="metadata" aria-label="A recorded cicoria session"></video>
+        <figcaption>Claude Code writes a small Go HTTP server while a README waits in the queue. A second session, split below, counts the lines of main.go. A note on the diff then asks the first session for a new endpoint, and it adds it.</figcaption>
+      </figure>
+    </div>
+  </section>
 
-<span class="d">It answered:</span>
-<span class="b">&gt;</span> 200, an empty list
+  <section class="band band-shade" aria-labelledby="run">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="run">Run them side by side, each one untouched</h2>
+        <p>An agent in cicoria is the same program you run on its own, in a real terminal. Its interface, its keys and its slash commands all work as they always do.</p>
+      </div>
 
-Handle it in the client.</pre>
-        <div>
-          <h3>Pass a question from one session to another</h3>
-          <p><kbd>ctrl+a</kbd> <kbd>k</kbd> puts your question to another session. Its answer is handed back to the session you asked from, with your question and what to do next, so you stop copying between panes. The agents never contact each other on their own.</p>
-        </div>
-      </li>
-      <li>
-        <pre><span class="b">╭─ api · claude · working ───╮</span>
-<span class="b">│</span>Adding the empty-cart case… <span class="b">│</span>
-<span class="b">╰────────────────────────────╯</span>
-<span class="d">╭─ web · codex · idle ───────╮</span>
-<span class="d">│</span>Done: the client handles it.<span class="d">│</span>
-<span class="d">╰────────────────────────────╯</span></pre>
-        <div>
-          <h3>Watch two agents at once</h3>
-          <p><kbd>ctrl+a</kbd> <kbd>-</kbd> splits the agent pane and shows a second session below the first. <kbd>ctrl+a</kbd> <kbd>tab</kbd> or a click moves the keys from one to the other.</p>
-        </div>
-      </li>
-      <li>
-        <pre><span class="w">api already works in this</span>
-<span class="w">repository: give this session</span>
-<span class="w">a worktree of its own?</span> [y/N]
+      <ul class="agents">
+        <li><b>Claude Code</b><span>Status, end of turn and the files it edits, reported through hooks. Its conversation resumes after a restart.</span></li>
+        <li><b>GitHub Copilot CLI</b><span>Status and edited files through a plugin cicoria loads only for the sessions it starts.</span></li>
+        <li><b>Codex CLI</b><span>Status, answers and patched files through hooks passed on its command line.</span></li>
+        <li><b>Anything else</b><span>Any command line, such as aider. Its status is read from the terminal: output, quiet, or the bell.</span></li>
+      </ul>
+      <p style="color:var(--soft);margin-top:1.4rem;font-size:0.9375rem">Your own agent settings are never touched. The hooks are given to the processes cicoria launches, and to nothing else.</p>
 
-<span class="b">╭─ fix-login · claude ───────╮</span>
-<span class="b">│</span><span class="d">~/src/app.worktrees/fix-login</span>
-<span class="b">│</span><span class="g">cicoria/fix-login</span>
-<span class="b">╰────────────────────────────╯</span></pre>
+      <div class="ability" style="margin-top:clamp(2rem,5vw,3.5rem)">
         <div>
-          <h3>Two agents on one repository, each in its own worktree</h3>
-          <p>Create a session where another one already works and cicoria offers it a git worktree and a branch of its own, so their changes never mix. Closing the session offers to remove the worktree, and the branch stays.</p>
+          <h3>Two agents on one screen</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>-</kbd> splits the agent pane and shows a second session below the first. <kbd>ctrl+a</kbd> <kbd>tab</kbd> or a click moves the keys between them, and the side panels follow the one you are typing to.</p>
         </div>
-      </li>
-      <li>
-        <pre><span class="d">workspace ›</span> <span class="d">█</span>
-<span class="b">~/src/worker</span>     <span class="d">2 session(s)</span>
-~/src/site       <span class="d">1 session(s)</span>
-~/src/infra      <span class="d">1 session(s)</span></pre>
+        <div class="term">
+          <div class="tp lit"><span class="tp-t">api · claude · working · ~/src/shop · main</span><pre>● Adding the empty-cart case to GET /orders…</pre></div>
+          <div class="tp"><span class="tp-t">web · codex · idle · ~/src/web · main</span><pre>● The client now shows an empty cart.</pre></div>
+        </div>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>One repository, a worktree for each agent</h3>
+          <p>Start a session where another one already works and cicoria offers it a git worktree and a branch of its own, so two agents never write over each other. Closing the session offers to remove the worktree. The branch stays.</p>
+        </div>
+        <div class="term">
+          <pre><span class="w">api already works in this repository: give
+this session a worktree of its own?</span> [y/N] y</pre>
+          <div class="tp lit"><span class="tp-t">fix-login · claude · starting</span><pre><span class="d">~/src/shop.worktrees/fix-login</span>
+<span class="g">cicoria/fix-login</span></pre></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="watch">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="watch">Stop checking on them. They tell you.</h2>
+        <p>Every session carries a mark and how long it has had it. <kbd>ctrl+a</kbd> <kbd>a</kbd> goes to the next one waiting for you, and a desktop notification tells you when one you are not looking at starts waiting.</p>
+      </div>
+      <dl class="marks">
+        <div><dt class="mk-working">●</dt><dd>Working</dd></div>
+        <div><dt class="mk-input">▲</dt><dd>Needs input: a question or a permission</dd></div>
+        <div><dt class="mk-done">✓</dt><dd>Finished while you were looking elsewhere</dd></div>
+        <div><dt class="mk-idle">○</dt><dd>Idle</dd></div>
+        <div><dt class="mk-exit">✕</dt><dd>The agent exited; one key restarts it</dd></div>
+      </dl>
+
+      <div class="ability" style="margin-top:clamp(2rem,5vw,3.5rem)">
         <div>
           <h3>Close the terminal, pick up where you left off</h3>
-          <p>Sessions come back with their names, directories, notes and queues, and Claude Code, Copilot CLI and Codex CLI resume their conversation. Queues return paused, so opening cicoria never sends anything by itself, and <kbd>ctrl+a</kbd> <kbd>w</kbd> opens another saved workspace.</p>
+          <p>Sessions come back with their names, directories, notes and queues, and Claude Code, Copilot CLI and Codex CLI resume their conversation. Queues return paused, so opening cicoria never sends anything by itself. <kbd>ctrl+a</kbd> <kbd>w</kbd> opens another saved workspace.</p>
         </div>
-      </li>
-      <li>
-        <pre><span class="d">╭─ Files · app ──────────────╮</span>
-<span class="d">│</span><span class="b">▾ api/                     </span><span class="d">•│</span>
-<span class="d">│</span><span class="b">   auth.go                 </span><span class="w">M</span><span class="d">│</span>
-<span class="d">│</span><span class="b">   token.go                </span><span class="g">A</span><span class="d">│</span>
-<span class="d">│▸ node_modules/             │</span>
-<span class="d">╰────────────────────────────╯</span></pre>
-        <div>
-          <h3>The whole project beside the agent</h3>
-          <p>See what the agent touched without leaving it. The files panel marks changed files with git's letter and lists what git ignores in grey. <kbd>@</kbd> mentions a file to the agent, <kbd>e</kbd> opens it in your editor, and <kbd>o</kbd> hands an image or a web page to the system.</p>
+        <div class="term">
+          <pre><span class="d">workspace ›</span> <span class="hl">~/src/shop       3 sessions</span>
+             ~/src/worker     1 session
+             ~/src/site       1 session  <span class="d">open elsewhere</span></pre>
         </div>
-      </li>
-      <li>
-        <pre><span class="d">[agents.aider]</span>
-command = ["aider"]
-
-<span class="d">[agents.claude]</span>
-command = ["claude", "--model", "opus"]</pre>
-        <div>
-          <h3>Any agent, with nothing of its interface lost</h3>
-          <p>An agent is a command line in a real terminal, so its own interface works as it does alone, and the wheel scrolls back through what left the screen. Claude Code, GitHub Copilot CLI and Codex CLI report their status and the end of their turn through hooks. For other agents the status is guessed from the terminal, and queued messages are sent by hand.</p>
-        </div>
-      </li>
-    </ul>
-  </div>
-
-  <div class="wrap section">
-    <h2>The first minute</h2>
-    <ol class="steps">
-      <li><div>
-        <p>Install it. You need git and the agents you want to run. Claude Code is the default, and GitHub Copilot CLI and Codex CLI are known too. It is tested on Linux and runs on Windows in WSL2. There are builds for macOS, not yet tried on a Mac.</p>
-        <pre>curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</pre>
-      </div></li>
-      <li><div>
-        <p>Open it on a project. The first session starts, and what you type goes to the agent.</p>
-        <pre>cd ~/src/app
-cicoria</pre>
-      </div></li>
-      <li><div>
-        <p>Press <kbd>ctrl+a</kbd> then <kbd>c</kbd> for another session: pick the agent, the directory it works in, and a name.</p>
-      </div></li>
-      <li><div>
-        <p>Press <kbd>ctrl+a</kbd> then <kbd>?</kbd> for every key, or <kbd>ctrl+a</kbd> then <kbd>space</kbd> to find a command by name. The mouse works too. The rest is in <a href="docs.html">the docs</a>.</p>
-      </div></li>
-    </ol>
-  </div>
-
-  <div class="wrap section close">
-    <h2>Start the agents, keep working, and switch to the one that needs you.</h2>
-    <div class="install">
-      <code id="install-again">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
-      <button type="button" data-copy="install-again">Copy</button>
+      </div>
     </div>
-  </div>
+  </section>
+
+  <section class="band band-shade" aria-labelledby="steer">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="steer">Review what they did, and say what you think</h2>
+        <p>Read the agent's work the way you read a pull request, beside the agent that wrote it.</p>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>Everything it changed, commits included</h3>
+          <p>The changes panel shows what is not committed, or with one key everything since the commit the session started on, so work the agent already committed is still there to read. Under it, the commits it made, each one a key away from its own diff. Diffs open on the whole screen, with search and jumps between hunks.</p>
+        </div>
+        <div class="term">
+          <div class="tp"><span class="tp-t">Changes (3) · 2 commits</span><pre><span class="w">M</span> api/orders.go          <span class="g">+42</span> <span class="r">-3</span>
+<span class="g">A</span> api/receipt_test.go    <span class="g">+58</span>
+<span class="w">M</span> openapi.yaml           <span class="g">+24</span></pre></div>
+          <div class="tp lit"><span class="tp-t">Commits (2)</span><pre><span class="hl"><span class="d">e41a07c</span> Document the receipt endpoint  <span class="d">4m</span></span>
+<span class="d">9b2f3d1</span> Add GET /orders/{id}/receipt   <span class="d">9m</span></pre></div>
+        </div>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>Notes on lines, sent as one message</h3>
+          <p>Select lines in a file or a diff and write what you think. When you are done, <kbd>t</kbd> sends every note to the agent together: each file, its lines, the code quoted and your words.</p>
+        </div>
+        <div class="term">
+          <pre> 41    if tok == "" {
+<span class="w">*</span><span class="hl"> 42        return nil</span>
+<span class="w">*</span><span class="hl"> 43    }</span>
+<span class="d">note on api/auth.go:42-43 ›</span> return an error, the caller ignores nil</pre>
+          <pre><span class="d">Review notes:
+
+api/auth.go:42-43
+&gt;         return nil
+&gt;     }</span>
+return an error, the caller ignores nil</pre>
+        </div>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>Line up what comes next</h3>
+          <p>Stop waiting for a turn to end before you type the next thing. <kbd>ctrl+a</kbd> <kbd>m</kbd> queues a message, and each one goes out when the agent ends its turn. Nothing is sent while it waits for a permission.</p>
+        </div>
+        <div class="term">
+          <div class="tp"><span class="tp-t">Queue (2)</span><pre><span class="b">▸</span> then run the linter
+  update the changelog</pre></div>
+        </div>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>Ask one session about another's work</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>k</kbd> puts your question to another session. Its answer comes back to the session you asked from, with your question and what to do with it, so you stop copying between panes.</p>
+        </div>
+        <div class="term">
+          <pre><span class="d">I asked the session "api":</span>
+<span class="b">&gt;</span> What does GET /orders return when the cart is empty?
+
+<span class="d">It answered:</span>
+<span class="b">&gt;</span> A 200 with an empty `items` array, never a 404.
+
+Update the client to handle it.</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band principle" aria-labelledby="principle">
+    <div class="wrap">
+      <h2 id="principle">An interface for you, not an orchestrator.</h2>
+      <div class="facts">
+        <p><b>Every message is yours.</b> An agent gets only what you write or queue. No workflow runs between agents.</p>
+        <p><b>Agents never talk behind your back.</b> A question goes from one session to another only when you ask it.</p>
+        <p><b>Nothing runs without you.</b> The agents stop when cicoria closes, and queues come back paused.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="start">
+    <div class="wrap">
+      <h2 id="start" style="margin-bottom:clamp(1.75rem,4vw,2.75rem)">The first minute</h2>
+      <ol class="steps">
+        <li><div>
+          <p>Install it. You need git and the agents you want to run. It is tested on Linux, has builds for macOS, and runs on Windows in WSL2.</p>
+          <div class="term"><pre>curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</pre></div>
+        </div></li>
+        <li><div>
+          <p>Open it on a project. The first session starts with Claude Code, and what you type goes to the agent.</p>
+          <div class="term"><pre>cd ~/src/app
+cicoria</pre></div>
+        </div></li>
+        <li><div><p>Press <kbd>ctrl+a</kbd> then <kbd>c</kbd> for another session: pick the agent, the directory it works in, and a name.</p></div></li>
+        <li><div><p>Press <kbd>ctrl+a</kbd> then <kbd>?</kbd> for every key, or <kbd>ctrl+a</kbd> then <kbd>space</kbd> to find a command by name. The mouse works too. The rest is in <a href="docs.html">the guide</a>.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band band-shade closing">
+    <div class="wrap">
+      <h2>Start the agents, keep working, and switch to the one that needs you.</h2>
+      <div class="install">
+        <code id="install-again">curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</code>
+        <button type="button" data-copy="install-again">Copy</button>
+      </div>
+    </div>
+  </section>
 </main>
 
 <footer class="wrap foot">
-  <pre aria-hidden="true">    \ | /
-  '. \|/ .'
- ---( @ )---
-  .' /|\ '.
-    / | \
-<span class="stem">      |/
-     \|
-      |</span></pre>
-  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start. The idea turned up at 5:15 one October morning; the name came later that morning, from the chicory its author was cooking while an agent wrote the first version. Only the agent said when it needed attention.</p>
-  <nav aria-label="Footer"><a href="docs.html">Docs</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
+  <svg aria-hidden="true" viewBox="0 0 32 44" style="color:var(--petal)"><use href="#flower" width="32" height="32"/><path d="M16 19.5V44M16 34c-3-1-5-3.5-5.5-7M16 38c3-1 5-3.5 5-6.5" fill="none" stroke="var(--leaf)" stroke-width="1.6" stroke-linecap="round"/></svg>
+  <p>Cicoria is Italian for chicory. The idea turned up at 5:15 one October morning. Later that morning its author cooked chicory while an agent wrote the first version, and the project took its name from the pan. Only the agent said when it needed attention.</p>
+  <nav aria-label="Footer"><a href="docs.html">Guide</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/releases">Releases</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
 </footer>
 
-<script src="cells.js"></script>
+<script src="workspace.js"></script>
 <script>
-  // Symbols a fallback font might draw wider each get a cell of their own.
-  for (const pre of document.querySelectorAll(".abilities pre")) {
-    pre.innerHTML = pre.innerHTML.replace(/[●▲✓○▸▾•█▌]/g, "<i>$&</i>");
-  }
   for (const button of document.querySelectorAll("[data-copy]")) {
     button.addEventListener("click", async () => {
+      const code = document.getElementById(button.dataset.copy);
       try {
-        await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);
+        await navigator.clipboard.writeText(code.textContent);
         button.textContent = "Copied";
       } catch {
-        button.textContent = "Select it";
-        getSelection().selectAllChildren(document.getElementById(button.dataset.copy));
+        getSelection().selectAllChildren(code);
+        button.textContent = "Selected";
       }
       setTimeout(() => (button.textContent = "Copy"), 1600);
     });

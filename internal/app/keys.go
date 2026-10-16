@@ -24,6 +24,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/henomis/cicoria/internal/agent"
+	"github.com/henomis/cicoria/internal/git"
 	"github.com/henomis/cicoria/internal/session"
 )
 
@@ -129,6 +130,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		return m.filesKey(key)
 	case focusChanges:
 		return m.changesKey(key)
+	case focusCommits:
+		return m.logKey(key)
 	case focusQueue:
 		return m.queueKey(key)
 	}
@@ -151,6 +154,9 @@ func (m *Model) panelKey(key string) bool {
 		}
 		if l.right {
 			round = append(round, focusChanges)
+			if l.log.h > 0 {
+				round = append(round, focusCommits)
+			}
 			if l.queue.h > 0 {
 				round = append(round, focusQueue)
 			}
@@ -269,6 +275,7 @@ func (m *Model) changesKey(key string) tea.Cmd {
 		// Everything since the session started, or what is not committed.
 		if s := m.current(); s != nil && s.Base != "" {
 			s.Uncommitted = !s.Uncommitted
+			m.commit = ""
 			if s.Uncommitted {
 				m.say("changes of " + s.Name + ": what is not committed")
 			} else {
@@ -277,6 +284,45 @@ func (m *Model) changesKey(key string) tea.Cmd {
 			return m.refresh()
 		}
 		m.say("this session has no commit to count its changes from")
+	}
+	return nil
+}
+
+// logKey handles the keys of the commits panel.
+func (m *Model) logKey(key string) tea.Cmd {
+	if m.panelKey(key) {
+		return nil
+	}
+	var c git.Commit
+	if m.logCursor < len(m.log) {
+		c = m.log[m.logCursor]
+	}
+	switch key {
+	case "j", "down":
+		m.logCursor = max(min(m.logCursor+1, len(m.log)-1), 0)
+	case "k", "up":
+		m.logCursor = max(m.logCursor-1, 0)
+	case "enter", "l", "right":
+		if c.Hash == "" {
+			return nil
+		}
+		// The commit already narrowed to gives all the changes back.
+		if c.Hash == m.commit {
+			m.say("all the changes since the session started")
+			return m.narrow("")
+		}
+		m.focus = focusChanges
+		m.say("changes of " + c.Short + ": " + c.Subject)
+		return m.narrow(c.Hash)
+	case "d":
+		if c.Hash != "" {
+			m.openCommit(c)
+		}
+	case "@":
+		if s := m.current(); c.Hash != "" && s != nil && s.Term != nil && s.Status != agent.Exited {
+			s.Term.Type(c.Short + " ")
+			m.focus = focusAgent
+		}
 	}
 	return nil
 }
@@ -354,6 +400,15 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			}
 		}
 		m.changeCursor = max(min(m.changeCursor+wheel, len(m.changes)-1), 0)
+
+	case l.log.contains(x, y):
+		if isClick {
+			m.focus = focusCommits
+			if row := m.logTop + y - l.log.y - 1; row >= 0 && row < len(m.log) && y > l.log.y && y < l.log.y+l.log.h-1 {
+				m.logCursor = row
+			}
+		}
+		m.logCursor = max(min(m.logCursor+wheel, len(m.log)-1), 0)
 
 	case l.queue.contains(x, y):
 		if s := m.current(); isClick && s != nil {

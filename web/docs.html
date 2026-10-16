@@ -3,207 +3,287 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cicoria docs</title>
-<meta name="description" content="How to install, use and configure cicoria, a terminal workspace for coding agents.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141834'/%3E%3Cg stroke='%238fa8ff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M16 5v22M5 16h22M8.2 8.2l15.6 15.6M23.8 8.2 8.2 23.8'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='4' fill='%23141834' stroke='%238fa8ff' stroke-width='2'/%3E%3C/svg%3E">
+<title>cicoria guide</title>
+<meta name="description" content="How cicoria works and how to use it: sessions, status, review, the queue, agent integrations, configuration and the files it keeps.">
+<meta name="theme-color" content="#4f63e8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f63e8'/%3E%3Cg fill='%23fff'%3E%3Cpath id='p' d='M14.5 12.5 14.2 4.6 15.1 3.6 16 4.4 16.9 3.6 17.8 4.6 17.5 12.5z'/%3E%3Cuse href='%23p' transform='rotate(40 16 16)'/%3E%3Cuse href='%23p' transform='rotate(80 16 16)'/%3E%3Cuse href='%23p' transform='rotate(120 16 16)'/%3E%3Cuse href='%23p' transform='rotate(160 16 16)'/%3E%3Cuse href='%23p' transform='rotate(200 16 16)'/%3E%3Cuse href='%23p' transform='rotate(240 16 16)'/%3E%3Cuse href='%23p' transform='rotate(280 16 16)'/%3E%3Cuse href='%23p' transform='rotate(320 16 16)'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%231e1f2e'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,300..800&family=Schibsted+Grotesk:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="site.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="flower" viewBox="0 0 32 32">
+    <g fill="currentColor">
+      <path id="petal" d="M14.5 12.5 14.2 4.6 15.1 3.6 16 4.4 16.9 3.6 17.8 4.6 17.5 12.5z"/>
+      <use href="#petal" transform="rotate(40 16 16)"/><use href="#petal" transform="rotate(80 16 16)"/>
+      <use href="#petal" transform="rotate(120 16 16)"/><use href="#petal" transform="rotate(160 16 16)"/>
+      <use href="#petal" transform="rotate(200 16 16)"/><use href="#petal" transform="rotate(240 16 16)"/>
+      <use href="#petal" transform="rotate(280 16 16)"/><use href="#petal" transform="rotate(320 16 16)"/>
+    </g>
+    <circle cx="16" cy="16" r="3.2" fill="#1e1f2e"/>
+  </symbol>
+</svg>
+<a class="skip" href="#main">Skip to the content</a>
 
-<header class="wrap top">
-  <a class="name" href="./"><span>✽</span> cicoria</a>
-  <a href="docs.html" aria-current="page">Docs</a>
-  <a href="https://github.com/henomis/cicoria">GitHub</a>
+<header class="guide-top">
+  <nav class="wrap bar" aria-label="Site">
+    <a class="mark" href="./"><svg aria-hidden="true"><use href="#flower"/></svg>cicoria</a>
+    <a href="docs.html" aria-current="page">Guide</a>
+    <a href="https://github.com/henomis/cicoria">GitHub</a>
+  </nav>
 </header>
 
-<div class="wrap doc-layout">
+<div class="wrap guide">
   <nav class="toc" aria-label="On this page">
-    <ol>
-      <li><a href="#install">Install</a></li>
-      <li><a href="#open">Open a workspace</a></li>
-      <li><a href="#commands">Commands</a></li>
-      <li><a href="#sessions">Sessions</a></li>
-      <li><a href="#status">Status</a></li>
-      <li><a href="#panels">Side panels</a></li>
-      <li><a href="#review">Review changes</a></li>
-      <li><a href="#notes">Notes</a></li>
-      <li><a href="#queue">Queue</a></li>
-      <li><a href="#agents">Agents</a></li>
-      <li><a href="#configure">Configure</a></li>
-      <li><a href="#remembered">What is remembered</a></li>
-      <li><a href="#develop">Develop</a></li>
-    </ol>
+    <div class="groups">
+      <div>
+        <h2>Start</h2>
+        <ol>
+          <li><a href="#install">Install</a></li>
+          <li><a href="#run">Run it</a></li>
+          <li><a href="#concepts">Concepts</a></li>
+        </ol>
+      </div>
+      <div>
+        <h2>Use</h2>
+        <ol>
+          <li><a href="#keys">Keys</a></li>
+          <li><a href="#sessions">Sessions</a></li>
+          <li><a href="#worktrees">Worktrees</a></li>
+          <li><a href="#split">Split</a></li>
+          <li><a href="#status">Status</a></li>
+          <li><a href="#panels">Side panels</a></li>
+          <li><a href="#review">Review</a></li>
+          <li><a href="#notes">Notes</a></li>
+          <li><a href="#queue">Queue</a></li>
+          <li><a href="#ask">Asking a session</a></li>
+        </ol>
+      </div>
+      <div>
+        <h2>Internals</h2>
+        <ol>
+          <li><a href="#hooks">How status is known</a></li>
+          <li><a href="#agents">Agent integrations</a></li>
+          <li><a href="#resume">Conversations</a></li>
+          <li><a href="#configure">Configuration</a></li>
+          <li><a href="#disk">Files and environment</a></li>
+          <li><a href="#trouble">Troubleshooting</a></li>
+          <li><a href="#develop">Develop</a></li>
+        </ol>
+      </div>
+    </div>
   </nav>
 
-  <main class="doc">
-    <h1>Using cicoria</h1>
-    <p>cicoria runs coding agents in terminal panes and shows, around the one on screen, its sessions, files and changes. This page covers everything it does.</p>
-    <p>cicoria is an interface for you, working with several coding agent sessions at once. It does not orchestrate agents, run workflows between them or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.</p>
+  <main class="doc" id="main">
+    <header>
+      <h1>The cicoria guide</h1>
+      <p>cicoria runs coding agents in pseudo-terminals and draws, around the one on screen, its sessions, files, changes and message queue. This guide covers every feature, and how cicoria learns what an agent is doing.</p>
+    </header>
+
 
     <section id="install">
       <h2>Install</h2>
       <pre>curl -fsSL https://henomis.github.io/cicoria/install.sh | sh</pre>
-      <p>The <a href="install.sh">script</a> downloads the latest <a href="https://github.com/henomis/cicoria/releases">release</a> for your system (Linux and macOS, x86_64 and arm64), checks it against the checksums of the release and puts <code>cicoria</code> in <code>~/.local/bin</code>. <code>CICORIA_INSTALL_DIR</code> names another directory and <code>CICORIA_VERSION</code> another release, such as <code>v0.0.4</code>. Running it again updates cicoria.</p>
-      <p>You can also download the archive from the releases yourself and put the <code>cicoria</code> in it on your <code>PATH</code>, or build it with Go:</p>
+      <p>The <a href="install.sh">script</a> downloads the latest <a href="https://github.com/henomis/cicoria/releases">release</a> for your system (Linux and macOS, x86_64 and arm64), checks it against the checksums of the release and puts <code>cicoria</code> in <code>~/.local/bin</code>. Running it again updates cicoria.</p>
+      <div class="table"><table>
+        <thead><tr><th>Variable</th><th>What it changes</th></tr></thead>
+        <tbody>
+          <tr><td>CICORIA_INSTALL_DIR</td><td>The directory the binary goes in, instead of <code>~/.local/bin</code></td></tr>
+          <tr><td>CICORIA_VERSION</td><td>The release to install, such as <code>v0.0.4</code>, instead of the latest</td></tr>
+        </tbody>
+      </table></div>
+      <p>You can also take the archive from the releases yourself and put the <code>cicoria</code> in it on your <code>PATH</code>, or build it with Go 1.26 or later:</p>
       <pre>go install github.com/henomis/cicoria@latest</pre>
-      <p>You need:</p>
+      <h3>Requirements</h3>
       <ul>
-        <li>Go 1.26 or later, only to build it.</li>
-        <li><code>git</code>, for the changes panel and the diffs.</li>
-        <li>The agents you want to run. Claude Code (<code>claude</code>) is the default; GitHub Copilot CLI (<code>copilot</code>) and Codex CLI (<code>codex</code>) are known too.</li>
-        <li>A Unix-like system. cicoria is developed and tested on Linux. Desktop notifications use <code>notify-send</code>, or <code>osascript</code> on macOS, and are skipped where neither is there.</li>
+        <li><code>git</code>, for the changes panel, the diffs and worktrees.</li>
+        <li>The agents you want to run: <code>claude</code> (the default), <code>copilot</code>, <code>codex</code>, or any other command line.</li>
+        <li>A Unix-like system. cicoria is developed and tested on Linux; the macOS builds have not been tried on a Mac yet.</li>
+        <li>For desktop notifications, <code>notify-send</code>, or <code>osascript</code> on macOS. They are skipped where neither is there.</li>
       </ul>
-      <p>On Windows cicoria runs in <a href="https://learn.microsoft.com/windows/wsl/">WSL2</a>, with the archive for Linux. Install it, <code>git</code> and the agents inside the distribution, and keep the project in its file system rather than under <code>/mnt/c</code>, where git is slow. <kbd>o</kbd> opens a file with its Windows program. Desktop notifications need <code>notify-send</code> and a notification service in the distribution, and are skipped without them.</p>
+      <h3>Windows</h3>
+      <p>cicoria runs in <a href="https://learn.microsoft.com/windows/wsl/">WSL2</a>, with the archive for Linux. Install it, <code>git</code> and the agents inside the distribution, and keep the project in its file system rather than under <code>/mnt/c</code>, where git is slow. <kbd>o</kbd> opens a file with its Windows program through <code>explorer.exe</code>. Notifications need <code>notify-send</code> and a notification service in the distribution.</p>
     </section>
 
-    <section id="open">
-      <h2>Open a workspace</h2>
-      <pre>cicoria            <span class="c"># on the current directory</span>
-cicoria ~/src/app  <span class="c"># or on another one</span>
-cicoria -config ./my.toml ~/src/app
-cicoria -version   <span class="c"># which version this is</span></pre>
-      <p>The directory you open is the workspace: its sessions are saved under it and come back the next time. The first time, one session starts with the default agent.</p>
-      <p>Everything you type goes to the agent on screen. To talk to cicoria instead, press the prefix key, <kbd>ctrl+a</kbd>, and then a command key. The mouse works too: click a panel or a session, scroll with the wheel, and clicks inside the agent pane go to the agent.</p>
-      <p>The title of the agent pane names the session, its agent, its status, its directory and the git branch that directory is on, or the commit when it is on no branch. It follows a branch the agent switches to. When the pane is narrow, a long branch name is cut in the middle and the directory keeps its end.</p>
-      <p>The mouse wheel and <kbd>pgup</kbd>/<kbd>pgdn</kbd> scroll back through what has left the agent's screen, and the title of the pane says how many lines back you are; typing goes back to the end. An agent that reads the mouse itself, or takes the whole screen as an editor does, gets the wheel and the keys instead.</p>
+    <section id="run">
+      <h2>Run it</h2>
+      <pre>cicoria                              <span class="c"># a workspace on the current directory</span>
+cicoria ~/src/app                    <span class="c"># or on another one</span>
+cicoria -config ./my.toml ~/src/app  <span class="c"># with another settings file</span>
+cicoria -version                     <span class="c"># which version this is</span></pre>
+      <p>The first time, one session starts with the default agent. Everything you type goes to the agent on screen. To talk to cicoria instead, press the prefix, <kbd>ctrl+a</kbd>, then a command key. Clicks in a panel select it, clicks in the agent pane go to the agent, and the wheel scrolls what is under it.</p>
+      <p>The binary has a second command, <code>cicoria hook</code>, which the agents' hooks call. You never run it yourself; see <a href="#hooks">How status is known</a>.</p>
     </section>
 
-    <section id="commands">
-      <h2>Commands</h2>
+    <section id="concepts">
+      <h2>Concepts</h2>
+      <div class="table"><table>
+        <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Workspace</td><td>The directory cicoria was opened on. Its sessions are saved for it and come back the next time it is opened.</td></tr>
+          <tr><td>Session</td><td>One agent working in one directory, in a terminal of its own. One workspace can hold sessions from several projects.</td></tr>
+          <tr><td>Agent</td><td>The command line a session runs: Claude Code, Copilot CLI, Codex CLI, a shell, or anything you configure.</td></tr>
+          <tr><td>Turn</td><td>What an agent does between a message and the moment it waits again. Integrated agents report when a turn ends; queued messages go out then.</td></tr>
+          <tr><td>Base</td><td>The commit the session's work tree was on when the session was created. The changes of a session are counted from it.</td></tr>
+          <tr><td>Prefix</td><td>The key, <kbd>ctrl+a</kbd> by default, that makes the next key a cicoria command instead of input for the agent.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><p>cicoria is an interface for you, not an orchestrator. Every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.</p></div>
+    </section>
+
+
+    <section id="keys">
+      <h2>Keys</h2>
       <p>Press <kbd>ctrl+a</kbd>, then:</p>
       <div class="table"><table>
-        <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+        <thead><tr><th>Key</th><th>Command</th></tr></thead>
         <tbody>
-          <tr><td>c</td><td>New session</td></tr>
-          <tr><td>1 to 9</td><td>Go to a session by its number</td></tr>
-          <tr><td>n, p</td><td>Next, previous session</td></tr>
+          <tr><td>c</td><td>New session: pick the agent, its directory and a name</td></tr>
+          <tr><td>1 to 9, n, p</td><td>Go to a session by number, the next, the previous</td></tr>
           <tr><td>a</td><td>Go to the next session that needs input</td></tr>
-          <tr><td>,</td><td>Rename the session</td></tr>
-          <tr><td>r</td><td>Restart the session once its agent has exited</td></tr>
-          <tr><td>x</td><td>Close the session</td></tr>
+          <tr><td>, r x</td><td>Rename the session, restart it once its agent has exited, close it</td></tr>
           <tr><td>-</td><td>Split: show another session below, or close the split</td></tr>
           <tr><td>tab</td><td>Go to the other pane of the split</td></tr>
-          <tr><td>w</td><td>Open another workspace in place of this one</td></tr>
-          <tr><td>s, f, g</td><td>Focus the sessions, files, changes panel</td></tr>
+          <tr><td>w</td><td>Open another saved workspace in place of this one</td></tr>
+          <tr><td>s f g</td><td>Focus the sessions, files, changes panel</td></tr>
+          <tr><td>l</td><td>Focus the commits panel</td></tr>
+          <tr><td>u</td><td>Focus the queue panel</td></tr>
           <tr><td>m</td><td>Queue a message for the agent</td></tr>
           <tr><td>k</td><td>Send a message to another session, or ask it and get the answer here</td></tr>
-          <tr><td>u</td><td>Focus the queue panel</td></tr>
-          <tr><td>d</td><td>Review changes: open the diff of the selected file</td></tr>
+          <tr><td>d</td><td>Open the diff of the selected file</td></tr>
           <tr><td>t</td><td>Send your review notes to the agent</td></tr>
-          <tr><td>h</td><td>Review from here: count changes from the last commit</td></tr>
+          <tr><td>h</td><td>Count the session's changes from the last commit</td></tr>
           <tr><td>/</td><td>Find a file by name</td></tr>
           <tr><td>b</td><td>Show or hide the side panels</td></tr>
-          <tr><td>[, ]</td><td>Show or hide the left, the right panels</td></tr>
+          <tr><td>[ ]</td><td>Show or hide the left, the right panels</td></tr>
           <tr><td>space</td><td>Command palette: every command, by name</td></tr>
-          <tr><td>?</td><td>Help. <kbd>j</kbd> <kbd>k</kbd> or the arrows, <kbd>space</kbd> <kbd>f</kbd> <kbd>pgdn</kbd> and <kbd>b</kbd> <kbd>pgup</kbd>, <kbd>g</kbd> <kbd>G</kbd> or <kbd>home</kbd> <kbd>end</kbd> and the mouse wheel scroll it, any other key closes it</td></tr>
+          <tr><td>?</td><td>Help. <kbd>j</kbd> <kbd>k</kbd>, <kbd>space</kbd> <kbd>b</kbd>, <kbd>g</kbd> <kbd>G</kbd> and the wheel scroll it; any other key closes it</td></tr>
           <tr><td>q</td><td>Quit</td></tr>
           <tr><td>ctrl+a</td><td>Send <kbd>ctrl+a</kbd> itself to the agent</td></tr>
         </tbody>
       </table></div>
-      <p>These work in a full-screen file or diff too. <kbd>t</kbd>, <kbd>/</kbd>, <kbd>space</kbd> and <kbd>?</kbd> open over the file. <kbd>a</kbd>, <kbd>d</kbd>, <kbd>r</kbd>, <kbd>x</kbd>, <kbd>q</kbd>, <kbd>,</kbd> and <kbd>m</kbd> keep it on screen while they reply, ask, restart the session or, for <kbd>d</kbd>, show a diff in its place; going to another session, closing the one on screen or quitting leaves it. The other commands go back to the workspace.</p>
+      <p>The prefix works in the full-screen file and diff view too. <kbd>t</kbd>, <kbd>/</kbd>, <kbd>space</kbd> and <kbd>?</kbd> open over the file. <kbd>a</kbd>, <kbd>d</kbd>, <kbd>r</kbd>, <kbd>x</kbd>, <kbd>q</kbd>, <kbd>,</kbd> and <kbd>m</kbd> keep it on screen while they reply, ask, restart the session or, for <kbd>d</kbd>, show a diff in its place. The other commands go back to the workspace.</p>
+      <p>The same letter means the same thing everywhere: <kbd>d</kbd> opens a diff, <kbd>x</kbd> deletes or closes, <kbd>o</kbd> opens with the system's program, <kbd>m</kbd> queues, <kbd>t</kbd> sends notes, <kbd>,</kbd> renames, <kbd>r</kbd> restarts. Moving follows vim and less, so <kbd>q</kbd> and <kbd>esc</kbd> both go back.</p>
+      <h3>Scrollback</h3>
+      <p>The wheel and <kbd>pgup</kbd>/<kbd>pgdn</kbd> scroll back through what has left the agent's screen, and the pane's title says how many lines back you are. Typing returns to the end. An agent that reads the mouse itself, or takes the whole screen as an editor does, gets the wheel and the keys instead.</p>
     </section>
 
     <section id="sessions">
       <h2>Sessions</h2>
-      <p>A session is one agent working in one directory. <kbd>ctrl+a</kbd> <kbd>c</kbd> creates one and asks three things:</p>
+      <p><kbd>ctrl+a</kbd> <kbd>c</kbd> asks three things:</p>
       <ul>
         <li>The agent, when more than one is configured.</li>
-        <li>The directory it works in, starting from the one of the session on screen. <kbd>tab</kbd> completes, <kbd>ctrl+w</kbd> deletes a path component, <kbd>ctrl+u</kbd> clears, and <code>~</code> and relative paths work.</li>
-        <li>A name. A free one, such as <code>claude-2</code>, is offered; <kbd>enter</kbd> accepts it.</li>
+        <li>The directory, starting from the one of the session on screen. <kbd>tab</kbd> completes, <kbd>ctrl+w</kbd> deletes a path component, <kbd>ctrl+u</kbd> clears; <code>~</code> and relative paths work.</li>
+        <li>A name. A free one, such as <code>claude-2</code>, is offered and <kbd>enter</kbd> accepts it.</li>
       </ul>
-      <p>Closing a session whose agent is still running, or that has queued messages, asks first. Quitting asks when a Claude Code, Copilot CLI or Codex CLI session is still working.</p>
-      <h3>A worktree of its own</h3>
-      <p>The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a <a href="https://git-scm.com/docs/git-worktree">git worktree</a> of its own: <kbd>y</kbd> makes one, <kbd>n</kbd> or <kbd>enter</kbd> puts the session in the same directory and warns you, <kbd>esc</kbd> gives up. A <code>shell</code> is a way to run a command without leaving cicoria, not a session at work: it is not asked, opens in the directory you give it, and is no reason to offer the next session a worktree.</p>
-      <p>The worktree is named after the session: for a session <code>fix-login</code> on <code>~/src/app</code> it is <code>~/src/app.worktrees/fix-login</code>, on a new branch <code>cicoria/fix-login</code> that starts from the commit the directory was on. In the name, anything but letters, digits, <code>-</code> and <code>_</code> becomes <code>-</code>. The session works there from then on, and comes back there after a restart.</p>
-      <p>Closing the session offers to remove the worktree. Its branch is always kept, so what was committed is not lost, and a worktree with changes that are not committed is kept too: the status bar says where it is. Merging the branch is up to you, or to an agent you ask.</p>
-      <p>A worktree holds what git tracks: files that are not committed or that git ignores, such as <code>.env</code> or <code>node_modules</code>, are not copied to it. Claude Code asks whether it can trust the new folder, as it does for any.</p>
-      <h3>Two sessions on screen</h3>
-      <p><kbd>ctrl+a</kbd> <kbd>-</kbd> splits the agent pane in two: the session on screen stays above, and the one you pick is shown below it. <kbd>ctrl+a</kbd> <kbd>tab</kbd>, or a click in the other pane, moves the keys from one to the other. The pane that has them is the one with the lit border, and the side panels show its project.</p>
-      <p>Going to a session (<kbd>ctrl+a</kbd> <kbd>n</kbd>, <kbd>p</kbd>, <kbd>1</kbd> to <kbd>9</kbd>) puts it in the pane that has the keys, or moves the keys when it is already in the other one. The wheel scrolls the pane it is over.</p>
-      <p><kbd>ctrl+a</kbd> <kbd>-</kbd> again goes back to one pane, as does closing one of the two sessions. A terminal too short for two panes keeps one, and the split is not remembered across restarts.</p>
+      <p>The title of the agent pane names the session, its agent, its status, its directory and the git branch that directory is on, or the commit when it is on no branch. It follows a branch the agent switches to. In a narrow pane a long branch is cut in the middle and the directory keeps its end.</p>
+      <p>Closing a session whose agent still runs, or that has queued messages, asks first. Quitting asks when an integrated agent is still working.</p>
+      <h3>When the agent exits</h3>
+      <p>A session closes when its agent or shell exits. It is kept, marked <span class="mk-exit">✕</span>, when the agent exits within three seconds of starting, so that its error can be read; when it has queued messages; and when a file, the palette or a question is open at that moment. <code>close_on_exit = false</code> keeps every session. <kbd>ctrl+a</kbd> <kbd>r</kbd> restarts a kept one.</p>
+    </section>
+
+    <section id="worktrees">
+      <h2>Worktrees</h2>
+      <p>The files and changes panels read the directory, not the agent, so two sessions in one work tree see each other's changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a <a href="https://git-scm.com/docs/git-worktree">git worktree</a>: <kbd>y</kbd> makes one, <kbd>n</kbd> or <kbd>enter</kbd> shares the directory and warns you, <kbd>esc</kbd> gives up.</p>
+      <div class="table"><table>
+        <thead><tr><th>For a session fix-login on ~/src/app</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Directory</td><td><code>~/src/app.worktrees/fix-login</code></td></tr>
+          <tr><td>Branch</td><td><code>cicoria/fix-login</code>, from the commit the directory was on</td></tr>
+          <tr><td>Name</td><td>Anything but letters, digits, <code>-</code> and <code>_</code> becomes <code>-</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>The session works there from then on, after restarts too. Closing it offers to remove the worktree. Its branch is always kept, and a worktree with uncommitted changes is kept too: the status bar says where it is. Merging the branch is up to you, or to an agent you ask.</p>
+      <p>A worktree holds only what git tracks: <code>.env</code>, <code>node_modules</code> and other ignored or untracked files are not copied. Claude Code asks whether to trust the new folder, as it does for any. A <code>shell</code> session is never asked and is no reason to offer the next session a worktree.</p>
+    </section>
+
+    <section id="split">
+      <h2>Split</h2>
+      <p><kbd>ctrl+a</kbd> <kbd>-</kbd> splits the agent pane: the session on screen stays above, and the one you pick shows below. <kbd>ctrl+a</kbd> <kbd>tab</kbd> or a click moves the keys between them; the pane that has them has the lit border, and the side panels show its project. Going to a session puts it in the pane that has the keys, or moves the keys when it is already in the other one.</p>
+      <p><kbd>ctrl+a</kbd> <kbd>-</kbd> again, or closing one of the two, goes back to one pane. A terminal too short for two keeps one, and the split is not saved.</p>
     </section>
 
     <section id="status">
       <h2>Status</h2>
-      <p>Each session carries a mark in the list, and its row shows for how long it has been so once that is a minute or more.</p>
-      <div class="table"><table class="status-key">
+      <div class="table"><table>
         <thead><tr><th>Mark</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td class="mark-g">●</td><td>Working</td></tr>
-          <tr><td class="mark-w">▲</td><td>Needs input: the agent asks a question or a permission</td></tr>
-          <tr><td class="mark-g">✓</td><td>Finished its turn while you were looking elsewhere</td></tr>
-          <tr><td class="mark-d">○</td><td>Idle</td></tr>
-          <tr><td class="mark-r">✕</td><td>The agent's process has exited and the session was kept; <kbd>ctrl+a</kbd> <kbd>r</kbd> restarts it</td></tr>
-          <tr><td class="mark-d">◌</td><td>Starting</td></tr>
+          <tr><td class="mk-working">●</td><td>Working</td></tr>
+          <tr><td class="mk-input">▲</td><td>Needs input: the agent asks a question or a permission</td></tr>
+          <tr><td class="mk-done">✓</td><td>Finished its turn while you were looking elsewhere</td></tr>
+          <tr><td class="mk-idle">○</td><td>Idle</td></tr>
+          <tr><td class="mk-idle">◌</td><td>Starting</td></tr>
+          <tr><td class="mk-exit">✕</td><td>The agent exited and the session was kept</td></tr>
         </tbody>
       </table></div>
-      <p>A session that needs input and is not on screen is also named in the status bar, and raises a desktop notification when <code>notify</code> is on.</p>
-      <p>Claude Code, Copilot CLI and Codex CLI tell cicoria what they are doing. When one says it is working but has shown no sign of life for 30 seconds, its status reads <code>working?</code> and its mark is dimmed. This happens after you interrupt a turn, and with Copilot CLI when a turn ends on an error. For other agents the status is guessed: output means working, quiet means idle, the terminal bell means it needs input.</p>
-      <p>A session closes when its agent or shell exits. It is kept, marked <span class="mark-r">✕</span>, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. <code>close_on_exit = false</code> in the settings keeps every session.</p>
+      <p>Each row shows for how long the session has had its status. A session that needs input and is not on screen is named in the status bar and raises a desktop notification when <code>notify</code> is on.</p>
+      <p>The window title, set with the xterm escape <code>OSC 2</code>, names the session on screen and its status, after a <code>▲ name</code> for each other session that needs input: <code>▲ api · web · idle · cicoria</code>. A tab or a window in the background tells you that way too. cicoria saves the title it found with <code>CSI 22 t</code> and puts it back with <code>CSI 23 t</code> when it quits; a terminal without that stack ignores both, and the shell's prompt usually sets its own title again.</p>
+      <p>An integrated agent that says it is working but shows no sign of life for 30 seconds reads <code>working?</code>, with its mark dimmed. That happens after you interrupt a turn, and when a Copilot CLI or Codex CLI turn fails, since neither runs a hook then.</p>
     </section>
 
     <section id="panels">
       <h2>Side panels</h2>
-      <p>Sessions and files are on the left, changes and the queue on the right. In a panel, <kbd>j</kbd> and <kbd>k</kbd> move, <kbd>tab</kbd> goes to the next panel, and <kbd>esc</kbd> gives the keys back to the agent.</p>
+      <p>Sessions and files are on the left, changes and the queue on the right. In a panel <kbd>j</kbd>/<kbd>k</kbd> move, <kbd>enter</kbd> opens, <kbd>tab</kbd> goes to the next panel, <kbd>esc</kbd> gives the keys back to the agent. While a panel has the keys, the right of the status bar lists the others it takes.</p>
       <div class="table"><table>
         <thead><tr><th>Panel</th><th>Keys</th></tr></thead>
         <tbody>
-          <tr><td>Sessions</td><td><kbd>enter</kbd> go to the session, <kbd>,</kbd> rename it, <kbd>r</kbd> restart it, <kbd>x</kbd> close it, <kbd>c</kbd> new session. They act on the session under the cursor</td></tr>
-          <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention the file to the agent, <kbd>i</kbd> show or hide what git ignores</td></tr>
-          <tr><td>Changes</td><td><kbd>enter</kbd> or <kbd>d</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted only or since the session started</td></tr>
+          <tr><td>Sessions</td><td><kbd>enter</kbd> go, <kbd>,</kbd> rename, <kbd>r</kbd> restart, <kbd>x</kbd> close, <kbd>c</kbd> new session</td></tr>
+          <tr><td>Files</td><td><kbd>enter</kbd> open, <kbd>h</kbd> <kbd>l</kbd> close and open a folder, <kbd>d</kbd> diff, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention to the agent, <kbd>i</kbd> show or hide ignored files</td></tr>
+          <tr><td>Changes</td><td><kbd>enter</kbd> or <kbd>d</kbd> diff, <kbd>v</kbd> the file, <kbd>e</kbd> editor, <kbd>o</kbd> open with the system, <kbd>@</kbd> mention, <kbd>s</kbd> uncommitted or since the session started</td></tr>
+          <tr><td>Commits</td><td><kbd>enter</kbd> narrow the changes to the commit, or show them all again, <kbd>d</kbd> its diff, <kbd>@</kbd> mention the commit to the agent</td></tr>
           <tr><td>Queue</td><td>See <a href="#queue">Queue</a></td></tr>
         </tbody>
       </table></div>
-      <p>In the file tree, folders are blue, files Claude Code, Copilot CLI or Codex CLI has edited in this run are highlighted, and changed files carry git's letter at the right. What git ignores is listed in grey, and an ignored folder is read when you open it; <kbd>i</kbd> in the files panel hides those files and shows them again.</p>
-      <p><kbd>ctrl+a</kbd> <kbd>[</kbd> and <kbd>]</kbd> hide one side, <kbd>b</kbd> both. A terminal too narrow for the agent and the panels you asked for shows the agent alone.</p>
+      <p>In the file tree folders are blue, files an integrated agent edited in this run are highlighted, and changed files carry git's letter. Ignored files are listed in grey and an ignored folder is read when you open it. <kbd>o</kbd> uses <code>xdg-open</code>, <code>open</code> on macOS or <code>explorer.exe</code> in WSL, so an image goes to the image viewer and a folder to the file manager.</p>
+      <p><kbd>ctrl+a</kbd> <kbd>[</kbd> and <kbd>]</kbd> hide one side, <kbd>b</kbd> both. A terminal too narrow for the agent and the panels shows the agent alone.</p>
     </section>
 
     <section id="review">
-      <h2>Review changes</h2>
-      <p>The changes panel shows what is not committed. It can also show the changes of the session: everything that differs from the commit its work tree was on when the session was created, committed or not. Work the agent commits then stays in the panel, and the title says how many commits were made since.</p>
+      <h2>Review</h2>
+      <p>The changes panel shows either what is not committed, or everything since the session's base, committed or not. In the second view its title counts the commits made since. The directory on screen is read again every two seconds, and again when the terminal gets the focus back.</p>
       <ul>
-        <li><kbd>s</kbd> in the changes panel switches between the two.</li>
-        <li><kbd>ctrl+a</kbd> <kbd>h</kbd> starts the count of the session again from the last commit, for when you have looked at everything so far.</li>
-        <li><code>changes = "session"</code> in the settings opens sessions on their own changes.</li>
+        <li><kbd>s</kbd> in the changes panel switches between the two. The choice is not saved.</li>
+        <li><kbd>ctrl+a</kbd> <kbd>h</kbd> moves the base to the last commit, once you have looked at everything so far.</li>
+        <li><code>changes = "session"</code> opens sessions on the second view.</li>
       </ul>
       <p>Outside a git repository the panel says so and the file tree lists the directory as it is.</p>
+      <h3>Commits</h3>
+      <p>In either view, the commits panel under the changes lists the commits made since the base, newest first: short hash, subject and age. It is there only once there is one, and takes at most a quarter of the column. It reads <code>git log base..HEAD</code>, up to 200 commits, and is not a history browser: other branches and older commits are not listed.</p>
+      <ul>
+        <li><kbd>enter</kbd> narrows the changes panel to the files of that commit, and its diffs to what the commit did against its first parent, switching to the second view if need be. The title then names the commit. <kbd>enter</kbd> on it again shows all the changes.</li>
+        <li><kbd>d</kbd> shows the whole commit as one diff on the full screen, as <code>git show</code> does; <kbd>tab</kbd> and <kbd>shift+tab</kbd> jump from file to file. A note belongs to one file, so this view takes none: narrow to the commit with <kbd>enter</kbd> and open a file's diff to write one.</li>
+        <li><kbd>@</kbd> types the short hash at the agent's prompt, for a message such as <q>revert a1b2c3d</q>.</li>
+      </ul>
+      <p>Switching the view or the session, or <kbd>ctrl+a</kbd> <kbd>h</kbd>, shows all the changes again, and so does a commit that is no longer since the base, after an amend or a reset: the status bar says so. Notes on a commit's diff are notes like any other: they quote the lines, so they read right even once the file has moved on.</p>
       <h3>The full-screen view</h3>
-      <p>Files and diffs open on the whole screen.</p>
       <div class="table"><table>
         <thead><tr><th>Key</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td>j, k</td><td>Move the cursor a line</td></tr>
-          <tr><td>space, b</td><td>A page down, up</td></tr>
-          <tr><td>g, G</td><td>First, last line</td></tr>
-          <tr><td>/, n, N</td><td>Search, next match, previous match</td></tr>
-          <tr><td>[, ]</td><td>Previous, next hunk of a diff, or heading of a document</td></tr>
-          <tr><td>tab, shift+tab</td><td>Next, previous changed file</td></tr>
+          <tr><td>j k</td><td>A line down, up</td></tr>
+          <tr><td>space b</td><td>A page down, up</td></tr>
+          <tr><td>g G</td><td>First, last line</td></tr>
+          <tr><td>/ n N</td><td>Search, next match, previous match</td></tr>
+          <tr><td>[ ]</td><td>Previous, next hunk of a diff, or heading of a document</td></tr>
+          <tr><td>tab shift+tab</td><td>Next, previous changed file</td></tr>
           <tr><td>d</td><td>Switch between the file and its diff</td></tr>
           <tr><td>w</td><td>Wrap long lines, or cut them again</td></tr>
           <tr><td>m</td><td>Switch a Markdown file between the document and its text</td></tr>
-          <tr><td>e</td><td>Open the file in <code>$VISUAL</code> or <code>$EDITOR</code></td></tr>
-          <tr><td>o</td><td>Open the file with the system: an image in the viewer, a web page in the browser</td></tr>
+          <tr><td>e</td><td>Open in <code>$VISUAL</code> or <code>$EDITOR</code></td></tr>
+          <tr><td>o</td><td>Open with the system</td></tr>
           <tr><td>@</td><td>Mention the file to the agent</td></tr>
-          <tr><td>v, c, x, t</td><td>Select lines, write a note, delete it, send the notes</td></tr>
+          <tr><td>v c x t</td><td>Select lines, write a note, delete it, send the notes</td></tr>
           <tr><td>q</td><td>Back to the workspace</td></tr>
         </tbody>
       </table></div>
-      <p>The commands of the prefix work in the view too, such as <kbd>ctrl+a</kbd> <kbd>/</kbd> to open another file.</p>
-      <p>A Markdown file opened from the file tree or by its name is shown as the document it describes: headings, lists, tables and coloured code, wrapped to the screen. <kbd>m</kbd> shows its text instead, at the same place, and the choice holds for the files opened after it. Notes are written on the text, and the document marks the passages that have one. A file opened from the changes panel, or next to its diff, is always text.</p>
+      <p>A Markdown file opened from the tree or by name is shown as a document: headings, lists, tables and coloured code, wrapped to the screen. <kbd>m</kbd> shows its text at the same place, and the choice holds for the next files. Notes are written on the text; the document marks the passages that have one. A file opened from the changes panel, or next to its diff, is always text.</p>
     </section>
 
     <section id="notes">
       <h2>Notes</h2>
-      <p>A note is a remark on one or more lines of a file or a diff. In the full-screen view:</p>
-      <ul>
-        <li>Move to a line and press <kbd>c</kbd> to write a note on it. To cover several lines, press <kbd>v</kbd> first and move.</li>
-        <li><kbd>c</kbd> on a line that has a note rewrites it. <kbd>x</kbd> deletes it.</li>
-        <li>Lines with a note carry a <code>*</code> in the margin.</li>
-      </ul>
-      <p>Notes wait until you send them with <kbd>t</kbd>, in the view or after <kbd>ctrl+a</kbd>. You choose whether they go to the agent at once or through the queue. They go together, as one message:</p>
+      <p>A note is a remark on one or more lines of a file or a diff. In the full-screen view, move to a line, or press <kbd>v</kbd> and move to cover several, then <kbd>c</kbd>. <kbd>c</kbd> on a noted line rewrites the note, <kbd>x</kbd> deletes it, and noted lines carry a <code>*</code> in the margin.</p>
+      <p><kbd>t</kbd>, in the view or after the prefix, sends every note as one message, at once or through the queue. If the agent is asking a question when you send them at once, they are queued instead, so they are not taken for the answer.</p>
       <pre>Review notes:
 
 api/auth.go:42-43
@@ -214,33 +294,33 @@ return an error here, the caller ignores nil
 api/token.go:7
 &gt; +const ttl = 3600
 make this a duration</pre>
-      <p>If the agent is asking a question when you send them at once, they are queued instead, so they are not taken for the answer.</p>
     </section>
 
     <section id="queue">
       <h2>Queue</h2>
-      <p>While an agent works you can line up what to tell it next. <kbd>ctrl+a</kbd> <kbd>m</kbd> asks for a message. You can edit the line with the arrows, <kbd>ctrl+w</kbd>, <kbd>ctrl+u</kbd> and the like. Messages wait in a panel under the changes and go to the agent one by one, each when it ends its turn. An idle agent gets the first at once. Nothing is sent while the agent waits for a permission, or after a turn that ended on an error.</p>
-      <p>In the queue panel (<kbd>ctrl+a</kbd> <kbd>u</kbd>):</p>
+      <p><kbd>ctrl+a</kbd> <kbd>m</kbd> asks for a message; the line edits with the arrows, <kbd>ctrl+w</kbd>, <kbd>ctrl+u</kbd> and the like. Messages go to the agent one at a time, each when it ends a turn, and an idle agent gets the first at once. Nothing is sent while the agent waits for a permission, or after a turn that ended on an error.</p>
       <div class="table"><table>
-        <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+        <thead><tr><th>Key, in the queue panel</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td>enter</td><td>Send the next message now</td></tr>
           <tr><td>p</td><td>Pause and resume. Pause when a turn ends with a question you want to answer first</td></tr>
-          <tr><td>m, e, x</td><td>Add, edit, delete a message</td></tr>
-          <tr><td>J, K</td><td>Move a message down, up</td></tr>
+          <tr><td>m e x</td><td>Add, edit, delete a message</td></tr>
+          <tr><td>J K</td><td>Move a message down, up</td></tr>
         </tbody>
       </table></div>
-      <p>Only Claude Code, Copilot CLI and Codex CLI say when their turn ends. Other agents keep a queue too, marked manual: each message is sent when you press <kbd>enter</kbd> in the panel.</p>
-      <h3>Asking another session</h3>
-      <p><kbd>ctrl+a</kbd> <kbd>k</kbd> sends a message from the session on screen to another one. Pick the session, then choose:</p>
+      <p>Only Claude Code, Copilot CLI and Codex CLI report the end of a turn. Other agents keep a queue marked manual: each message goes when you press <kbd>enter</kbd>. Queues are saved and come back paused.</p>
+    </section>
+
+    <section id="ask">
+      <h2>Asking a session</h2>
+      <p><kbd>ctrl+a</kbd> <kbd>k</kbd> picks another session, then one of:</p>
       <div class="table"><table>
-        <thead><tr><th>Choice</th><th>What it does</th></tr></thead>
+        <thead><tr><th>Choice</th><th>What happens</th></tr></thead>
         <tbody>
-          <tr><td>Send a message</td><td>Queues it there, as <kbd>ctrl+a</kbd> <kbd>m</kbd> would do from that session</td></tr>
-          <tr><td>Ask, and get the answer here</td><td>Queues the question there, shown as <code>from &lt;session&gt;</code>. What its agent says at the end of the turn the question starts is queued back for the session you asked from</td></tr>
+          <tr><td>Send a message</td><td>It is queued there, as <kbd>ctrl+a</kbd> <kbd>m</kbd> would from that session</td></tr>
+          <tr><td class="wrap-ok">Ask, and get the answer here</td><td>The question is queued there, shown as <code>from &lt;session&gt;</code>. What its agent says at the end of the turn the question starts is queued back for you, with the question and, if you gave one, what to do with it</td></tr>
         </tbody>
       </table></div>
-      <p>When you ask, a second prompt takes what the session that asked should do with the answer. Leave it empty to only hand the answer over. That session receives one message:</p>
       <pre>I asked the session "api":
 &gt; What does GET /orders return when the cart is empty?
 
@@ -248,65 +328,135 @@ It answered:
 &gt; A 200 with an empty `items` array, never a 404.
 
 Update the client to handle it.</pre>
-      <p>Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code and Codex CLI can be asked, since they are the ones that tell what they said when a turn ends: for Copilot CLI the choice says <code>not supported</code>, and the other agents are only sent messages. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.</p>
+      <p>The answer is the agent's last message in the <code>Stop</code> hook's payload, so only Claude Code and Codex CLI can be asked. Copilot CLI's hooks do not carry it, and cicoria does not read transcripts, so for Copilot the choice says <code>not supported</code>.</p>
+      <p>Only the turn the question starts counts. When another message was taken first, which is how an interrupted turn shows, or the turn ends on an error, or the agent says nothing, no answer goes back and the status bar says so. Claude Code names the message a turn is for, which settles this exactly. A question still being answered when cicoria closes is lost.</p>
+    </section>
+
+
+    <section id="hooks">
+      <h2>How status is known</h2>
+      <p>cicoria never scrapes an integrated agent's screen for its status. It gives the agent process hooks, and the hooks report back:</p>
+      <ol class="flow">
+        <li><b>The agent runs a hook</b>On a prompt, a tool call, a notification or the end of a turn, it runs <code>cicoria hook</code> with a JSON payload on stdin.</li>
+        <li><b>The hook forwards it</b>It sends <code>{session, payload}</code> to the socket named in <code>CICORIA_SOCK</code>, for the session in <code>CICORIA_SESSION</code>, and always exits 0.</li>
+        <li><b>The adapter reads it</b>Each agent's adapter turns the event into an update: status, turn ended, file touched, conversation ID, answer.</li>
+        <li><b>The workspace acts</b>The session's mark changes, a notification may fire, and on a turn's end the next queued message goes out.</li>
+      </ol>
+      <p>The hook command never fails, so that a stopped or missing workspace never gets in the agent's way. The socket is <code>$XDG_RUNTIME_DIR/cicoria-&lt;pid&gt;.sock</code>, or in the temporary directory when that is unset, and is removed when cicoria quits.</p>
+      <p>For agents without hooks the status is guessed from the terminal: output means working, quiet means idle, and the bell means it needs input.</p>
     </section>
 
     <section id="agents">
-      <h2>Agents</h2>
-      <p>An agent is a command line that cicoria runs in a terminal of its own. Five kinds are offered when you create a session:</p>
-      <ul>
-        <li>Claude Code, always. It reports its status through hooks that cicoria registers for the process it launches, without touching your Claude Code settings. Its conversation continues when the session is reopened. The files it edits are highlighted in the tree.</li>
-        <li>GitHub Copilot CLI, always. It reports its status through the hooks of a plugin that cicoria loads for the process it launches, without touching your Copilot settings. It says nothing until the first message, so a new session reads idle once its screen is drawn. Its conversation continues when the session is reopened, and the files it edits are highlighted in the tree.</li>
-        <li>Codex CLI, always. It reports its status through hooks that cicoria passes on the command line of the process it launches, without touching your Codex settings. Codex asks you to trust them the first time: pick <q>Trust all and continue</q>, or it works but reports nothing. Like Copilot CLI it says nothing until the first message. Its conversation continues when the session is reopened, and the files it patches are highlighted in the tree.</li>
-        <li>Any command you add to the configuration. Its status is guessed from terminal activity.</li>
-        <li>A plain shell, always.</li>
-      </ul>
+      <h2>Agent integrations</h2>
+      <div class="table"><table>
+        <thead><tr><th>Agent</th><th>How the hooks are given</th><th>Hooks listened to</th></tr></thead>
+        <tbody>
+          <tr><td>claude</td><td><code>--settings</code> carrying the hooks, on top of your own settings</td><td>SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Notification, Stop, StopFailure</td></tr>
+          <tr><td>copilot</td><td><code>--plugin-dir</code> pointing at a plugin written under the user cache directory, in <code>cicoria/copilot</code>. Its hooks run <code>"$CICORIA_BIN" hook &lt;name&gt;</code>, since the payloads do not say which hook they are from</td><td>sessionStart, userPromptSubmitted, preToolUse, postToolUse, postToolUseFailure, notification, errorOccurred, agentStop</td></tr>
+          <tr><td>codex</td><td>One <code>-c hooks.&lt;Event&gt;=…</code> option per hook, running <code>"$CICORIA_BIN" hook</code></td><td>SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, Stop, Interrupt</td></tr>
+        </tbody>
+      </table></div>
+      <div class="table"><table>
+        <thead><tr><th>Agent</th><th>Ready before the first message</th><th>Reports turn end</th><th>Can be asked</th><th>Highlights edited files</th></tr></thead>
+        <tbody>
+          <tr><td>claude</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>copilot</td><td>No: idle once its screen is quiet</td><td>Yes</td><td>No</td><td>Yes</td></tr>
+          <tr><td>codex</td><td>No: idle once its screen is quiet</td><td>Yes, once its hooks are trusted</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>any other</td><td>Guessed</td><td>No: the queue is manual</td><td>No</td><td>No</td></tr>
+        </tbody>
+      </table></div>
+      <p>Codex CLI runs a hook only once you have trusted it, and remembers the answer by the hook's command. That is why the command names <code>$CICORIA_BIN</code> rather than the binary's path: it stays the same when cicoria moves or is updated.</p>
+      <p>A plain <code>shell</code> is always offered as a session type, and is not a session at work.</p>
+    </section>
+
+    <section id="resume">
+      <h2>Conversations</h2>
+      <p>Agent processes stop with cicoria: each is told its terminal is gone, as when a terminal window closes, and killed if it is still there two seconds later. The next time, each integrated agent continues its conversation:</p>
+      <div class="table"><table>
+        <thead><tr><th>Agent</th><th>How it resumes</th></tr></thead>
+        <tbody>
+          <tr><td>claude</td><td>Started with <code>--session-id &lt;id&gt;</code>, restarted with <code>--resume</code> when a transcript for that ID exists in Claude Code's config directory. After <code>/clear</code> the new conversation ID arrives through the hooks and is resumed instead</td></tr>
+          <tr><td>copilot</td><td><code>--session-id &lt;id&gt;</code>, which both names a new session and continues one. Transcripts are under <code>$COPILOT_HOME/session-state</code>, by default <code>~/.copilot</code></td></tr>
+          <tr><td>codex</td><td>Codex names its conversations itself; the ID it reports is saved, and the session restarts with <code>resume &lt;id&gt;</code> when a transcript exists under <code>$CODEX_HOME/sessions</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>Transcripts are only looked for, to know whether a conversation can be resumed. They are never read.</p>
     </section>
 
     <section id="configure">
-      <h2>Configure</h2>
-      <p>Settings live in <code>~/.config/cicoria/config.toml</code>, or under <code>$XDG_CONFIG_HOME</code> when that is set. All are optional, and an unknown one is reported as an error.</p>
+      <h2>Configuration</h2>
+      <p><code>~/.config/cicoria/config.toml</code>, or <code>$XDG_CONFIG_HOME/cicoria/config.toml</code>, or the file given with <code>-config</code>. Every key is optional; an unknown key or an invalid value is an error, not a silent default.</p>
       <div class="table"><table>
-        <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+        <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td>prefix</td><td><code>"ctrl+a"</code></td><td>The key that starts a command</td></tr>
           <tr><td>default_agent</td><td><code>"claude"</code></td><td>The agent of the first session of a new workspace</td></tr>
           <tr><td>notify</td><td><code>true</code></td><td>Desktop notification when a session not on screen needs input</td></tr>
           <tr><td>left_panel</td><td><code>true</code></td><td>Open with sessions and files shown</td></tr>
           <tr><td>right_panel</td><td><code>true</code></td><td>Open with changes and the queue shown</td></tr>
-          <tr><td>changes</td><td><code>"uncommitted"</code></td><td>What the changes panel opens on: what is not committed, or with <code>"session"</code> everything a session changed since it started</td></tr>
-          <tr><td>ignored_files</td><td><code>true</code></td><td>Open with the files git ignores listed in the files panel, in grey. <code>false</code> leaves them out until <kbd>i</kbd> is pressed in the panel</td></tr>
-          <tr><td>close_on_exit</td><td><code>true</code></td><td>Close a session when its agent or shell exits. <code>false</code> keeps it, marked <span class="mark-r">✕</span>, to restart or close by hand</td></tr>
-          <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and when a session is created or closed. Any key ends it</td></tr>
+          <tr><td>changes</td><td><code>"uncommitted"</code></td><td><code>"session"</code> opens the changes panel on everything since the session started</td></tr>
+          <tr><td>ignored_files</td><td><code>true</code></td><td><code>false</code> leaves ignored files out of the file tree until <kbd>i</kbd></td></tr>
+          <tr><td>close_on_exit</td><td><code>true</code></td><td><code>false</code> keeps a session whose agent exited, to restart or close by hand</td></tr>
+          <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and a session is created or closed</td></tr>
         </tbody>
       </table></div>
       <pre>prefix = "ctrl+b"
 right_panel = false
 
-<span class="c"># Any command line can be an agent.</span>
+<span class="c"># Any command line can be an agent. Its status is guessed.</span>
 [agents.aider]
 command = ["aider"]
 
-<span class="c"># An entry named "claude", "copilot" or "codex" changes how Claude</span>
-<span class="c"># Code, Copilot CLI or Codex CLI is started, and one named "shell"</span>
-<span class="c"># which shell is run.</span>
+<span class="c"># "claude", "copilot" and "codex" change how those are started,</span>
+<span class="c"># and "shell" which shell is run.</span>
 [agents.claude]
 command = ["claude", "--model", "opus"]
 
-<span class="c"># cicoria adds its own options at the end, so a launcher that</span>
-<span class="c"># passes the rest on ends with "--".</span>
-[agents.copilot]
-command = ["ollama", "launch", "copilot", "--model", "gemma4:cloud", "--"]
-
+<span class="c"># cicoria appends its own options, so a launcher that passes</span>
+<span class="c"># the rest on ends with "--".</span>
 [agents.codex]
 command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]</pre>
     </section>
 
-    <section id="remembered">
-      <h2>What is remembered</h2>
-      <p>For each directory you open cicoria on, it keeps the sessions with their names, directories, starting commits, notes and queues. They are stored under <code>$XDG_STATE_HOME/cicoria</code>, or <code>~/.local/state/cicoria</code>.</p>
-      <p>Agents stop when cicoria closes: each is told that its terminal is gone, as when a terminal window is closed, and killed only if it is still there two seconds later. The next time, every session is started again; Claude Code, Copilot CLI and Codex CLI pick up their conversation. Queues come back paused, so that opening cicoria never sends a message by itself.</p>
-      <p>A session belongs to the workspace it was created in, wherever it works: one created from <code>~/src/app</code> to work in <code>~/src/lib</code> comes back when cicoria is opened on <code>~/src/app</code>, not on <code>~/src/lib</code>. <kbd>ctrl+a</kbd> <kbd>w</kbd> lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. A workspace that another cicoria has open is asked about before it is opened a second time, from there or with <code>cicoria</code> itself: its agents would run twice, on the same conversations. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.</p>
+    <section id="disk">
+      <h2>Files and environment</h2>
+      <div class="table"><table>
+        <thead><tr><th>Path</th><th>What it holds</th></tr></thead>
+        <tbody>
+          <tr><td>~/.config/cicoria/config.toml</td><td>Settings, under <code>$XDG_CONFIG_HOME</code> when set</td></tr>
+          <tr><td>~/.local/state/cicoria/&lt;hash&gt;/sessions.json</td><td>One workspace: its directory, and each session's name, agent, directory, base, worktree, conversation, notes and queue. Under <code>$XDG_STATE_HOME</code> when set. The hash is the first 8 bytes of the SHA-256 of the workspace directory</td></tr>
+          <tr><td>…/&lt;hash&gt;/lock</td><td>Held while a cicoria has the workspace open, so a second one asks before running the same agents twice</td></tr>
+          <tr><td>$XDG_RUNTIME_DIR/cicoria-&lt;pid&gt;.sock</td><td>The socket hook events arrive on</td></tr>
+          <tr><td>&lt;cache&gt;/cicoria/copilot</td><td>The plugin that gives Copilot CLI its hooks</td></tr>
+          <tr><td>&lt;dir&gt;.worktrees/&lt;session&gt;</td><td>Worktrees cicoria creates, on branches <code>cicoria/&lt;session&gt;</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>A session belongs to the workspace it was created in, wherever it works: one created from <code>~/src/app</code> to work in <code>~/src/lib</code> comes back with <code>~/src/app</code>. <kbd>ctrl+a</kbd> <kbd>w</kbd> lists the other saved workspaces, which of their sessions work in this directory, and whether another cicoria has them open. Opened on a directory with nothing saved, cicoria says in the status bar where other sessions are.</p>
+      <h3>Environment given to agents</h3>
+      <div class="table"><table>
+        <thead><tr><th>Variable</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>CICORIA_SOCK</td><td>The socket path of the running workspace</td></tr>
+          <tr><td>CICORIA_SESSION</td><td>The session the process belongs to</td></tr>
+          <tr><td>CICORIA_BIN</td><td>The cicoria binary, for the hooks of Copilot CLI and Codex CLI</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="trouble">
+      <h2>Troubleshooting</h2>
+      <div class="table"><table>
+        <thead><tr><th>What you see</th><th>Why, and what to do</th></tr></thead>
+        <tbody>
+          <tr><td class="wrap-ok">A Codex session never changes status</td><td>Codex asks to trust the hooks cicoria gives it the first time. Pick <q>Trust all and continue</q>; until then it works but reports nothing</td></tr>
+          <tr><td class="wrap-ok"><code>working?</code></td><td>The agent said it was working and then went quiet for 30 seconds: an interrupted turn, or a failed Copilot or Codex turn. Send a message or check the pane</td></tr>
+          <tr><td class="wrap-ok">Queued messages wait</td><td>The queue is paused (it is after a restart, press <kbd>p</kbd>), the agent waits for a permission, the last turn ended on an error, or the agent does not report turn ends and the queue is manual</td></tr>
+          <tr><td class="wrap-ok">A session closed at once</td><td>It did not if the agent exited within three seconds: it is kept with <span class="mk-exit">✕</span> so the error can be read. Set <code>close_on_exit = false</code> to keep every session</td></tr>
+          <tr><td class="wrap-ok">No notifications</td><td><code>notify-send</code> (or <code>osascript</code> on macOS) is missing, or, in WSL, there is no notification service</td></tr>
+          <tr><td class="wrap-ok">Slow changes panel in WSL</td><td>The project is under <code>/mnt/c</code>. Move it into the distribution's file system</td></tr>
+          <tr><td class="wrap-ok">Tests misbehave inside a session</td><td>Its agent has <code>CICORIA_SOCK</code> and <code>CICORIA_SESSION</code> set. Run them with <code>env -u CICORIA_SOCK -u CICORIA_SESSION</code>, as the Makefile does</td></tr>
+        </tbody>
+      </table></div>
     </section>
 
     <section id="develop">
@@ -314,18 +464,32 @@ command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]</pre>
       <pre>git clone https://github.com/henomis/cicoria
 cd cicoria
 make build      <span class="c"># build ./cicoria</span>
-make check      <span class="c"># formatting, vet and tests: run it before a commit</span>
+make check      <span class="c"># vet, tests and gofmt: run it before a commit</span>
 make lint       <span class="c"># golangci-lint, as the CI runs it</span>
-make test-real  <span class="c"># the test that drives the real Claude Code; needs a folder it already trusts</span>
-make site       <span class="c"># serve the website in web/ on http://localhost:8000</span>
+make race       <span class="c"># tests with the race detector</span>
+make test-real  <span class="c"># the test that drives the real Claude Code; needs a trusted folder</span>
 make help       <span class="c"># every target</span></pre>
-      <p>The end-to-end tests in <code>e2e_test.go</code> run the built binary in a terminal against a scripted agent. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
+      <p>cicoria is Go with <a href="https://github.com/charmbracelet/bubbletea">Bubble Tea</a>. Dependencies point one way, from <code>main.go</code> to <code>internal/app</code> to the rest:</p>
+      <div class="table"><table>
+        <thead><tr><th>Package</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td>internal/app</td><td>The one model: sessions, focus, modes, keys, commands, drawing, the full-screen view and the queue</td></tr>
+          <tr><td>internal/agent</td><td>One adapter per agent: its command line, its hooks, how to mention a file, how an event becomes an update</td></tr>
+          <tr><td>internal/session</td><td>An agent and its terminal: status, queue, notes, base; and the saved workspace</td></tr>
+          <tr><td>internal/term</td><td>A command in a PTY, with an emulated screen so the agent's interface can be drawn in a pane</td></tr>
+          <tr><td>internal/ipc</td><td>The unix socket hook events arrive on</td></tr>
+          <tr><td>internal/git</td><td>The work tree, read through the <code>git</code> command line</td></tr>
+          <tr><td>internal/ui</td><td>Widgets: pager, tree, palette, input, syntax highlighting. It knows nothing of agents or git</td></tr>
+        </tbody>
+      </table></div>
+      <p>End-to-end tests in <code>e2e_test.go</code> build the binary and drive it in a PTY against a scratch git project, with shell scripts standing in for the agents and emitting real hook events. Bugs and ideas go to the <a href="https://github.com/henomis/cicoria/issues">issue tracker</a>.</p>
     </section>
   </main>
 </div>
 
 <footer class="wrap foot">
-  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start. The idea turned up at 5:15 one October morning; the name came later that morning, from the chicory its author was cooking while an agent wrote the first version. Only the agent said when it needed attention.</p>
+  <svg aria-hidden="true" viewBox="0 0 32 44" style="color:var(--petal)"><use href="#flower" width="32" height="32"/><path d="M16 19.5V44M16 34c-3-1-5-3.5-5.5-7M16 38c3-1 5-3.5 5-6.5" fill="none" stroke="var(--leaf)" stroke-width="1.6" stroke-linecap="round"/></svg>
+  <p>Cicoria is Italian for chicory. One grows in the agent pane each time you start.</p>
   <nav aria-label="Footer"><a href="./">Home</a><a href="https://github.com/henomis/cicoria">GitHub</a><a href="https://github.com/henomis/cicoria/issues">Issues</a></nav>
 </footer>
 

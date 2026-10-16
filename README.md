@@ -67,6 +67,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
+| `l` | Focus the commits panel |
 | `m` | Queue a message for the agent |
 | `k` | Send a message to another session, or ask it and get the answer here |
 | `u` | Focus the queue panel |
@@ -85,7 +86,7 @@ These work in a full-screen file or diff too. `t`, `/`, `space` and `?` open ove
 
 The first time a Codex CLI session starts, Codex asks you to trust the hooks cicoria gives it: pick "Trust all and continue". Until then it works, but reports nothing.
 
-In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent. The mouse works too. In the sessions panel, `,` renames, `r` restarts, `x` closes the session under the cursor, and `c` creates one.
+In a side panel, `j`/`k` move, `enter` opens, `tab` goes to the next panel and `esc` gives the keys back to the agent; the status bar shows the other keys of the panel. The mouse works too. In the sessions panel, `,` renames, `r` restarts, `x` closes the session under the cursor, and `c` creates one.
 
 The title of the agent pane names the session, its agent, its status, its directory and the git branch that directory is on, or the commit when it is on no branch. It follows a branch the agent switches to.
 
@@ -125,13 +126,15 @@ A worktree holds what git tracks: files that are not committed or that git ignor
 | `○` | Idle |
 | `✕` | The agent's process has exited and the session was kept; `ctrl+a r` restarts it |
 
-Each row also shows for how long the session has been in its status. A Claude Code, Copilot CLI or Codex CLI session that says it is working but has given no sign of life for 30 seconds reads `working?`, as after an interrupted turn.
+Each row also shows for how long the session has been in its status. The terminal's window title names the session on screen and its status, such as `api · working · cicoria`, after a `▲ name` for each other session that needs input, so a tab or a window in the background tells you too. The title the terminal had is put back when cicoria quits, where the terminal keeps a stack of titles, as xterm and GNOME Terminal do. A Claude Code, Copilot CLI or Codex CLI session that says it is working but has given no sign of life for 30 seconds reads `working?`, as after an interrupted turn.
 
 A session closes when its agent or shell exits. It is kept, marked `✕`, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. `close_on_exit = false` in the settings keeps every session.
 
 ## Review
 
 The changes panel shows what is not committed. In it, `s` switches to everything the session changed since the commit it started on, committed or not, and back; the panel then says how many commits were made since, and `ctrl+a h` starts the count again from the last commit, once you have looked. With `changes = "session"` in the settings, sessions open on that view.
+
+Under the changes, in either view, the commits panel lists the commits made since the session started, newest first, with their subject and age; it is there only once there is one. `enter` on a commit narrows the changes panel to the files of that commit, and its diffs to what the commit did, switching to everything since the session started if need be; `enter` on it again shows them all. `d` shows the whole commit as one diff on the full screen, where `tab` jumps from file to file; notes are written on the diff of one file, so it takes none. `@` mentions the commit to the agent, and `ctrl+a l` goes to the panel. Switching the view or the session, or `ctrl+a h`, shows all the changes again.
 
 Files and diffs open on the whole screen: `j`/`k` move a line, `space`/`b` a page, `/` searches, `[` `]` jump between hunks, `tab` goes to the next changed file, `d` switches between the file and its diff, `w` wraps long lines instead of cutting them, `m` switches a Markdown file between the document and its text, `e` opens `$EDITOR`, `o` opens the file with the system, `@` mentions the file to the agent, `q` goes back. The commands of the prefix work there too.
 

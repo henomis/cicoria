@@ -341,3 +341,77 @@ func TestWorktree(t *testing.T) {
 		t.Error("the branch went with the work tree")
 	}
 }
+
+func TestParseLog(t *testing.T) {
+	out := "aaaa\x1faa\x1f1700000000\x1fsecond: with \x1f in it\x00bbbb\x1fbb\x1f1690000000\x1ffirst\x00"
+	got := parseLog([]byte(out))
+	if len(got) != 2 {
+		t.Fatalf("got %d commits: %+v", len(got), got)
+	}
+	if got[0].Hash != "aaaa" || got[0].Short != "aa" || got[0].Subject != "second: with \x1f in it" || got[0].When.Unix() != 1700000000 {
+		t.Errorf("first record: %+v", got[0])
+	}
+	if got[1].Subject != "first" {
+		t.Errorf("second record: %+v", got[1])
+	}
+	if parseLog(nil) != nil {
+		t.Error("no output should give no commits")
+	}
+}
+
+func TestLogAndCommits(t *testing.T) {
+	dir := repo(t)
+	base, _ := Head(dir)
+	writeFile(t, dir, "kept.txt", "one\ntwo\nthree\nfour\n")
+	gitCmd(t, dir, "commit", "-q", "-am", "add four")
+	writeFile(t, dir, "sub/new.txt", "hello\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-q", "-m", "add new")
+
+	log, err := Log(dir, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(log) != 2 || log[0].Subject != "add new" || log[1].Subject != "add four" {
+		t.Fatalf("log: %+v", log)
+	}
+	if log[0].Short == "" || !strings.HasPrefix(log[0].Hash, log[0].Short) || log[0].When.IsZero() {
+		t.Errorf("fields: %+v", log[0])
+	}
+
+	// A commit lists only its own files, with paths from the directory asked.
+	changes, err := CommitStatus(filepath.Join(dir, "sub"), log[0].Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Path != "new.txt" || changes[0].Mark() != "A" || changes[0].Added != 1 {
+		t.Errorf("changes of the last commit: %+v", changes)
+	}
+	changes, err = CommitStatus(dir, log[1].Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Path != "kept.txt" || changes[0].Mark() != "M" || changes[0].Added != 1 {
+		t.Errorf("changes of the first commit: %+v", changes)
+	}
+	diff, err := CommitDiff(dir, log[1].Hash, "kept.txt")
+	if err != nil || !strings.Contains(diff, "+four") || strings.Contains(diff, "new.txt") {
+		t.Errorf("diff of kept.txt: %v\n%s", err, diff)
+	}
+
+	// The first commit of a repository is compared against nothing.
+	changes, err = CommitStatus(dir, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 4 || changes[0].Mark() != "A" {
+		t.Errorf("changes of the root commit: %+v", changes)
+	}
+	if diff, err := CommitDiff(dir, base, "gone.txt"); err != nil || !strings.Contains(diff, "+bye") {
+		t.Errorf("diff in the root commit: %v\n%s", err, diff)
+	}
+
+	if log, err := Log(dir, "HEAD"); err != nil || len(log) != 0 {
+		t.Errorf("nothing since HEAD: %v %+v", err, log)
+	}
+}

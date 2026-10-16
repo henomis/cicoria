@@ -218,6 +218,20 @@ func (w *workspace) see(wants ...string) {
 	}
 }
 
+// title waits until the window title is want.
+func (w *workspace) title(want string) {
+	w.t.Helper()
+	deadline := time.After(10 * time.Second)
+	for w.tm.Title() != want {
+		select {
+		case <-w.tm.Updates():
+		case <-time.After(50 * time.Millisecond):
+		case <-deadline:
+			w.t.Fatalf("window title never became %q; it is %q", want, w.tm.Title())
+		}
+	}
+}
+
 // gone waits until the screen no longer shows text.
 func (w *workspace) gone(text string) {
 	w.t.Helper()
@@ -394,10 +408,14 @@ func TestWorkspace(t *testing.T) {
 	w.line("ask")
 	w.prefix('1')
 	w.see("▲ claude-2 needs input")
+	// The window title tells it too, for a terminal in the background.
+	w.title("▲ claude-2 · claude-1 · idle · cicoria")
 	w.prefix('a')
 	w.see("claude-2 · claude · needs input")
+	w.title("claude-2 · needs input · cicoria")
 	w.line("stop")
 	w.see("claude-2 · claude · idle")
+	w.title("claude-2 · idle · cicoria")
 
 	// Sessions are remembered across runs.
 	w.quit()
@@ -848,6 +866,103 @@ func TestReviewSinceTheStart(t *testing.T) {
 	w.launch(140, 40)
 	w.see("agent ready", "working tree clean")
 	w.gone("1 commit")
+	w.quit()
+}
+
+// The status bar names the keys of the side panel that has the focus.
+func TestPanelHints(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(160, 40)
+	w.see("agent ready", "ctrl+a ? help")
+	for _, c := range []struct {
+		key  rune
+		hint string
+	}{
+		{'s', "enter go · , rename"},
+		{'f', "enter open · d diff"},
+		{'g', "enter diff · v view · s all ⇄ uncommitted"},
+	} {
+		w.prefix(c.key)
+		w.see(c.hint)
+		w.gone("ctrl+a ? help")
+	}
+	w.typeText("q")
+	w.see("ctrl+a ? help")
+	w.quit()
+}
+
+// The commits made since a session started are listed under its changes,
+// and the changes can be narrowed to one of them.
+func TestCommitsPanel(t *testing.T) {
+	w := newWorkspace(t)
+	w.set(`changes = "session"`)
+	w.launch(140, 40)
+	w.see("agent ready", "working tree clean")
+	w.gone("Commits (")
+
+	commit := func(subject string) {
+		t.Helper()
+		for _, args := range [][]string{
+			{"add", "-A"},
+			{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", subject},
+		} {
+			if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+	}
+	w.line("edit notes.txt")
+	w.see("? notes.txt")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	commit("write the notes")
+	w.line("edit later.txt")
+	w.see("? later.txt")
+	w.line("stop")
+	w.see("claude-1 · claude · idle")
+	commit("write later")
+	w.see("Changes (2) · 2 commits", "Commits (2)", "write later", "write the notes")
+
+	// The older commit narrows the changes to its own file.
+	w.prefix('l')
+	w.see("enter narrow · d diff")
+	w.typeText("j")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("changes of", "A notes.txt")
+	w.see("Changes (1) · ")
+	w.gone("A later.txt")
+
+	// d shows the whole commit, which takes no notes, and enter on the
+	// commit again shows all the changes.
+	w.prefix('l')
+	w.typeText("d")
+	w.see("write the notes", "+++ b/notes.txt", "+hello from the agent", "tab next file")
+	w.gone("later.txt")
+	w.typeText("c")
+	w.see("this is the whole commit")
+	w.typeText("q")
+	w.see("Commits (2)")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Changes (2) · 2 commits", "A later.txt")
+
+	// The commits stay listed with what is not committed, and narrowing to
+	// one goes back to everything since the session started.
+	w.prefix('g')
+	w.typeText("s")
+	w.see("what is not committed", "working tree clean", "Commits (2)")
+	w.prefix('l')
+	w.typeText("k")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Changes (1) · ", "A later.txt")
+	w.gone("A notes.txt")
+	w.prefix('l')
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("Changes (2) · 2 commits")
+
+	// Once it has been looked at, the list starts again.
+	w.prefix('h')
+	w.see("counted from here")
+	w.gone("Commits (")
 	w.quit()
 }
 
