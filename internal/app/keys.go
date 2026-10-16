@@ -315,21 +315,9 @@ func (m *Model) logKey(key string) tea.Cmd {
 		m.say("changes of " + c.Short + ": " + c.Subject)
 		return m.narrow(c.Hash)
 	case "d":
-		if c.Hash == "" {
-			return nil
+		if c.Hash != "" {
+			m.openCommit(c)
 		}
-		changes, err := git.CommitStatus(m.project(), c.Hash)
-		if err != nil || len(changes) == 0 {
-			m.say(c.Short + " changes no file")
-			return nil
-		}
-		// The view walks the changes of the commit, as the panel lists them.
-		if s := m.current(); s != nil {
-			s.Uncommitted = false
-		}
-		m.commit, m.changes, m.changeCursor, m.changeTop = c.Hash, changes, 0, 0
-		m.openDiff(changes[0])
-		return m.refreshNow()
 	case "@":
 		if s := m.current(); c.Hash != "" && s != nil && s.Term != nil && s.Status != agent.Exited {
 			s.Term.Type(c.Short + " ")

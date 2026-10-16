@@ -200,9 +200,10 @@ func CommitStatus(dir, hash string) ([]Change, error) {
 	return changes, nil
 }
 
-// CommitDiff returns the unified diff of one file in a commit.
-func CommitDiff(dir, hash, path string) (string, error) {
-	out, err := run(dir, "diff", parent(dir, hash), hash, "--", path)
+// CommitDiff returns the unified diff of a commit, or of the files of it
+// that are named.
+func CommitDiff(dir, hash string, paths ...string) (string, error) {
+	out, err := run(dir, append([]string{"diff", parent(dir, hash), hash, "--"}, paths...)...)
 	return string(out), err
 }
 

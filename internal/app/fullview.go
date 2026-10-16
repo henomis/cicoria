@@ -54,6 +54,9 @@ type fullView struct {
 	refs  []ui.LineRef
 	// search is set while the user types a search.
 	search *ui.Input
+	// commit is set when the view shows the whole diff of a commit, which
+	// is of no one file.
+	commit *git.Commit
 }
 
 // viewHeight is the number of text rows of the full-screen view.
@@ -61,7 +64,7 @@ func (m *Model) viewHeight() int { return max(m.height-2, 1) }
 
 // openDiff shows the diff of a changed file on the whole screen.
 func (m *Model) openDiff(c git.Change) {
-	m.view.dir, m.view.path, m.view.diff = m.project(), c.Path, true
+	m.view.dir, m.view.path, m.view.diff, m.view.commit = m.project(), c.Path, true, nil
 	m.view.plain, m.view.refs = nil, nil
 	m.view.rendered, m.view.spans = false, nil
 	m.view.pager.Title, m.view.pager.Wrap = c.Path, m.view.wrap
@@ -84,6 +87,64 @@ func (m *Model) openDiff(c git.Change) {
 	m.markNotes()
 }
 
+// openCommit shows the whole diff of a commit on the screen, every file of
+// it one after the other. Its lines belong to no one file, so they take no
+// notes.
+func (m *Model) openCommit(c git.Commit) {
+	m.view.dir, m.view.path, m.view.diff, m.view.commit = m.project(), "", true, &c
+	m.view.rendered, m.view.spans = false, nil
+	m.view.plain, m.view.refs = nil, nil
+	m.view.pager.Title, m.view.pager.Wrap = c.Short, m.view.wrap
+	m.mode = modeView
+
+	diff, err := git.CommitDiff(m.view.dir, c.Hash)
+	switch {
+	case err != nil:
+		m.view.pager.SetContent([]string{ui.Bad.Render(err.Error())}, nil)
+	case diff == "":
+		m.view.pager.SetContent([]string{ui.Dim.Render("no textual differences")}, nil)
+	default:
+		m.view.pager.SetContent(ui.DiffLines(diff))
+		m.view.plain = strings.Split(strings.TrimSuffix(diff, "\n"), "\n")
+	}
+}
+
+// stepCommitFile moves the cursor to the next or previous file of the
+// commit on screen.
+func (m *Model) stepCommitFile(dir int) {
+	p := &m.view.pager
+	for i := p.Cursor + dir; i >= 0 && i < len(m.view.plain); i += dir {
+		if strings.HasPrefix(m.view.plain[i], "diff --git ") {
+			p.Top = i
+			p.SetCursor(i, m.viewHeight())
+			return
+		}
+	}
+	m.say("no more files in this commit")
+}
+
+// commitViewKey handles the keys that are about one file, which the whole
+// diff of a commit is not. It reports whether the key was one of them.
+func (m *Model) commitViewKey(key string) bool {
+	switch key {
+	case "tab":
+		m.stepCommitFile(1)
+	case "shift+tab":
+		m.stepCommitFile(-1)
+	case "@":
+		c := m.view.commit
+		m.closeView()
+		if s := m.current(); s != nil && s.Term != nil && s.Status != agent.Exited {
+			s.Term.Type(c.Short + " ")
+		}
+	case "c", "d", "m", "e", "o":
+		m.say("this is the whole commit: enter on it in the commits panel lists its files")
+	default:
+		return false
+	}
+	return true
+}
+
 // showFile shows a file the way it reads best: a Markdown one rendered,
 // unless the user asked for its text.
 func (m *Model) showFile(path string) {
@@ -103,7 +164,7 @@ func (m *Model) openRendered(path string) {
 		m.openFile(path)
 		return
 	}
-	m.view.path, m.view.diff, m.view.rendered = path, false, true
+	m.view.path, m.view.diff, m.view.rendered, m.view.commit = path, false, true, nil
 	m.view.plain, m.view.refs = nil, nil
 	m.mode = modeView
 
@@ -117,7 +178,7 @@ func (m *Model) openRendered(path string) {
 
 // openFile shows the text of a file on the whole screen.
 func (m *Model) openFile(path string) {
-	m.view.dir, m.view.path, m.view.diff = m.project(), path, false
+	m.view.dir, m.view.path, m.view.diff, m.view.commit = m.project(), path, false, nil
 	m.view.rendered, m.view.spans = false, nil
 	m.view.pager.Title, m.view.pager.Wrap = path, m.view.wrap
 	m.mode = modeView
@@ -378,7 +439,9 @@ func (m *Model) sendReview(queue bool) tea.Cmd {
 // reloadView reads again what the full-screen view shows, keeping its place.
 func (m *Model) reloadView() {
 	top, cursor, wrap := m.view.pager.Top, m.view.pager.Cursor, m.view.pager.Wrap
-	if c, ok := m.change(m.view.path); m.view.diff && ok {
+	if c := m.view.commit; c != nil {
+		m.openCommit(*c)
+	} else if c, ok := m.change(m.view.path); m.view.diff && ok {
 		m.openDiff(c)
 	} else if m.view.rendered {
 		m.openRendered(m.view.path)
@@ -483,6 +546,10 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		default:
 			in.Key(k)
 		}
+		return nil
+	}
+
+	if m.view.commit != nil && m.commitViewKey(k.String()) {
 		return nil
 	}
 

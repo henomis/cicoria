@@ -851,6 +851,28 @@ func TestReviewSinceTheStart(t *testing.T) {
 	w.quit()
 }
 
+// The status bar names the keys of the side panel that has the focus.
+func TestPanelHints(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(160, 40)
+	w.see("agent ready", "ctrl+a ? help")
+	for _, c := range []struct {
+		key  rune
+		hint string
+	}{
+		{'s', "enter go · , rename"},
+		{'f', "enter open · d diff"},
+		{'g', "enter diff · v view · s all ⇄ uncommitted"},
+	} {
+		w.prefix(c.key)
+		w.see(c.hint)
+		w.gone("ctrl+a ? help")
+	}
+	w.typeText("q")
+	w.see("ctrl+a ? help")
+	w.quit()
+}
+
 // The commits made since a session started are listed under its changes,
 // and the changes can be narrowed to one of them.
 func TestCommitsPanel(t *testing.T) {
@@ -885,16 +907,21 @@ func TestCommitsPanel(t *testing.T) {
 
 	// The older commit narrows the changes to its own file.
 	w.prefix('l')
+	w.see("enter narrow · d diff")
 	w.typeText("j")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("changes of", "A notes.txt")
 	w.see("Changes (1) · ")
 	w.gone("A later.txt")
 
-	// Its diff is that commit's, and enter on it again shows them all.
+	// d shows the whole commit, which takes no notes, and enter on the
+	// commit again shows all the changes.
 	w.prefix('l')
 	w.typeText("d")
-	w.see("diff  notes.txt", "+hello from the agent")
+	w.see("write the notes", "+++ b/notes.txt", "+hello from the agent", "tab next file")
+	w.gone("later.txt")
+	w.typeText("c")
+	w.see("this is the whole commit")
 	w.typeText("q")
 	w.see("Commits (2)")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})

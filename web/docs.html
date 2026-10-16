@@ -224,7 +224,7 @@ cicoria -version                     <span class="c"># which version this is</sp
 
     <section id="panels">
       <h2>Side panels</h2>
-      <p>Sessions and files are on the left, changes and the queue on the right. In a panel <kbd>j</kbd>/<kbd>k</kbd> move, <kbd>enter</kbd> opens, <kbd>tab</kbd> goes to the next panel, <kbd>esc</kbd> gives the keys back to the agent.</p>
+      <p>Sessions and files are on the left, changes and the queue on the right. In a panel <kbd>j</kbd>/<kbd>k</kbd> move, <kbd>enter</kbd> opens, <kbd>tab</kbd> goes to the next panel, <kbd>esc</kbd> gives the keys back to the agent. While a panel has the keys, the right of the status bar lists the others it takes.</p>
       <div class="table"><table>
         <thead><tr><th>Panel</th><th>Keys</th></tr></thead>
         <tbody>
@@ -252,7 +252,7 @@ cicoria -version                     <span class="c"># which version this is</sp
       <p>In either view, the commits panel under the changes lists the commits made since the base, newest first: short hash, subject and age. It is there only once there is one, and takes at most a quarter of the column. It reads <code>git log base..HEAD</code>, up to 200 commits, and is not a history browser: other branches and older commits are not listed.</p>
       <ul>
         <li><kbd>enter</kbd> narrows the changes panel to the files of that commit, and its diffs to what the commit did against its first parent, switching to the second view if need be. The title then names the commit. <kbd>enter</kbd> on it again shows all the changes.</li>
-        <li><kbd>d</kbd> narrows the same way and opens the diff of the first file; <kbd>tab</kbd> in the view goes through the others.</li>
+        <li><kbd>d</kbd> shows the whole commit as one diff on the full screen, as <code>git show</code> does; <kbd>tab</kbd> and <kbd>shift+tab</kbd> jump from file to file. A note belongs to one file, so this view takes none: narrow to the commit with <kbd>enter</kbd> and open a file's diff to write one.</li>
         <li><kbd>@</kbd> types the short hash at the agent's prompt, for a message such as <q>revert a1b2c3d</q>.</li>
       </ul>
       <p>Switching the view or the session, or <kbd>ctrl+a</kbd> <kbd>h</kbd>, shows all the changes again, and so does a commit that is no longer since the base, after an amend or a reset: the status bar says so. Notes on a commit's diff are notes like any other: they quote the lines, so they read right even once the file has moved on.</p>

@@ -549,6 +549,9 @@ func (m *Model) renderView() []string {
 		kind = "rendered"
 	}
 	header := fmt.Sprintf(" %s  %s", kind, m.view.path)
+	if c := m.view.commit; c != nil {
+		header = fmt.Sprintf(" commit  %s %s", c.Short, c.Subject)
+	}
 	if where := ui.Dim.Render(tilde(m.view.dir)) + " "; ansi.StringWidth(header)+ansi.StringWidth(where) < m.width {
 		header = ui.Fit(header, m.width-ansi.StringWidth(where)) + where
 	}
@@ -612,6 +615,7 @@ func (m *Model) renderHelp() []string {
 		"",
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
+		"    the status bar shows the other keys of the panel that has the focus",
 		"    sessions: enter go to it · , rename · r restart · x close · c new",
 		"    files: h/l close/open folder · d diff · e editor · @ mention to the agent",
 		"           o open with the system, as an image or a web page wants",
@@ -620,7 +624,7 @@ func (m *Model) renderHelp() []string {
 		"             s what is not committed ⇄ everything since the session started",
 		"    commits: the ones made since the session started",
 		"             enter narrow the changes to the commit ⇄ show them all again",
-		"             d its diff · @ mention the commit to the agent",
+		"             d the whole commit as one diff · @ mention the commit to the agent",
 		"",
 		ui.Bold.Render("  In a full-screen file or diff"),
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
@@ -643,6 +647,24 @@ func (m *Model) renderHelp() []string {
 }
 
 // renderStatus draws the bottom line.
+// panelHint names the keys of the side panel that has the focus, or how to
+// get help when the agent has it.
+func (m *Model) panelHint() string {
+	switch m.focus {
+	case focusSessions:
+		return "enter go · , rename · r restart · x close · c new · esc back"
+	case focusFiles:
+		return "enter open · d diff · e edit · o open · @ mention · i ignored · esc back"
+	case focusChanges:
+		return "enter diff · v view · s all ⇄ uncommitted · e edit · @ mention · esc back"
+	case focusCommits:
+		return "enter narrow · d diff · @ mention · esc back"
+	case focusQueue:
+		return "enter send · p pause · e edit · x delete · J/K move · m add"
+	}
+	return m.cfg.Prefix + " ? help"
+}
+
 func (m *Model) renderStatus() string {
 	switch {
 	case m.confirm != nil:
@@ -685,6 +707,9 @@ func (m *Model) renderStatus() string {
 			left = append(left, ui.Warn.Render(fmt.Sprintf("%d note(s)", len(s.Notes))))
 		}
 		right = "q back · / search · [ ] hunks · tab file · d diff · v select · c note · t send"
+		if m.view.commit != nil {
+			right = "q back · / search · [ ] hunks · tab next file · @ mention"
+		}
 		if m.mode == modePalette {
 			right = "esc back"
 		}
@@ -699,7 +724,7 @@ func (m *Model) renderStatus() string {
 				right = fmt.Sprintf("queue %d%s · ", n, map[bool]string{true: " paused"}[s.Paused])
 			}
 		}
-		right += m.cfg.Prefix + " ? help"
+		right += m.panelHint()
 	}
 
 	text := " " + strings.Join(left, ui.Dim.Render(" · "))
