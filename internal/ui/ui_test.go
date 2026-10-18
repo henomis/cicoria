@@ -15,6 +15,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -423,9 +424,9 @@ func TestPagerWrap(t *testing.T) {
 	p.Noted = map[int]bool{1: true}
 	const w, h = 22, 5
 
-	// Cut, a long line takes one row and ends with an ellipsis.
+	// Cut, a long line takes one row and ends with a mark that it goes on.
 	rows := p.View(w, h)
-	if got := strings.TrimSpace(ansi.Strip(rows[1])); !strings.HasSuffix(got, "…") {
+	if got := strings.TrimSpace(ansi.Strip(rows[1])); !strings.HasSuffix(got, "›") {
 		t.Errorf("a cut line = %q", got)
 	}
 
@@ -479,6 +480,55 @@ func TestPagerWrap(t *testing.T) {
 	p.Move(1, h)
 	if p.Cursor != 1 || p.Top != 1 {
 		t.Errorf("past a line taller than the screen: cursor %d, top %d", p.Cursor, p.Top)
+	}
+}
+
+func TestPagerSlide(t *testing.T) {
+	var p Pager
+	prose := strings.TrimSpace(strings.Repeat("word ", 12))
+	table := "a | " + strings.Repeat("x", 30) + "END"
+	p.SetContent([]string{prose, table}, nil)
+	p.Wrap, p.Keep = true, []bool{false, true}
+	const w, h = 22, 6
+	text := w - gutter
+
+	// The prose wraps; the row of the table is cut and says it goes on.
+	rows := p.View(w, h)
+	if got := ansi.Strip(rows[3]); !strings.HasPrefix(got[2:], "a | x") || !strings.HasSuffix(got, "›") || ansi.StringWidth(got) != w {
+		t.Errorf("a kept line = %q, after %q", got, rows[:3])
+	}
+
+	// Sideways it goes as far as the end of the widest line that is cut.
+	p.Slide(1000)
+	if want := ansi.StringWidth(table) - text; p.Left != want {
+		t.Errorf("left = %d, want %d", p.Left, want)
+	}
+	rows = p.View(w, h)
+	if got := ansi.Strip(rows[3]); !strings.HasPrefix(got[2:], "‹") || !strings.HasSuffix(got, "END") {
+		t.Errorf("a kept line scrolled to its end = %q", got)
+	}
+	if got := ansi.Strip(ansi.Cut(rows[0], gutter, w)); !strings.HasPrefix(got, "word") {
+		t.Errorf("the prose moved sideways: %q", rows[0])
+	}
+	if got := p.Status(h); !strings.Contains(got, fmt.Sprintf("column %d", p.Left+1)) {
+		t.Errorf("status = %q", got)
+	}
+
+	// The numbers of a file stay while its text scrolls.
+	p.SetContent(FileLines("notes.txt", "short\n"+strings.Repeat("y", 40)+"END\n", true), nil)
+	p.Wrap, p.Fixed = false, NumberWidth(2)
+	p.Slide(1000)
+	rows = p.View(w, h)
+	if got := ansi.Strip(ansi.Cut(rows[1], gutter, w)); !strings.HasPrefix(got, "2 ‹") || !strings.HasSuffix(got, "END") {
+		t.Errorf("a numbered line scrolled to its end = %q", got)
+	}
+
+	// Nothing is cut once nothing is kept.
+	p.SetContent([]string{prose, table}, nil)
+	p.Wrap = true
+	p.Slide(0)
+	if p.Left != 0 {
+		t.Errorf("left with nothing cut = %d", p.Left)
 	}
 }
 
@@ -536,6 +586,16 @@ func TestMarkdown(t *testing.T) {
 	spans := []Span{{1, 1}, {}, {3, 4}, {}, {6, 6}, {}, {8, 8}, {9, 9}, {}, {11, 11}, {}, {14, 14}, {}, {17, 17}, {}, {19, 19}}
 	if !slices.Equal(doc.Spans, spans) {
 		t.Errorf("spans = %v, want %v", doc.Spans, spans)
+	}
+	// Code and tables keep their shape; the rest wraps.
+	var kept []int
+	for i, k := range doc.Keep {
+		if k {
+			kept = append(kept, i)
+		}
+	}
+	if len(doc.Keep) != len(doc.Lines) || !slices.Equal(kept, []int{11, 13, 14, 15}) {
+		t.Errorf("kept lines %v of %d", kept, len(doc.Keep))
 	}
 	if !slices.Equal(doc.Heads, []int{0, 4}) {
 		t.Errorf("headings on lines %v", doc.Heads)

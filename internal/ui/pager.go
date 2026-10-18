@@ -49,6 +49,15 @@ type Pager struct {
 	// first: the indent of a list item. It may be nil, and SetContent
 	// drops it.
 	Hang []string
+	// Keep says which lines are never wrapped, such as the rows of a table:
+	// they are cut and scroll sideways like all lines do when Wrap is off.
+	// It may be nil, and SetContent drops it.
+	Keep []bool
+	// Left is how many cells of the lines that are cut are scrolled past.
+	Left int
+	// Fixed is how many cells at the start of every line stay when it
+	// scrolls sideways, such as its number.
+	Fixed int
 	// width is how wide the pager was last drawn, and wrapped the rows of
 	// the lines that were wrapped to it so far.
 	width   int
@@ -70,7 +79,7 @@ func (p *Pager) SetContent(lines []string, marks []int) {
 	for i, l := range lines {
 		p.plain[i] = strings.ToLower(ansi.Strip(l))
 	}
-	p.Top, p.Cursor, p.selecting, p.wrapped, p.Hang = 0, 0, false, nil, nil
+	p.Top, p.Cursor, p.selecting, p.wrapped, p.Hang, p.Keep, p.Left, p.Fixed = 0, 0, false, nil, nil, nil, 0, 0
 	p.Search(p.query)
 }
 
@@ -81,8 +90,11 @@ func (p *Pager) Len() int { return len(p.lines) }
 // wrapped. A line that would not fit on the screen is cut at height rows.
 func (p *Pager) rows(i, height int) []string {
 	text := p.width - gutter
-	if !p.Wrap || text < 1 {
+	if text < 1 {
 		return p.lines[i : i+1]
+	}
+	if p.cut(i) {
+		return []string{p.slide(p.lines[i], text)}
 	}
 	rows, ok := p.wrapped[i]
 	if !ok {
@@ -96,6 +108,63 @@ func (p *Pager) rows(i, height int) []string {
 		rows = append(slices.Clone(rows[:height-1]), ansi.Truncate(rows[height-1], text-1, "")+"…")
 	}
 	return rows
+}
+
+// cut reports whether line i is cut at the edge of the screen rather than
+// wrapped.
+func (p *Pager) cut(i int) bool {
+	return !p.Wrap || i < len(p.Keep) && p.Keep[i]
+}
+
+// slide returns the width cells of a line that are on screen once Left
+// cells are scrolled past, with a mark at either end that has more.
+func (p *Pager) slide(l string, width int) string {
+	if fixed := min(p.Fixed, width-1); fixed > 0 {
+		return ansi.Cut(l, 0, fixed) + p.slideFrom(ansi.Cut(l, fixed, ansi.StringWidth(l)), width-fixed)
+	}
+	return p.slideFrom(l, width)
+}
+
+func (p *Pager) slideFrom(l string, width int) string {
+	full := ansi.StringWidth(l)
+	if p.Left == 0 && full <= width {
+		return l
+	}
+	from, to := p.Left, p.Left+width
+	before, after := from > 0 && full > 0, full > to
+	if before {
+		from++
+	}
+	if after {
+		to--
+	}
+	row := ansi.Cut(l, from, to)
+	if after {
+		// A wide character cut in two leaves a space.
+		row += strings.Repeat(" ", max(to-from-ansi.StringWidth(row), 0)) + Dim.Render("›")
+	}
+	if before {
+		row = Dim.Render("‹") + row
+	}
+	return row
+}
+
+// Slide scrolls the lines that are cut sideways by delta cells, no further
+// than the widest of them needs.
+func (p *Pager) Slide(delta int) {
+	p.Left = max(min(p.Left+delta, p.widest()-(p.width-gutter-p.Fixed)), 0)
+}
+
+// widest returns the width of the widest line that is cut, past the cells
+// that stay.
+func (p *Pager) widest() int {
+	w := 0
+	for i, l := range p.lines {
+		if p.cut(i) {
+			w = max(w, ansi.StringWidth(l)-p.Fixed)
+		}
+	}
+	return w
 }
 
 // minHang is the least width of text that is still indented under a line.
@@ -304,6 +373,9 @@ func (p *Pager) Status(height int) string {
 	if n := len(p.lines); n > 0 {
 		s = fmt.Sprintf("%d-%d/%d", p.Top+1, p.bottom(height)+1, n)
 	}
+	if p.Left > 0 {
+		s += fmt.Sprintf(" · column %d", p.Left+1)
+	}
 	if p.query != "" {
 		if len(p.matches) == 0 {
 			s += fmt.Sprintf(" · no match for %q", p.query)
@@ -318,6 +390,7 @@ func (p *Pager) Status(height int) string {
 func (p *Pager) View(width, height int) []string {
 	if width != p.width {
 		p.width, p.wrapped = width, nil
+		p.Slide(0)
 	}
 	p.clamp(height)
 

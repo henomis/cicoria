@@ -650,7 +650,7 @@ func (m *Model) renderHelp() []string {
 		"    j/k space b g G scroll · / search · n N matches · [ ] hunks",
 		"    tab/shift+tab next/previous changed file · d file ⇄ diff · q back",
 		"    e editor · o open with the system · @ mention to the agent",
-		"    w wrap long lines ⇄ cut them",
+		"    w wrap long lines ⇄ cut them · h l scroll the lines that are cut sideways",
 		"    m a Markdown file as a document ⇄ its text · [ ] headings of a document",
 		"    v select lines · c write a note on them · x delete it · t send the notes",
 		"",
