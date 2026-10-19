@@ -64,12 +64,18 @@ func FileLines(name, content string, dark bool) []string {
 		}
 	}
 
-	width := len(fmt.Sprint(len(source)))
+	width := NumberWidth(len(source)) - 1
 	lines := make([]string, len(source))
 	for i, l := range styled {
 		lines[i] = Dim.Render(fmt.Sprintf("%*d ", width, i+1)) + expandTabs(l)
 	}
 	return lines
+}
+
+// NumberWidth returns how many cells the numbers FileLines puts before the
+// lines of a file of n lines take.
+func NumberWidth(n int) int {
+	return len(fmt.Sprint(n)) + 1
 }
 
 // highlight colours source code line by line. It returns nil when the

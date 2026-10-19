@@ -31,6 +31,9 @@ import (
 // wheelStep is how many rows one notch of the mouse wheel scrolls.
 const wheelStep = 3
 
+// wheelSlide is how many cells one notch sideways scrolls a line that is cut.
+const wheelSlide = 8
+
 func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
 
@@ -345,6 +348,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	switch m.mode {
 	case modeView:
 		m.view.pager.Scroll(wheel, m.viewHeight())
+		switch {
+		case isWheel && mouse.Button == tea.MouseWheelRight:
+			m.view.pager.Slide(wheelSlide)
+		case isWheel && mouse.Button == tea.MouseWheelLeft:
+			m.view.pager.Slide(-wheelSlide)
+		}
 		// The text starts under the header line.
 		if isClick && mouse.Y >= 1 && mouse.Y <= m.viewHeight() {
 			m.view.pager.SetCursor(m.view.pager.LineAt(mouse.Y-1, m.viewHeight()), m.viewHeight())

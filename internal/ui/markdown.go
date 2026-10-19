@@ -47,6 +47,9 @@ type Document struct {
 	Spans []Span
 	// Heads are the lines that hold a heading.
 	Heads []int
+	// Keep says which lines lose their shape when wrapped: the rows of a
+	// table, code and rules. They scroll sideways instead.
+	Keep []bool
 }
 
 // IsMarkdown reports whether a file is Markdown, by its name.
@@ -89,6 +92,8 @@ type markdown struct {
 	starts []int
 	dark   bool
 	doc    Document
+	// keep says the lines emitted now are not to be wrapped.
+	keep bool
 	// first is what the next line starts with, and rest the ones after it:
 	// the bullet of a list item and the space under it.
 	first, rest string
@@ -114,7 +119,15 @@ func (r *markdown) emit(s string, span Span) {
 	r.doc.Lines = append(r.doc.Lines, r.first+s)
 	r.doc.Hang = append(r.doc.Hang, r.rest)
 	r.doc.Spans = append(r.doc.Spans, span)
+	r.doc.Keep = append(r.doc.Keep, r.keep)
 	r.first = r.rest
+}
+
+// whole renders what fn does on lines that are not to be wrapped.
+func (r *markdown) whole(fn func()) {
+	r.keep = true
+	fn()
+	r.keep = false
 }
 
 // blank leaves a line between two blocks.
@@ -122,6 +135,7 @@ func (r *markdown) blank() {
 	r.doc.Lines = append(r.doc.Lines, strings.TrimRight(r.rest, " "))
 	r.doc.Hang = append(r.doc.Hang, "")
 	r.doc.Spans = append(r.doc.Spans, Span{})
+	r.doc.Keep = append(r.doc.Keep, false)
 }
 
 // inside renders what fn does with first before its first line and rest
@@ -196,18 +210,20 @@ func (r *markdown) block(n ast.Node) {
 		}
 
 	case *ast.ThematicBreak:
-		r.emit(Dim.Render(strings.Repeat("─", ruleWidth)), r.span(n))
+		r.whole(func() { r.emit(Dim.Render(strings.Repeat("─", ruleWidth)), r.span(n)) })
 
 	case *ast.HTMLBlock:
-		for i := range n.Lines().Len() {
-			r.raw(n.Lines().At(i))
-		}
-		if n.HasClosure() {
-			r.raw(n.ClosureLine)
-		}
+		r.whole(func() {
+			for i := range n.Lines().Len() {
+				r.raw(n.Lines().At(i))
+			}
+			if n.HasClosure() {
+				r.raw(n.ClosureLine)
+			}
+		})
 
 	case *east.Table:
-		r.table(n)
+		r.whole(func() { r.table(n) })
 
 	default:
 		r.blocks(n, true)
@@ -235,10 +251,12 @@ func (r *markdown) code(n ast.Node, language string) {
 		}
 	}
 	r.inside(codeIndent, codeIndent, func() {
-		for i, l := range styled {
-			at := r.line(n.Lines().At(i).Start)
-			r.emit(expandTabs(l), Span{at, at})
-		}
+		r.whole(func() {
+			for i, l := range styled {
+				at := r.line(n.Lines().At(i).Start)
+				r.emit(expandTabs(l), Span{at, at})
+			}
+		})
 	})
 }
 

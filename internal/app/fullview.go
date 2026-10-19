@@ -172,7 +172,8 @@ func (m *Model) openRendered(path string) {
 	m.view.spans = doc.Spans
 	m.view.pager.SetContent(doc.Lines, doc.Heads)
 	// A paragraph is one line, which only reads wrapped.
-	m.view.pager.Title, m.view.pager.Wrap, m.view.pager.Hang = path, true, doc.Hang
+	// Tables and code keep their shape and scroll sideways.
+	m.view.pager.Title, m.view.pager.Wrap, m.view.pager.Hang, m.view.pager.Keep = path, true, doc.Hang, doc.Keep
 	m.markNotes()
 }
 
@@ -185,6 +186,10 @@ func (m *Model) openFile(path string) {
 
 	lines, source := m.fileLines(path)
 	m.view.pager.SetContent(lines, nil)
+	if source != nil {
+		// The numbers stay when the text scrolls sideways.
+		m.view.pager.Fixed = ui.NumberWidth(len(source))
+	}
 	m.view.plain, m.view.refs = source, make([]ui.LineRef, len(source))
 	for i := range source {
 		m.view.refs[i] = ui.LineRef{Old: i + 1, New: i + 1}
@@ -438,7 +443,7 @@ func (m *Model) sendReview(queue bool) tea.Cmd {
 
 // reloadView reads again what the full-screen view shows, keeping its place.
 func (m *Model) reloadView() {
-	top, cursor, wrap := m.view.pager.Top, m.view.pager.Cursor, m.view.pager.Wrap
+	top, cursor, wrap, left := m.view.pager.Top, m.view.pager.Cursor, m.view.pager.Wrap, m.view.pager.Left
 	if c := m.view.commit; c != nil {
 		m.openCommit(*c)
 	} else if c, ok := m.change(m.view.path); m.view.diff && ok {
@@ -449,6 +454,7 @@ func (m *Model) reloadView() {
 		m.openFile(m.view.path)
 	}
 	m.view.pager.Top, m.view.pager.Wrap = top, wrap
+	m.view.pager.Slide(left)
 	m.view.pager.SetCursor(cursor, m.viewHeight())
 }
 
@@ -533,6 +539,12 @@ func (m *Model) stepView(dir int) {
 	}
 }
 
+// slideStep is how far a line that is cut scrolls sideways at a time: half
+// the screen, as in less.
+func (m *Model) slideStep() int {
+	return max(m.width/2, 1)
+}
+
 func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 	p, h := &m.view.pager, m.viewHeight()
 
@@ -566,6 +578,10 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		p.Move(1, h)
 	case "k", "up":
 		p.Move(-1, h)
+	case "l", "right":
+		p.Slide(m.slideStep())
+	case "h", "left":
+		p.Slide(-m.slideStep())
 	case "v":
 		p.Select()
 	case "c":
@@ -615,6 +631,7 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		if !m.view.rendered {
 			m.view.wrap = p.Wrap
 		}
+		p.Slide(0)
 		p.SetCursor(p.Cursor, h)
 	case "e":
 		return m.edit(m.view.path)
