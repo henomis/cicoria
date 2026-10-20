@@ -58,6 +58,7 @@ func init() {
 		{"-", "Split: show another session below, or close the split", (*Model).askSplit, false},
 		{"tab", "Go to the other pane of the split", (*Model).focusOther, false},
 		{"w", "Open another workspace…", (*Model).askWorkspace, false},
+		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
 		{"g", "Focus changes", func(m *Model) tea.Cmd { return m.setFocus(focusChanges) }, false},

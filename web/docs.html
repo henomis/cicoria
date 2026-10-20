@@ -59,6 +59,7 @@
           <li><a href="#notes">Notes</a></li>
           <li><a href="#queue">Queue</a></li>
           <li><a href="#ask">Asking a session</a></li>
+          <li><a href="#web">Web cockpit</a></li>
         </ol>
       </div>
       <div>
@@ -147,6 +148,7 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>-</td><td>Split: show another session below, or close the split</td></tr>
           <tr><td>tab</td><td>Go to the other pane of the split</td></tr>
           <tr><td>w</td><td>Open another saved workspace in place of this one</td></tr>
+          <tr><td>v</td><td>Web cockpit: share sessions with a phone or a browser</td></tr>
           <tr><td>s f g</td><td>Focus the sessions, files, changes panel</td></tr>
           <tr><td>l</td><td>Focus the commits panel</td></tr>
           <tr><td>u</td><td>Focus the queue panel</td></tr>
@@ -333,6 +335,22 @@ Update the client to handle it.</pre>
       <p>Only the turn the question starts counts. When another message was taken first, which is how an interrupted turn shows, or the turn ends on an error, or the agent says nothing, no answer goes back and the status bar says so. Claude Code names the message a turn is for, which settles this exactly. A question still being answered when cicoria closes is lost.</p>
     </section>
 
+    <section id="web">
+      <h2>Web cockpit</h2>
+      <p><kbd>ctrl+a</kbd> <kbd>v</kbd> starts a web server inside cicoria and shows its link as a QR code, drawn in the terminal: point a phone at it and the page opens. The page shows only the sessions you share. The session on screen is shared when the cockpit starts.</p>
+      <div class="table"><table>
+        <thead><tr><th>Key, in the cockpit's box</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>j k</td><td>Move between the sessions</td></tr>
+          <tr><td>space</td><td>Share the session, or stop sharing it. Shared sessions are marked <code>↗</code> in the sessions panel</td></tr>
+          <tr><td>x</td><td>Stop the cockpit: the link stops working and no session is shared</td></tr>
+          <tr><td>esc q</td><td>Close the box; the cockpit keeps running and the status bar says <code>web</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>The page lists the shared sessions with their status, and for each one shows what its agent said at the end of the last turn (Claude Code and Codex CLI), the text of its screen while you look at it, its changes with their diffs, and its queue. From there you can send a message now or queue it, and press the keys that answer an agent: <kbd>y</kbd> <kbd>n</kbd> <kbd>1</kbd>-<kbd>3</kbd> <kbd>esc</kbd> <kbd>enter</kbd>, the arrows and <kbd>tab</kbd>. The status bar of cicoria says when a message came from the web. Sessions are not created, closed or restarted from the page, and an agent that is not running can only be queued for.</p>
+      <p>The workspace stays the only owner of the sessions: it hands the server a snapshot of the shared sessions every half second and after each hook event, streamed to the page as server-sent events, and what the page asks comes back to it as a message, the way hook events do. Diffs are only given for the files git lists as changed.</p>
+      <p>By default the cockpit listens on every address of the machine, on a free port, so a phone on the same network can open it. The link names the address of the interface traffic goes out from, not that of a bridge of containers. Set <code>web_address</code> to change it: <code>"127.0.0.1:0"</code> keeps it to this machine, the address of a VPN like Tailscale to your devices, and a fixed port like <code>"0.0.0.0:7777"</code> keeps the link's address the same between starts. The link carries a 128-bit token that is new each time the cockpit starts. The page keeps it for its tab and sends it as a header, never as a cookie, which the browser would also hand to the other ports of the host; everything but the page itself needs it. The server speaks plain HTTP: across a network you do not trust, use a VPN or put HTTPS in front, like <code>tailscale serve</code>.</p>
+    </section>
 
     <section id="hooks">
       <h2>How status is known</h2>
@@ -399,6 +417,7 @@ Update the client to handle it.</pre>
           <tr><td>ignored_files</td><td><code>true</code></td><td><code>false</code> leaves ignored files out of the file tree until <kbd>i</kbd></td></tr>
           <tr><td>close_on_exit</td><td><code>true</code></td><td><code>false</code> keeps a session whose agent exited, to restart or close by hand</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and a session is created or closed</td></tr>
+          <tr><td>web_address</td><td><code>"0.0.0.0:0"</code></td><td>Where the <a href="#web">web cockpit</a> listens, host and port: every address by default, and port 0 picks a free one. <code>"127.0.0.1:0"</code> keeps it to this machine</td></tr>
         </tbody>
       </table></div>
       <pre>prefix = "ctrl+b"

@@ -169,12 +169,16 @@ func (m *Model) View() tea.View {
 		} else {
 			rows = m.renderWorkspace(l)
 		}
-		if m.mode == modePalette {
+		if m.mode == modeWeb {
+			box := m.renderWeb(m.width-2, l.body.h)
+			w, h := ansi.StringWidth(box[0]), len(box)
+			rows = ui.Overlay(rows, box, (m.width-w)/2, max((l.body.h-h)/2, 0))
+		} else if m.mode == modePalette {
 			w := min(m.width-4, 72)
 			h := min(l.body.h-2, 18)
 			box := m.palette.View("", w, h)
 			rows = ui.Overlay(rows, box, (m.width-w)/2, max((l.body.h-h)/3, 0))
-		} else if s := m.current(); s != nil && s.Term != nil && m.focus == focusAgent && m.typing() && m.anim == nil {
+		} else if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent && m.typing() && m.anim == nil {
 			if x, y, visible := s.Term.Cursor(); visible && s.Status != agent.Exited {
 				v.Cursor = tea.NewCursor(l.agent.x+x, l.agent.y+y)
 			}
@@ -378,6 +382,9 @@ func (m *Model) renderSessions(r rect) []string {
 		row := fmt.Sprintf("%s %s %s", ui.Dim.Render(num), badge(s), name)
 		if n := len(s.Queue); n > 0 {
 			row += ui.Dim.Render(fmt.Sprintf(" ⋯%d", n))
+		}
+		if s.Web {
+			row += ui.Info.Render(" ↗")
 		}
 		// How long it has been so and its project go at the right edge, as
 		// far as there is room: the time first.
@@ -633,6 +640,13 @@ func (m *Model) renderHelp() []string {
 		"    question, and with what you want done with the answer, if you say so.",
 		"    Claude Code and Codex CLI can be asked.",
 		"",
+		ui.Bold.Render("  Web cockpit"),
+		"    "+p+" v starts a web server and shows its link as a QR code, to open on a",
+		"    phone. The page shows the shared sessions: their status, last answer,",
+		"    screen, changes and queue, and sends or queues messages and answer keys.",
+		"    In its box: space share ⇄ stop sharing · x stop the cockpit · esc close.",
+		"    Shared sessions are marked ↗. web_address says where it listens.",
+		"",
 		ui.Bold.Render("  In a side panel"),
 		"    j/k move · enter open · tab next panel · esc back to the agent",
 		"    the status bar shows the other keys of the panel that has the focus",
@@ -707,6 +721,9 @@ func (m *Model) renderStatus() string {
 	}
 
 	var left []string
+	if m.web != nil {
+		left = append(left, ui.Info.Render("web"))
+	}
 	if m.prefix {
 		left = append(left, ui.Reverse.Render(" "+m.cfg.Prefix+" "))
 	}
@@ -735,6 +752,8 @@ func (m *Model) renderStatus() string {
 		}
 	case modeHelp:
 		right = "j/k space b g G scroll · any other key closes"
+	case modeWeb:
+		right = "j/k move · space share ⇄ stop sharing · x stop · esc back"
 	default:
 		if s := m.current(); s != nil {
 			if s.Status == agent.Exited {

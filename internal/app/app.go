@@ -35,6 +35,7 @@ import (
 	"github.com/henomis/cicoria/internal/session"
 	"github.com/henomis/cicoria/internal/term"
 	"github.com/henomis/cicoria/internal/ui"
+	"github.com/henomis/cicoria/internal/web"
 )
 
 const (
@@ -73,6 +74,7 @@ const (
 	modeView
 	modePalette
 	modeHelp
+	modeWeb
 )
 
 // Model is the root Bubble Tea model.
@@ -160,6 +162,12 @@ type Model struct {
 	paletteFrom, helpFrom mode
 	// helpTop is the first line of help on screen.
 	helpTop int
+
+	// web is the web cockpit, while it runs; webQR is the code of its link,
+	// and webCursor the session under the cursor of its box.
+	web       *web.Server
+	webQR     []string
+	webCursor int
 
 	// One-line interactions in the status bar.
 	prompt    *prompt
@@ -447,6 +455,7 @@ func (m *Model) Close() error {
 		stopping.Go(s.Close)
 	}
 	stopping.Wait()
+	m.stopWeb()
 	m.unlock()
 	return m.ipc.Close()
 }
@@ -685,7 +694,16 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		}
 
 	case hookMsg:
-		return tea.Batch(m.handleHook(ipc.Event(msg)), waitHook(m.ipc))
+		cmd := m.handleHook(ipc.Event(msg))
+		m.publish()
+		return tea.Batch(cmd, waitHook(m.ipc))
+
+	case webMsg:
+		// A server that was stopped since is not listened to again.
+		if msg.srv != m.web {
+			return nil
+		}
+		return tea.Batch(m.handleWeb(msg.Action), waitWeb(m.web))
 
 	case tickMsg:
 		return tea.Batch(m.handleTick(time.Time(msg)), tick())
@@ -791,6 +809,7 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 		m.message = ""
 	}
 	m.ticks++
+	m.publish()
 	// Nobody sees the panels of a terminal that is not in front: the work
 	// tree is looked at again when it comes back.
 	if m.ticks%refreshTicks == 0 && !m.blurred {
