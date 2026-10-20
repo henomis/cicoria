@@ -995,6 +995,8 @@ func TestNotes(t *testing.T) {
 	// panel, where g alone would go to the top.
 	w.prefix('g')
 	w.see("Sessions")
+	w.prefix('o')
+	w.see("ctrl+a / finds a file now")
 
 	// In a file, several lines are selected first.
 	w.prefix('/')
@@ -2135,7 +2137,7 @@ func TestWebCockpit(t *testing.T) {
 	w.launch(160, 50)
 	w.see("claude-1 · claude · idle")
 
-	w.prefix('o')
+	w.prefix('v')
 	w.see("Web cockpit", "[x]", "only this machine can open it", "http://127.0.0.1:")
 	link := regexp.MustCompile(`http://127\.0\.0\.1:\d+/\?t=[0-9a-f]{32}`).FindString(w.tm.String())
 	if link == "" {
@@ -2204,7 +2206,7 @@ func TestWebCockpit(t *testing.T) {
 	snapshot(`"answer":"all-done"`, `"status":"idle"`)
 
 	// Stopping the cockpit takes the link with it.
-	w.prefix('o')
+	w.prefix('v')
 	w.see("Web cockpit")
 	w.typeText("x")
 	w.see("stopped the web cockpit")

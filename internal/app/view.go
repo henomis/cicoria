@@ -641,7 +641,7 @@ func (m *Model) renderHelp() []string {
 		"    Claude Code and Codex CLI can be asked.",
 		"",
 		ui.Bold.Render("  Web cockpit"),
-		"    "+p+" o starts a web server and shows its link as a QR code, to open on a",
+		"    "+p+" v starts a web server and shows its link as a QR code, to open on a",
 		"    phone. The page shows the shared sessions: their status, last answer,",
 		"    screen, changes and queue, and sends or queues messages and answer keys.",
 		"    In its box: space share ⇄ stop sharing · x stop the cockpit · esc close.",

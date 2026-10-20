@@ -67,7 +67,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `-` | Split: show another session below, or close the split |
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
-| `o` | Web cockpit: share sessions with a phone or a browser |
+| `v` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
 | `m` | Queue a message for the agent |
@@ -179,7 +179,7 @@ Neither agent knows of the other: one gets a message, the other a message with a
 
 ## Web cockpit
 
-`ctrl+a o` starts a small web server inside cicoria and shows its link as a QR code: point your phone at it and the page opens. It shows the sessions you share, and nothing else. The session on screen is shared when the cockpit starts; in its box, `space` shares or stops sharing the session under the cursor, `x` stops the cockpit and `esc` closes the box. Shared sessions are marked `↗` in the sessions panel, and the status bar says `web` while the cockpit runs.
+`ctrl+a v` starts a small web server inside cicoria and shows its link as a QR code: point your phone at it and the page opens. It shows the sessions you share, and nothing else. The session on screen is shared when the cockpit starts; in its box, `space` shares or stops sharing the session under the cursor, `x` stops the cockpit and `esc` closes the box. Shared sessions are marked `↗` in the sessions panel, and the status bar says `web` while the cockpit runs.
 
 For each shared session the page shows:
 
