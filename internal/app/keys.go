@@ -93,6 +93,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 			m.mode = m.helpFrom
 		}
 		return nil
+	case modeWeb:
+		return m.webKey(key)
 	case modePalette:
 		if key == "esc" {
 			m.mode, m.palette = m.paletteFrom, nil
@@ -362,7 +364,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case modeHelp:
 		m.helpTop = max(m.helpTop+wheel, 0)
 		return nil
-	case modePalette:
+	case modePalette, modeWeb:
 		return nil
 	}
 

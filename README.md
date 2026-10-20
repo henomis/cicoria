@@ -20,6 +20,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Shows two sessions at once**, one above the other.
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
+- **Follows you on your phone**: a web cockpit, turned on when you want it, shows the sessions you share, what each agent said last and its changes, and takes your replies and queued messages.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
 Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, which cicoria gives the agents it launches without touching your settings, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
@@ -66,6 +67,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `-` | Split: show another session below, or close the split |
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
+| `o` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
 | `m` | Queue a message for the agent |
@@ -175,6 +177,22 @@ Update the client to handle it.
 
 Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code and Codex CLI can be asked, since they are the ones that tell what they said when a turn ends: for Copilot CLI the choice says `not supported`, and the other agents are only sent messages. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.
 
+## Web cockpit
+
+`ctrl+a o` starts a small web server inside cicoria and shows its link as a QR code: point your phone at it and the page opens. It shows the sessions you share, and nothing else. The session on screen is shared when the cockpit starts; in its box, `space` shares or stops sharing the session under the cursor, `x` stops the cockpit and `esc` closes the box. Shared sessions are marked `↗` in the sessions panel, and the status bar says `web` while the cockpit runs.
+
+For each shared session the page shows:
+
+- its status, and for how long it has been in it;
+- **Answer**: what the agent said at the end of its last turn (Claude Code and Codex CLI);
+- **Screen**: the text of the agent's screen, live while you look at it;
+- **Changes**: the files the session changed, and their diffs;
+- its queue.
+
+From the page you can send a message now or queue it, and press the keys that answer an agent's question: `y`, `n`, `1`-`3`, `Esc`, `Enter`, the arrows and `tab`. The status bar says when a message came from the web. Sessions cannot be created, closed or restarted from there.
+
+It listens on every address, on a free port, so a phone on the same network opens it; `web_address` changes that (`127.0.0.1:0` for this machine only, a Tailscale address for your devices, `0.0.0.0:7777` for a fixed port). The link holds a token that is new at each start and stops working with the cockpit. It is plain HTTP: on a network you do not trust, use a VPN or `tailscale serve`.
+
 ## Configure
 
 `~/.config/cicoria/config.toml`, or under `$XDG_CONFIG_HOME` when that is set (all optional):
@@ -189,6 +207,7 @@ changes = "uncommitted"  # "session" opens on everything a session changed since
 ignored_files = true     # false opens with the files git ignores left out of the files panel
 close_on_exit = true     # false keeps a session whose agent has exited, to restart or close by hand
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
+web_address = "0.0.0.0:0"  # where the web cockpit listens: every address, a free port; "127.0.0.1:0" keeps it to this machine
 
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.

@@ -15,10 +15,14 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -991,8 +995,6 @@ func TestNotes(t *testing.T) {
 	// panel, where g alone would go to the top.
 	w.prefix('g')
 	w.see("Sessions")
-	w.prefix('o')
-	w.see("ctrl+a / finds a file now")
 
 	// In a file, several lines are selected first.
 	w.prefix('/')
@@ -2123,4 +2125,91 @@ func TestShellIsNotAtWork(t *testing.T) {
 	w.see("aider-1 · aider")
 	w.gone("their changes will be mixed")
 	w.quit()
+}
+
+// TestWebCockpit opens the web cockpit, follows a session from a client
+// that opened its link, and directs the agent from there.
+func TestWebCockpit(t *testing.T) {
+	w := newWorkspace(t)
+	w.set(`web_address = "127.0.0.1:0"`)
+	w.launch(160, 50)
+	w.see("claude-1 · claude · idle")
+
+	w.prefix('o')
+	w.see("Web cockpit", "[x]", "only this machine can open it", "http://127.0.0.1:")
+	link := regexp.MustCompile(`http://127\.0\.0\.1:\d+/\?t=[0-9a-f]{32}`).FindString(w.tm.String())
+	if link == "" {
+		t.Fatalf("no link on the screen:\n%s", w.tm.String())
+	}
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("Web cockpit")
+	w.see("↗", "web")
+
+	u, _ := url.Parse(link)
+	base, token := "http://"+u.Host, u.Query().Get("t")
+
+	events, err := http.Get(base + "/events?t=" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = events.Body.Close() }()
+	stream := bufio.NewScanner(events.Body)
+	stream.Buffer(nil, 1<<20)
+	var id string
+	// snapshot waits for an event that has every one of the texts.
+	snapshot := func(wants ...string) string {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) && stream.Scan() {
+			data, ok := strings.CutPrefix(stream.Text(), "data: ")
+			if !ok {
+				continue
+			}
+			if id == "" {
+				id = regexp.MustCompile(`"id":"([^"]+)"`).FindStringSubmatch(data)[1]
+			}
+			found := true
+			for _, want := range wants {
+				found = found && strings.Contains(data, want)
+			}
+			if found {
+				return data
+			}
+		}
+		t.Fatalf("no event had %q", wants)
+		return ""
+	}
+	post := func(kind, body string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, base+"/api/sessions/"+id+"/"+kind, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = r.Body.Close()
+		if r.StatusCode != http.StatusNoContent {
+			t.Fatalf("%s: %s", kind, r.Status)
+		}
+	}
+	snapshot(`"name":"claude-1"`, `"status":"idle"`)
+
+	// A message queued from the web goes to the idle agent at once.
+	post("queue", `{"text":"hello web"}`)
+	w.see("got hello web", "from the web: a message queued for claude-1")
+	snapshot(`"status":"working"`)
+
+	// What the agent says at the end of its turn reaches the page.
+	post("send", `{"text":"reply all-done"}`)
+	snapshot(`"answer":"all-done"`, `"status":"idle"`)
+
+	// Stopping the cockpit takes the link with it.
+	w.prefix('o')
+	w.see("Web cockpit")
+	w.typeText("x")
+	w.see("stopped the web cockpit")
+	if r, err := http.Get(base + "/"); err == nil {
+		_ = r.Body.Close()
+		t.Errorf("the cockpit still answers: %s", r.Status)
+	}
 }

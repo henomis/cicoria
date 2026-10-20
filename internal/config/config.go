@@ -19,9 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 
 	"github.com/BurntSushi/toml"
 
@@ -53,6 +55,9 @@ type Config struct {
 	// Animations enables the ASCII art that plays when cicoria opens and
 	// quits and when a session is created or closed.
 	Animations bool `toml:"animations"`
+	// WebAddress is the address the web cockpit listens on, host and port.
+	// Port 0 picks a free one.
+	WebAddress string `toml:"web_address"`
 	// Agents are command lines to offer as agents, by name. An entry named
 	// "claude", "copilot" or "codex" changes how Claude Code, Copilot CLI
 	// or Codex CLI is started.
@@ -75,7 +80,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0"}
 }
 
 // Path returns where the config file is looked for: under $XDG_CONFIG_HOME
@@ -123,6 +128,11 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Changes != ChangesUncommitted && cfg.Changes != ChangesSession {
 		return cfg, fmt.Errorf("%s: changes is %q: it can be %q or %q", path, cfg.Changes, ChangesUncommitted, ChangesSession)
+	}
+	if _, port, err := net.SplitHostPort(cfg.WebAddress); err != nil {
+		return cfg, fmt.Errorf("%s: web_address is %q: it is a host and a port, like %q", path, cfg.WebAddress, "0.0.0.0:7777")
+	} else if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
+		return cfg, fmt.Errorf("%s: web_address is %q: the port is a number up to 65535", path, cfg.WebAddress)
 	}
 	for name, a := range cfg.Agents {
 		if len(a.Command) == 0 {

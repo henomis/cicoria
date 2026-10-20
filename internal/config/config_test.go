@@ -117,6 +117,18 @@ func TestLoadChanges(t *testing.T) {
 	}
 }
 
+func TestLoadWebAddress(t *testing.T) {
+	cfg, err := Load(write(t, `web_address = "0.0.0.0:7777"`))
+	if err != nil || cfg.WebAddress != "0.0.0.0:7777" {
+		t.Errorf("web_address = %q, %v", cfg.WebAddress, err)
+	}
+	for _, bad := range []string{"7777", "localhost", "0.0.0.0:http", "0.0.0.0:70000"} {
+		if _, err := Load(write(t, `web_address = "`+bad+`"`)); err == nil {
+			t.Errorf("web_address %q was accepted", bad)
+		}
+	}
+}
+
 func TestPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

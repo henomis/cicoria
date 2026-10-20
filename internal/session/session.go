@@ -82,6 +82,12 @@ type Session struct {
 	Queue []Message
 	// Paused holds the queue back.
 	Paused bool
+	// Answer is what the agent said at the end of its last turn, for the
+	// agents that tell.
+	Answer string
+	// Web says the session is shared in the web cockpit.
+	Web bool
+
 	// Answering is the question of another session the agent is working on:
 	// what it says at the end of its turn goes back there.
 	Answering *Message
@@ -268,6 +274,9 @@ func (s *Session) Apply(u agent.Update, active bool, now time.Time) {
 	s.lastOutput = now
 	if u.HasStatus && s.Status != agent.Exited {
 		s.setStatus(u.Status, active)
+	}
+	if strings.TrimSpace(u.Answer) != "" {
+		s.Answer = u.Answer
 	}
 	if u.Conversation != "" && u.Conversation != s.ID {
 		s.Conversation = u.Conversation
