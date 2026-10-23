@@ -197,6 +197,18 @@ func TestEncodeKey(t *testing.T) {
 		{"enter", uv.Key{Code: uv.KeyEnter}, "", false},
 		{"ctrl+c", uv.Key{Code: 'c', Mod: uv.ModCtrl}, "", false},
 		{"arrow", uv.Key{Code: uv.KeyUp}, "", false},
+		{"end", uv.Key{Code: uv.KeyEnd}, "", false},
+		{"ctrl+end", uv.Key{Code: uv.KeyEnd, Mod: uv.ModCtrl}, "\x1b[1;5F", true},
+		{"ctrl+home", uv.Key{Code: uv.KeyHome, Mod: uv.ModCtrl}, "\x1b[1;5H", true},
+		{"shift+up", uv.Key{Code: uv.KeyUp, Mod: uv.ModShift}, "\x1b[1;2A", true},
+		{"alt+left", uv.Key{Code: uv.KeyLeft, Mod: uv.ModAlt}, "\x1b[1;3D", true},
+		{"ctrl+shift+right", uv.Key{Code: uv.KeyRight, Mod: uv.ModCtrl | uv.ModShift}, "\x1b[1;6C", true},
+		{"ctrl+delete", uv.Key{Code: uv.KeyDelete, Mod: uv.ModCtrl}, "\x1b[3;5~", true},
+		{"ctrl+pgup", uv.Key{Code: uv.KeyPgUp, Mod: uv.ModCtrl}, "\x1b[5;5~", true},
+		{"shift+f5", uv.Key{Code: uv.KeyF5, Mod: uv.ModShift}, "\x1b[15;2~", true},
+		{"ctrl+f1", uv.Key{Code: uv.KeyF1, Mod: uv.ModCtrl}, "\x1b[1;5P", true},
+		{"ctrl+end with num lock", uv.Key{Code: uv.KeyEnd, Mod: uv.ModCtrl | uv.ModNumLock}, "\x1b[1;5F", true},
+		{"shift+tab", uv.Key{Code: uv.KeyTab, Mod: uv.ModShift}, "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
