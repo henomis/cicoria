@@ -297,11 +297,18 @@ func TestFiles(t *testing.T) {
 func TestWorktree(t *testing.T) {
 	dir := repo(t)
 	path := filepath.Join(dir+".worktrees", "fix")
-	if err := AddWorktree(dir, path, "cicoria/fix"); err != nil {
+	if err := AddWorktree(dir, path); err != nil {
 		t.Fatal(err)
 	}
-	if got := Branch(path); got != "cicoria/fix" {
-		t.Errorf("branch = %q", got)
+	// It is on the commit dir is on, and on no branch.
+	if _, err := run(path, "symbolic-ref", "--quiet", "HEAD"); err == nil {
+		t.Error("the work tree is on a branch")
+	}
+	if got, want := Branch(path), Branch(dir); got == want || !Exists(dir, got) {
+		t.Errorf("commit = %q, branch of dir = %q", got, want)
+	}
+	if !OnBranch(path) {
+		t.Error("the commit it starts from is on no branch")
 	}
 	// The main work tree is the same seen from either.
 	for _, from := range []string{dir, path} {
@@ -312,9 +319,9 @@ func TestWorktree(t *testing.T) {
 	if _, ok := Main(t.TempDir()); ok {
 		t.Error("main outside a repository")
 	}
-	// A name that is taken is refused.
-	if err := AddWorktree(dir, path+"2", "cicoria/fix"); err == nil {
-		t.Error("the branch was made twice")
+	// A path that is taken is refused.
+	if err := AddWorktree(dir, path); err == nil {
+		t.Error("the work tree was made twice")
 	}
 
 	// Work that is not committed keeps the work tree.
@@ -330,6 +337,14 @@ func TestWorktree(t *testing.T) {
 	if !Clean(path) {
 		t.Error("not clean after the commit")
 	}
+	// A commit on no branch would go with the work tree.
+	if OnBranch(path) {
+		t.Error("a commit on no branch is on one")
+	}
+	gitCmd(t, path, "switch", "-q", "-c", "fix")
+	if !OnBranch(path) {
+		t.Error("a commit on a branch is on none")
+	}
 	if err := RemoveWorktree(path); err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +352,7 @@ func TestWorktree(t *testing.T) {
 		t.Error("the work tree is still there")
 	}
 	// Its branch, and so the commit, stays.
-	if !Exists(dir, "cicoria/fix") {
+	if !Exists(dir, "fix") {
 		t.Error("the branch went with the work tree")
 	}
 }

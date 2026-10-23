@@ -1971,6 +1971,15 @@ func TestWorktree(t *testing.T) {
 	w.launch(140, 40)
 	w.see("claude-1 · claude · idle")
 	tree := filepath.Join(w.dir+".worktrees", "aider-1")
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	head := git(w.dir, "rev-parse", "--short", "HEAD")
 
 	create := func() {
 		t.Helper()
@@ -1984,8 +1993,8 @@ func TestWorktree(t *testing.T) {
 		w.typeText("y")
 		w.see("session name: aider-1")
 		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-		// It works there, on a branch named after it.
-		w.see("aider-1 · aider", "project.worktrees/aider-1", "cicoria/aider-1")
+		// It works there, on the commit of the project and on no branch.
+		w.see("aider-1 · aider", "project.worktrees/aider-1", head)
 	}
 	create()
 	if _, err := os.Stat(filepath.Join(tree, "main.go")); err != nil {
@@ -2004,7 +2013,7 @@ func TestWorktree(t *testing.T) {
 	w.launch(140, 40)
 	w.see("claude-1 · claude · idle")
 	w.prefix('2')
-	w.see("aider-1 · aider", "cicoria/aider-1")
+	w.see("aider-1 · aider", head)
 
 	// One with work that is not committed outlives its session.
 	w.prefix('x')
@@ -2032,41 +2041,38 @@ func TestWorktree(t *testing.T) {
 	w.see("already exists")
 	w.gone("aider-1 · aider")
 
-	// A clean one is removed when its session is closed, and its branch
-	// stays.
-	for _, args := range [][]string{{"worktree", "remove", "--force", tree}, {"branch", "-D", "cicoria/aider-1"}} {
-		if out, err := exec.Command("git", append([]string{"-C", w.dir}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
+	// A clean one is removed when its session is closed, and no branch is
+	// made or left behind.
+	git(w.dir, "worktree", "remove", "--force", tree)
 	create()
 	w.prefix('x')
 	w.see("close aider-1 and stop its agent?")
 	w.typeText("y")
-	w.see("remove the worktree", "the branch cicoria/aider-1 is kept")
+	w.see("remove the worktree")
 	w.typeText("y")
 	w.see("removed the worktree")
 	if _, err := os.Stat(tree); err == nil {
 		t.Error("the worktree is still there")
 	}
-	out, err := exec.Command("git", "-C", w.dir, "branch", "--list", "cicoria/aider-1").Output()
-	if err != nil || !strings.Contains(string(out), "cicoria/aider-1") {
-		t.Errorf("branch: %q, %v", out, err)
+	if got := git(w.dir, "branch", "--list"); strings.Count(got, "\n") != 0 {
+		t.Errorf("branches: %q", got)
 	}
 
-	// The branch that is kept has the name: the next session is offered
-	// another one.
-	w.prefix('c')
-	w.see("agent ›")
-	w.typeText("aider")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("aider in directory: ")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("a worktree of its own?")
+	// One whose commits are on no branch outlives its session, so that they
+	// are not lost with it.
+	create()
+	if err := os.WriteFile(filepath.Join(tree, "work.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(tree, "add", "-A")
+	git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "work")
+	w.prefix('x')
+	w.see("close aider-1 and stop its agent?")
 	w.typeText("y")
-	w.see("session name: aider-2")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("aider-2 · aider", "project.worktrees/aider-2", "cicoria/aider-2")
+	w.see("worktree kept at", "it has commits that are on no branch")
+	if _, err := os.Stat(tree); err != nil {
+		t.Fatal(err)
+	}
 	w.quit()
 }
 

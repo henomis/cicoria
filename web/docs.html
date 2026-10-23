@@ -193,11 +193,11 @@ cicoria -version                     <span class="c"># which version this is</sp
         <thead><tr><th>For a session fix-login on ~/src/app</th><th></th></tr></thead>
         <tbody>
           <tr><td>Directory</td><td><code>~/src/app.worktrees/fix-login</code></td></tr>
-          <tr><td>Branch</td><td><code>cicoria/fix-login</code>, from the commit the directory was on</td></tr>
+          <tr><td>Branch</td><td>None: the commit the directory was on, detached. Making a branch is up to the agent or to you</td></tr>
           <tr><td>Name</td><td>Anything but letters, digits, <code>-</code> and <code>_</code> becomes <code>-</code></td></tr>
         </tbody>
       </table></div>
-      <p>The session works there from then on, after restarts too. Closing it offers to remove the worktree. Its branch is always kept, and a worktree with uncommitted changes is kept too: the status bar says where it is. Merging the branch is up to you, or to an agent you ask.</p>
+      <p>The session works there from then on, after restarts too. Closing it offers to remove the worktree. A branch made there is always kept, and a worktree with uncommitted changes, or with commits on no branch, is kept too: the status bar says where it is. Making a branch, and merging it, is up to you, or to an agent you ask.</p>
       <p>A worktree holds only what git tracks: <code>.env</code>, <code>node_modules</code> and other ignored or untracked files are not copied. Claude Code asks whether to trust the new folder, as it does for any. A <code>shell</code> session is never asked and is no reason to offer the next session a worktree.</p>
     </section>
 
@@ -448,7 +448,7 @@ command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]</pre>
           <tr><td>…/&lt;hash&gt;/lock</td><td>Held while a cicoria has the workspace open, so a second one asks before running the same agents twice</td></tr>
           <tr><td>$XDG_RUNTIME_DIR/cicoria-&lt;pid&gt;.sock</td><td>The socket hook events arrive on</td></tr>
           <tr><td>&lt;cache&gt;/cicoria/copilot</td><td>The plugin that gives Copilot CLI its hooks</td></tr>
-          <tr><td>&lt;dir&gt;.worktrees/&lt;session&gt;</td><td>Worktrees cicoria creates, on branches <code>cicoria/&lt;session&gt;</code></td></tr>
+          <tr><td>&lt;dir&gt;.worktrees/&lt;session&gt;</td><td>Worktrees cicoria creates, on no branch</td></tr>
         </tbody>
       </table></div>
       <p>A session belongs to the workspace it was created in, wherever it works: one created from <code>~/src/app</code> to work in <code>~/src/lib</code> comes back with <code>~/src/app</code>. <kbd>ctrl+a</kbd> <kbd>w</kbd> lists the other saved workspaces, which of their sessions work in this directory, and whether another cicoria has them open. Opened on a directory with nothing saved, cicoria says in the status bar where other sessions are.</p>

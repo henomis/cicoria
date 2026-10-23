@@ -460,16 +460,16 @@ func Main(dir string) (string, bool) {
 	return path, ok && path != ""
 }
 
-// AddWorktree adds a work tree at path to the repository of dir, on a new
-// branch that starts from the commit dir is on.
-func AddWorktree(dir, path, branch string) error {
-	_, err := run(dir, "worktree", "add", "-q", "-b", branch, path)
+// AddWorktree adds a work tree at path to the repository of dir, on the
+// commit dir is on and on no branch: making one is up to whoever works there.
+func AddWorktree(dir, path string) error {
+	_, err := run(dir, "worktree", "add", "-q", "--detach", path)
 	return err
 }
 
 // RemoveWorktree takes the work tree at path away from its repository. git
-// refuses when it holds changes that are not committed, and its branch is
-// left alone.
+// refuses when it holds changes that are not committed, and a branch it is on
+// is left alone.
 func RemoveWorktree(path string) error {
 	main, ok := Main(path)
 	if !ok {
@@ -477,6 +477,13 @@ func RemoveWorktree(path string) error {
 	}
 	_, err := run(main, "worktree", "remove", path)
 	return err
+}
+
+// OnBranch reports whether the commit the work tree containing dir is on is
+// on a branch, so that it outlives the work tree.
+func OnBranch(dir string) bool {
+	out, err := run(dir, "for-each-ref", "--count=1", "--contains=HEAD", "refs/heads")
+	return err == nil && len(bytes.TrimSpace(out)) > 0
 }
 
 // Clean reports whether the work tree containing dir has nothing that is
