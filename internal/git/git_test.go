@@ -337,10 +337,16 @@ func TestWorktree(t *testing.T) {
 	if !Clean(path) {
 		t.Error("not clean after the commit")
 	}
-	// A commit on no branch would go with the work tree.
+	// A commit on no branch would go with the work tree, also once another
+	// commit is checked out.
 	if OnBranch(path) {
 		t.Error("a commit on no branch is on one")
 	}
+	gitCmd(t, path, "checkout", "-q", "--detach", "HEAD~1")
+	if OnBranch(path) {
+		t.Error("a commit left on no branch is on one")
+	}
+	gitCmd(t, path, "checkout", "-q", "-")
 	gitCmd(t, path, "switch", "-q", "-c", "fix")
 	if !OnBranch(path) {
 		t.Error("a commit on a branch is on none")

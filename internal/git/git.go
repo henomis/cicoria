@@ -479,11 +479,23 @@ func RemoveWorktree(path string) error {
 	return err
 }
 
-// OnBranch reports whether the commit the work tree containing dir is on is
-// on a branch, so that it outlives the work tree.
+// OnBranch reports whether every commit the work tree containing dir has
+// been on, as its reflog tells, is on a branch, so that none goes with the
+// work tree. A commit made on no branch and left by checking out another
+// one counts too.
 func OnBranch(dir string) bool {
-	out, err := run(dir, "for-each-ref", "--count=1", "--contains=HEAD", "refs/heads")
-	return err == nil && len(bytes.TrimSpace(out)) > 0
+	out, err := run(dir, "log", "--walk-reflogs", "--format=%H", "HEAD")
+	if err != nil {
+		return false
+	}
+	commits := []string{"HEAD"}
+	for _, c := range strings.Fields(string(out)) {
+		if !slices.Contains(commits, c) {
+			commits = append(commits, c)
+		}
+	}
+	out, err = run(dir, append(append([]string{"rev-list", "--max-count=1"}, commits...), "--not", "--branches")...)
+	return err == nil && len(bytes.TrimSpace(out)) == 0
 }
 
 // Clean reports whether the work tree containing dir has nothing that is
