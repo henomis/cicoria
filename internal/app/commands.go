@@ -399,26 +399,24 @@ func slug(name string) string {
 }
 
 // worktreeOf returns where the worktree of a session of that name goes,
-// next to the main work tree of its repository, and the branch it is on.
-func worktreeOf(main, name string) (top, branch string) {
-	return filepath.Join(main+".worktrees", slug(name)), "cicoria/" + slug(name)
+// next to the main work tree of its repository.
+func worktreeOf(main, name string) string {
+	return filepath.Join(main+".worktrees", slug(name))
 }
 
 // worktreeFree reports whether a session of that name can have a worktree
-// in the repository of dir: the directory and the branch of one that was
-// made before may still be there.
+// in the repository of dir: one that was made before may still be there.
 func worktreeFree(name, dir string) bool {
 	main, ok := git.Main(dir)
 	if !ok {
 		return true
 	}
-	top, branch := worktreeOf(main, name)
-	_, err := os.Stat(top)
-	return err != nil && !git.Exists(dir, "refs/heads/"+branch)
+	_, err := os.Stat(worktreeOf(main, name))
+	return err != nil
 }
 
 // addWorktree makes a git worktree named after a session, next to the
-// repository of dir and on a branch of its own. It returns the top of the
+// repository of dir, on the commit dir is on and on no branch. It returns the top of the
 // worktree and the directory in it that stands for dir.
 func addWorktree(name, dir string) (top, in string, err error) {
 	root, ok := git.Root(dir)
@@ -426,8 +424,11 @@ func addWorktree(name, dir string) (top, in string, err error) {
 	if !ok || !isMain {
 		return "", "", errors.New("not a git repository")
 	}
-	top, branch := worktreeOf(main, name)
-	if err := git.AddWorktree(dir, top, branch); err != nil {
+	top = worktreeOf(main, name)
+	if _, err := os.Stat(top); err == nil {
+		return "", "", fmt.Errorf("a worktree named %s already exists", slug(name))
+	}
+	if err := git.AddWorktree(dir, top); err != nil {
 		return "", "", err
 	}
 	// A directory git does not know of is not in the worktree.
@@ -441,8 +442,9 @@ func addWorktree(name, dir string) (top, in string, err error) {
 }
 
 // askRemoveWorktree offers to remove the worktree that was made for a
-// session that is now closed. One that holds work not committed is kept,
-// and so is one another session works in.
+// session that is now closed. One that holds work not committed is kept, so
+// is one whose commits are on no branch, and so is one another session
+// works in.
 func (m *Model) askRemoveWorktree(path string) {
 	if _, err := os.Stat(path); path == "" || err != nil {
 		return
@@ -456,8 +458,12 @@ func (m *Model) askRemoveWorktree(path string) {
 		m.say("worktree kept at " + tilde(path) + ": it has changes that are not committed")
 		return
 	}
+	if !git.OnBranch(path) {
+		m.say("worktree kept at " + tilde(path) + ": it has commits that are on no branch")
+		return
+	}
 	m.confirm = &confirm{
-		question: fmt.Sprintf("remove the worktree %s? the branch %s is kept", tilde(path), git.Branch(path)),
+		question: fmt.Sprintf("remove the worktree %s?", tilde(path)),
 		yes: func() tea.Cmd {
 			return func() tea.Msg { return removedMsg{path, git.RemoveWorktree(path)} }
 		},
@@ -467,8 +473,7 @@ func (m *Model) askRemoveWorktree(path string) {
 // askName asks what to call a new session, offering a name that is free.
 // With worktree, the name is also that of the worktree made for it.
 func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
-	// The name of a worktree that is still there, or of its branch, is not
-	// offered again.
+	// The name of a worktree that is still there is not offered again.
 	var free func(string) bool
 	if worktree {
 		free = func(name string) bool { return worktreeFree(name, dir) }

@@ -106,9 +106,9 @@ A session is one agent working in one directory, so one cicoria can hold session
 
 The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a [git worktree](https://git-scm.com/docs/git-worktree) of its own: `y` makes one, `n` or `enter` puts the session in the same directory and warns you, `esc` gives up. A `shell` is a way to run a command without leaving cicoria, not a session at work: it is not asked, opens in the directory you give it, and is no reason to offer the next session a worktree.
 
-The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on a new branch `cicoria/fix-login` that starts from the commit the directory was on. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart.
+The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on the commit the directory was on and on no branch: cicoria does not make one, so naming it is up to the agent or to you. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart.
 
-Closing the session offers to remove the worktree. Its branch is always kept, so what was committed is not lost, and a worktree with changes that are not committed is kept too: the status bar says where it is. Merging the branch is up to you, or to an agent you ask.
+Closing the session offers to remove the worktree. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, or with commits that are on no branch, is kept too: the status bar says where it is. Making a branch, and merging it, is up to you, or to an agent you ask.
 
 A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not copied to it. Claude Code asks whether it can trust the new folder, as it does for any.
 
