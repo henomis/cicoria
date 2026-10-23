@@ -98,6 +98,16 @@ func TestScrollBack(t *testing.T) {
 	}
 	defer func() { _ = tm.Close() }()
 	waitFor(t, tm, "end")
+	// The newline after end can come in a read of its own.
+	deadline := time.After(5 * time.Second)
+	for x, y, _ := tm.Cursor(); x != 0 || y != 4; x, y, _ = tm.Cursor() {
+		select {
+		case <-tm.Updates():
+		case <-time.After(50 * time.Millisecond):
+		case <-deadline:
+			t.Fatalf("the cursor stayed at %d,%d; got:\n%s", x, y, tm.String())
+		}
+	}
 
 	// The screen holds 48, 49, 50, end and the line of the cursor.
 	tm.Scroll(3)
