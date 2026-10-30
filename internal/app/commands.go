@@ -306,7 +306,7 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 		src := dir
 		main, _ := git.Main(src)
 		var err error
-		if made, dir, err = addWorktree(name, dir); err != nil {
+		if made, dir, err = addWorktree(m.cfg.WorktreeDir, name, dir); err != nil {
 			m.say(err.Error())
 			return nil
 		}
@@ -436,33 +436,37 @@ func slug(name string) string {
 	return notSlug.ReplaceAllString(name, "-")
 }
 
-// worktreeOf returns where the worktree of a session of that name goes,
-// next to the main work tree of its repository.
-func worktreeOf(main, name string) string {
+// worktreeOf returns where the worktree of a session of that name goes:
+// in base, in a directory named after the main work tree of its repository,
+// or next to that work tree when base is "".
+func worktreeOf(base, main, name string) string {
+	if base != "" {
+		return filepath.Join(base, filepath.Base(main), slug(name))
+	}
 	return filepath.Join(main+".worktrees", slug(name))
 }
 
 // worktreeFree reports whether a session of that name can have a worktree
 // in the repository of dir: one that was made before may still be there.
-func worktreeFree(name, dir string) bool {
+func worktreeFree(base, name, dir string) bool {
 	main, ok := git.Main(dir)
 	if !ok {
 		return true
 	}
-	_, err := os.Stat(worktreeOf(main, name))
+	_, err := os.Stat(worktreeOf(base, main, name))
 	return err != nil
 }
 
-// addWorktree makes a git worktree named after a session, next to the
-// repository of dir, on the commit dir is on and on no branch. It returns the top of the
-// worktree and the directory in it that stands for dir.
-func addWorktree(name, dir string) (top, in string, err error) {
+// addWorktree makes a git worktree named after a session, where worktreeOf
+// puts it, on the commit dir is on and on no branch. It returns the top of
+// the worktree and the directory in it that stands for dir.
+func addWorktree(base, name, dir string) (top, in string, err error) {
 	root, ok := git.Root(dir)
 	main, isMain := git.Main(dir)
 	if !ok || !isMain {
 		return "", "", errors.New("not a git repository")
 	}
-	top = worktreeOf(main, name)
+	top = worktreeOf(base, main, name)
 	if _, err := os.Stat(top); err == nil {
 		return "", "", fmt.Errorf("a worktree named %s already exists", slug(name))
 	}
@@ -608,7 +612,7 @@ func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
 	// The name of a worktree that is still there is not offered again.
 	var free func(string) bool
 	if worktree {
-		free = func(name string) bool { return worktreeFree(name, dir) }
+		free = func(name string) bool { return worktreeFree(m.cfg.WorktreeDir, name, dir) }
 	}
 	p := &prompt{input: ui.Input{Prompt: "session name: "}}
 	p.input.Set(m.newName(a, free))

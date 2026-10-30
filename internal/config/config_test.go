@@ -157,6 +157,21 @@ func TestSetup(t *testing.T) {
 	}
 }
 
+func TestLoadWorktreeDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := Load(write(t, `worktree_dir = "~/worktrees/"`))
+	if want := filepath.Join(home, "worktrees"); err != nil || cfg.WorktreeDir != want {
+		t.Errorf("worktree_dir = %q, %v; want %q", cfg.WorktreeDir, err, want)
+	}
+	if cfg, err := Load(write(t, "")); err != nil || cfg.WorktreeDir != "" {
+		t.Errorf("worktree_dir by default = %q, %v", cfg.WorktreeDir, err)
+	}
+	if _, err := Load(write(t, `worktree_dir = "worktrees"`)); err == nil {
+		t.Error("a relative worktree_dir was accepted")
+	}
+}
+
 func TestPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

@@ -192,7 +192,7 @@ cicoria -version                     <span class="c"># which version this is</sp
       <div class="table"><table>
         <thead><tr><th>For a session fix-login on ~/src/app</th><th></th></tr></thead>
         <tbody>
-          <tr><td>Directory</td><td><code>~/src/app.worktrees/fix-login</code></td></tr>
+          <tr><td>Directory</td><td><code>~/src/app.worktrees/fix-login</code>, or <code>&lt;worktree_dir&gt;/app/fix-login</code> with <code>worktree_dir</code> set</td></tr>
           <tr><td>Branch</td><td>None: the commit the directory was on, detached. Making a branch is up to the agent or to you</td></tr>
           <tr><td>Name</td><td>Anything but letters, digits, <code>-</code> and <code>_</code> becomes <code>-</code></td></tr>
         </tbody>
@@ -420,6 +420,7 @@ Update the client to handle it.</pre>
           <tr><td>close_on_exit</td><td><code>true</code></td><td><code>false</code> keeps a session whose agent exited, to restart or close by hand</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and a session is created or closed</td></tr>
           <tr><td>web_address</td><td><code>"0.0.0.0:0"</code></td><td>Where the <a href="#web">web cockpit</a> listens, host and port: every address by default, and port 0 picks a free one. <code>"127.0.0.1:0"</code> keeps it to this machine</td></tr>
+          <tr><td>worktree_dir</td><td><code>""</code></td><td>Where <a href="#worktrees">worktrees</a> go, as <code>&lt;worktree_dir&gt;/&lt;repository&gt;/&lt;session&gt;</code>: an absolute path, or one that starts with <code>~</code>. <code>""</code> puts them next to the repository</td></tr>
         </tbody>
       </table></div>
       <pre>prefix = "ctrl+b"

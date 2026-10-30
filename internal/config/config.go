@@ -63,6 +63,10 @@ type Config struct {
 	// "claude", "copilot" or "codex" changes how Claude Code, Copilot CLI
 	// or Codex CLI is started.
 	Agents map[string]AgentConfig `toml:"agents"`
+	// WorktreeDir is where the worktrees made for sessions go, each in a
+	// directory named after its repository. "" puts them next to the
+	// repository, in <repository>.worktrees. Load makes it absolute.
+	WorktreeDir string `toml:"worktree_dir"`
 	// Worktrees say what to do in a worktree made for a session, by the
 	// repository it is made from.
 	Worktrees []WorktreeConfig `toml:"worktree"`
@@ -152,6 +156,13 @@ func Load(path string) (Config, error) {
 		if len(a.Command) == 0 {
 			return cfg, fmt.Errorf("%s: agent %q has no command", path, name)
 		}
+	}
+	if cfg.WorktreeDir != "" {
+		cfg.WorktreeDir = expandHome(cfg.WorktreeDir)
+		if !filepath.IsAbs(cfg.WorktreeDir) {
+			return cfg, fmt.Errorf("%s: worktree_dir is %q: it is an absolute path, or one that starts with ~", path, cfg.WorktreeDir)
+		}
+		cfg.WorktreeDir = filepath.Clean(cfg.WorktreeDir)
 	}
 	for _, w := range cfg.Worktrees {
 		if w.Repo == "" {

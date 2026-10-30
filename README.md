@@ -106,7 +106,7 @@ A session is one agent working in one directory, so one cicoria can hold session
 
 The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a [git worktree](https://git-scm.com/docs/git-worktree) of its own: `y` makes one, `n` or `enter` puts the session in the same directory and warns you, `esc` gives up. A `shell` is a way to run a command without leaving cicoria, not a session at work: it is not asked, opens in the directory you give it, and is no reason to offer the next session a worktree.
 
-The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on the commit the directory was on and on no branch: cicoria does not make one, so naming it is up to the agent or to you. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart.
+The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on the commit the directory was on and on no branch: cicoria does not make one, so naming it is up to the agent or to you. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart. With `worktree_dir` in the settings, worktrees go there instead, in a directory named after the repository: with `worktree_dir = "~/worktrees"`, `~/worktrees/app/fix-login`.
 
 Closing the session offers to remove the worktree, once its agent has ended. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, with commits that are on no branch, or with files you cannot delete (such as a `node_modules` a container made as root) is kept too: the status bar says where it is. Files git ignores are deleted with the worktree.
 
@@ -218,6 +218,7 @@ ignored_files = true     # false opens with the files git ignores left out of th
 close_on_exit = true     # false keeps a session whose agent has exited, to restart or close by hand
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 web_address = "0.0.0.0:0"  # where the web cockpit listens: every address, a free port; "127.0.0.1:0" keeps it to this machine
+worktree_dir = ""        # where worktrees go, as ~/worktrees/<repository>/<session>; "" puts them next to the repository
 
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.
