@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 
@@ -58,10 +59,35 @@ type Config struct {
 	// WebAddress is the address the web cockpit listens on, host and port.
 	// Port 0 picks a free one.
 	WebAddress string `toml:"web_address"`
+	// PortBase is the first of the ports given to sessions, PortsPerSession
+	// to each: a session has its own range, whose first port it is told in
+	// CICORIA_PORT. A PortBase of 0 gives sessions no ports.
+	PortBase        int `toml:"port_base"`
+	PortsPerSession int `toml:"ports_per_session"`
 	// Agents are command lines to offer as agents, by name. An entry named
 	// "claude", "copilot" or "codex" changes how Claude Code, Copilot CLI
 	// or Codex CLI is started.
 	Agents map[string]AgentConfig `toml:"agents"`
+	// WorktreeDir is where the worktrees made for sessions go, each in a
+	// directory named after its repository. "" puts them next to the
+	// repository, in <repository>.worktrees. Load makes it absolute.
+	WorktreeDir string `toml:"worktree_dir"`
+	// Worktrees say what to do in a worktree made for a session, by the
+	// repository it is made from.
+	Worktrees []WorktreeConfig `toml:"worktree"`
+}
+
+// WorktreeConfig is what to do in the worktrees made from one repository.
+type WorktreeConfig struct {
+	// Repo is the main work tree of the repository. ~ stands for the home
+	// directory.
+	Repo string `toml:"repo"`
+	// Setup is the command line run in each new worktree, as dependencies
+	// are installed.
+	Setup []string `toml:"setup"`
+	// Teardown is the command line run in a worktree before it is removed,
+	// as containers started there are stopped.
+	Teardown []string `toml:"teardown"`
 }
 
 // What the changes panel can show.
@@ -80,7 +106,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0"}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10}
 }
 
 // Path returns where the config file is looked for: under $XDG_CONFIG_HOME
@@ -139,7 +165,64 @@ func Load(path string) (Config, error) {
 			return cfg, fmt.Errorf("%s: agent %q has no command", path, name)
 		}
 	}
+	if cfg.PortsPerSession < 1 {
+		return cfg, fmt.Errorf("%s: ports_per_session is %d: it is at least 1", path, cfg.PortsPerSession)
+	}
+	if cfg.PortBase != 0 && (cfg.PortBase < 1024 || cfg.PortBase+cfg.PortsPerSession-1 > 65535) {
+		return cfg, fmt.Errorf("%s: port_base is %d: it is 0, or a port from 1024 that leaves room for ports_per_session", path, cfg.PortBase)
+	}
+	if cfg.WorktreeDir != "" {
+		cfg.WorktreeDir = expandHome(cfg.WorktreeDir)
+		if !filepath.IsAbs(cfg.WorktreeDir) {
+			return cfg, fmt.Errorf("%s: worktree_dir is %q: it is an absolute path, or one that starts with ~", path, cfg.WorktreeDir)
+		}
+		cfg.WorktreeDir = filepath.Clean(cfg.WorktreeDir)
+	}
+	for _, w := range cfg.Worktrees {
+		if w.Repo == "" {
+			return cfg, fmt.Errorf("%s: a worktree has no repo", path)
+		}
+		if len(w.Setup) == 0 && len(w.Teardown) == 0 {
+			return cfg, fmt.Errorf("%s: the worktree of %q has no setup and no teardown", path, w.Repo)
+		}
+	}
 	return cfg, nil
+}
+
+// Worktree returns what to do in the worktrees of the repository whose
+// main work tree is main: nothing when the settings do not name it.
+func (c Config) Worktree(main string) WorktreeConfig {
+	for _, w := range c.Worktrees {
+		if samePath(expandHome(w.Repo), main) {
+			return w
+		}
+	}
+	return WorktreeConfig{}
+}
+
+// expandHome replaces a leading ~ with the home directory.
+func expandHome(path string) string {
+	rest, ok := strings.CutPrefix(path, "~")
+	if !ok || rest != "" && rest[0] != '/' {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, rest)
+}
+
+// samePath reports whether a and b name one directory, through symbolic
+// links too.
+func samePath(a, b string) bool {
+	resolve := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return filepath.Clean(p)
+	}
+	return resolve(a) == resolve(b)
 }
 
 // Shell is the name of the plain shell, which is always offered.

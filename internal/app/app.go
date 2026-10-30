@@ -248,6 +248,12 @@ type (
 	}
 	// stoppedMsg reports that the agent of a closed session has ended.
 	stoppedMsg struct{ s *session.Session }
+	// worktreeMsg reports why the worktree of a closed session must be
+	// kept, or that it can go when kept is "".
+	worktreeMsg struct{ path, kept string }
+	// closingMsg reports why closing the session would keep its worktree,
+	// or "" when it would not.
+	closingMsg struct{ id, kept string }
 )
 
 // New returns a workspace opened on dir, with the sessions it had last time.
@@ -290,6 +296,10 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 			s := session.New(saved.ID, saved.Name, sdir, a)
 			s.Conversation, s.Base, s.Notes = saved.Conversation, saved.Base, saved.Notes
 			s.Worktree = saved.Worktree
+			// A session keeps its ports, unless the settings changed since.
+			if m.ownPorts(saved.Port) {
+				s.Port = saved.Port
+			}
 			s.Uncommitted = cfg.Changes != config.ChangesSession
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
@@ -308,6 +318,11 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 		s.Base, _ = git.Head(dir)
 		s.Uncommitted = cfg.Changes != config.ChangesSession
 		m.sessions = append(m.sessions, s)
+	}
+	for _, s := range m.sessions {
+		if s.Port == 0 {
+			s.Port = m.freePorts()
+		}
 	}
 	m.active = max(min(st.Active, len(m.sessions)-1), 0)
 	m.sessionCursor = m.active
@@ -434,7 +449,7 @@ func (m *Model) save() {
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
-			Worktree: s.Worktree, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
+			Worktree: s.Worktree, Port: s.Port, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
 		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {
@@ -466,8 +481,9 @@ func (m *Model) Close() error {
 // read, a queue has messages, and what is open on top of the workspace may
 // be about this session.
 func (m *Model) closesOnExit(s *session.Session) bool {
-	return m.cfg.CloseOnExit &&
-		time.Since(s.Started) >= startupGrace &&
+	// The setup of a worktree that fails stays as a shell: one that ends
+	// has done its work.
+	return (s.Setup || m.cfg.CloseOnExit && time.Since(s.Started) >= startupGrace) &&
 		len(s.Queue) == 0 &&
 		m.mode == modeWorkspace && m.prompt == nil && m.confirm == nil
 }
@@ -687,6 +703,16 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 
 	case stoppedMsg:
 		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s })
+		return m.askRemoveWorktree(msg.s.Worktree)
+
+	case worktreesMsg:
+		m.showWorktrees(msg)
+
+	case worktreeMsg:
+		m.offerRemoveWorktree(msg.path, msg.kept)
+
+	case closingMsg:
+		m.askCloseWith(msg.id, msg.kept)
 
 	case submitMsg:
 		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term && s.Status != agent.Exited {

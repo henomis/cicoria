@@ -27,6 +27,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // maxWalk bounds how many files are listed outside of a repository, and how
@@ -460,12 +462,79 @@ func Main(dir string) (string, bool) {
 	return path, ok && path != ""
 }
 
+// Worktrees lists the work trees added to the repository of dir, in the
+// order git keeps them: all but the main one. One whose directory is gone,
+// which git prune would forget, is not one.
+func Worktrees(dir string) ([]string, error) {
+	out, err := run(dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for i, entry := range strings.Split(strings.TrimSpace(string(out)), "\n\n") {
+		path, ok := strings.CutPrefix(entry, "worktree ")
+		if i == 0 || !ok {
+			continue
+		}
+		path, _, _ = strings.Cut(path, "\n")
+		if strings.Contains("\n"+entry+"\n", "\nprunable") {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
 // AddWorktree adds a work tree at path to the repository of dir, on the
 // commit dir is on and on no branch: making one is up to whoever works there.
 func AddWorktree(dir, path string) error {
 	_, err := run(dir, "worktree", "add", "-q", "--detach", path)
 	return err
 }
+
+// IncludeFile names the file at the top of a work tree that lists, as a
+// .gitignore does, the files git ignores that a new worktree needs too, such
+// as .env. Claude Code reads the same file for the worktrees it makes.
+const IncludeFile = ".worktreeinclude"
+
+// Included lists the files of the work tree at root, relative to it and
+// sorted, that git ignores and IncludeFile names. A file git tracks, or one
+// it does not ignore, is not one: it is already in a worktree, or not meant
+// to be copied.
+func Included(root string) ([]string, error) {
+	list := filepath.Join(root, IncludeFile)
+	if _, err := os.Stat(list); err != nil {
+		return nil, nil
+	}
+	out, err := run(root, "ls-files", "-z", "--others", "--ignored", "--exclude-from="+list)
+	if err != nil {
+		return nil, err
+	}
+	named := strings.TrimSuffix(string(out), "\x00")
+	if named == "" {
+		return nil, nil
+	}
+
+	// Of those, the ones git ignores. It exits with 1 when there is none.
+	cmd := exec.Command("git", "-C", root, "check-ignore", "-z", "--stdin")
+	cmd.Stdin = strings.NewReader(named + "\x00")
+	out, err = cmd.Output()
+	if exit := (*exec.ExitError)(nil); err != nil && (!errors.As(err, &exit) || exit.ExitCode() != 1) {
+		return nil, fmt.Errorf("git check-ignore: %w", err)
+	}
+	var files []string
+	for p := range strings.SplitSeq(string(out), "\x00") {
+		if p != "" {
+			files = append(files, p)
+		}
+	}
+	slices.Sort(files)
+	return files, nil
+}
+
+// ErrLeftBehind is what RemoveWorktree fails with when git let go of the
+// work tree but could not delete all of it.
+var ErrLeftBehind = errors.New("git let go of the worktree, but some of it is left behind")
 
 // RemoveWorktree takes the work tree at path away from its repository. git
 // refuses when it holds changes that are not committed, and a branch it is on
@@ -476,21 +545,47 @@ func RemoveWorktree(path string) error {
 		return errors.New("not a git repository")
 	}
 	_, err := run(main, "worktree", "remove", path)
+	// git lets go of the work tree before it deletes the files: one it
+	// cannot delete leaves the rest behind, no longer a work tree.
+	if _, gone := Main(path); err != nil && !gone {
+		if _, serr := os.Stat(path); serr == nil {
+			return fmt.Errorf("%w: %w", ErrLeftBehind, err)
+		}
+	}
 	return err
+}
+
+// Undeletable returns a file in the tree at dir that cannot be deleted, as
+// one in a directory the user may not change, or "" when there is none.
+// Ignored files count too: removing a work tree deletes them.
+func Undeletable(dir string) string {
+	var found string
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() && unix.Access(path, unix.R_OK|unix.W_OK|unix.X_OK) != nil {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 // OnBranch reports whether every commit the work tree containing dir has
 // been on, as its reflog tells, is on a branch, so that none goes with the
 // work tree. A commit made on no branch and left by checking out another
-// one counts too.
+// one counts too. One a branch was on, as the reflog of the branch tells,
+// was left on purpose, by an amend or a rebase, and does not count.
 func OnBranch(dir string) bool {
 	out, err := run(dir, "log", "--walk-reflogs", "--format=%H", "HEAD")
 	if err != nil {
 		return false
 	}
+	// Without the reflogs of the branches, every commit counts.
+	left, _ := run(dir, "log", "--walk-reflogs", "--format=%H", "--branches")
+	was := strings.Fields(string(left))
 	commits := []string{"HEAD"}
 	for _, c := range strings.Fields(string(out)) {
-		if !slices.Contains(commits, c) {
+		if !slices.Contains(commits, c) && !slices.Contains(was, c) {
 			commits = append(commits, c)
 		}
 	}

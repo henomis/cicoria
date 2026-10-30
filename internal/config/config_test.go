@@ -17,6 +17,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/henomis/cicoria/internal/agent"
@@ -100,6 +101,11 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"unknown key":   `prefx = "ctrl+b"`,
 		"empty command": "[agents.x]\ncommand = []",
 		"bad syntax":    `prefix = `,
+		"no repo":       "[[worktree]]\nsetup = [\"make\"]",
+		"no setup":      "[[worktree]]\nrepo = \"/src/app\"",
+		"no ports":      "ports_per_session = 0",
+		"low ports":     "port_base = 80",
+		"too many":      "port_base = 65530",
 	} {
 		if _, err := Load(write(t, content)); err == nil {
 			t.Errorf("%s: Load accepted it", name)
@@ -126,6 +132,61 @@ func TestLoadWebAddress(t *testing.T) {
 		if _, err := Load(write(t, `web_address = "`+bad+`"`)); err == nil {
 			t.Errorf("web_address %q was accepted", bad)
 		}
+	}
+}
+
+func TestLoadPorts(t *testing.T) {
+	if cfg, err := Load(write(t, "")); err != nil || cfg.PortBase != 20000 || cfg.PortsPerSession != 10 {
+		t.Errorf("ports by default = %d, %d, %v", cfg.PortBase, cfg.PortsPerSession, err)
+	}
+	if cfg, err := Load(write(t, "port_base = 0")); err != nil || cfg.PortBase != 0 {
+		t.Errorf("port_base 0 = %d, %v", cfg.PortBase, err)
+	}
+	if cfg, err := Load(write(t, "port_base = 65535\nports_per_session = 1")); err != nil || cfg.PortBase != 65535 {
+		t.Errorf("the last port = %d, %v", cfg.PortBase, err)
+	}
+}
+
+func TestSetup(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	app := filepath.Join(home, "src", "app")
+	if err := os.MkdirAll(app, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "app")
+	if err := os.Symlink(app, link); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(write(t, "[[worktree]]\nrepo = \"~/src/app\"\nsetup = [\"npm\", \"ci\"]\n\n[[worktree]]\nrepo = \"/elsewhere\"\nteardown = [\"make\", \"down\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, main := range []string{app, app + "/", link} {
+		if got := cfg.Worktree(main).Setup; !slices.Equal(got, []string{"npm", "ci"}) {
+			t.Errorf("setup of %s = %v", main, got)
+		}
+	}
+	if got := cfg.Worktree("/elsewhere"); got.Setup != nil || !slices.Equal(got.Teardown, []string{"make", "down"}) {
+		t.Errorf("worktree with a teardown alone = %+v", got)
+	}
+	if got := cfg.Worktree(filepath.Join(home, "src", "other")); got.Setup != nil || got.Teardown != nil {
+		t.Errorf("worktree of another repository = %+v", got)
+	}
+}
+
+func TestLoadWorktreeDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := Load(write(t, `worktree_dir = "~/worktrees/"`))
+	if want := filepath.Join(home, "worktrees"); err != nil || cfg.WorktreeDir != want {
+		t.Errorf("worktree_dir = %q, %v; want %q", cfg.WorktreeDir, err, want)
+	}
+	if cfg, err := Load(write(t, "")); err != nil || cfg.WorktreeDir != "" {
+		t.Errorf("worktree_dir by default = %q, %v", cfg.WorktreeDir, err)
+	}
+	if _, err := Load(write(t, `worktree_dir = "worktrees"`)); err == nil {
+		t.Error("a relative worktree_dir was accepted")
 	}
 }
 

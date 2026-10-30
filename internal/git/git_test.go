@@ -15,6 +15,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -351,6 +352,11 @@ func TestWorktree(t *testing.T) {
 	if !OnBranch(path) {
 		t.Error("a commit on a branch is on none")
 	}
+	// One the branch left, by an amend, does not keep the work tree.
+	gitCmd(t, path, "commit", "-q", "--amend", "-m", "work again")
+	if !OnBranch(path) {
+		t.Error("a commit the branch was amended from keeps the work tree")
+	}
 	if err := RemoveWorktree(path); err != nil {
 		t.Fatal(err)
 	}
@@ -360,6 +366,106 @@ func TestWorktree(t *testing.T) {
 	// Its branch, and so the commit, stays.
 	if !Exists(dir, "fix") {
 		t.Error("the branch went with the work tree")
+	}
+}
+
+// The work trees of a repository are the ones added to it, seen from any of
+// them, and not one whose directory is gone.
+func TestWorktrees(t *testing.T) {
+	dir := repo(t)
+	if got, err := Worktrees(dir); err != nil || got != nil {
+		t.Errorf("worktrees of a repository without any = %v, %v", got, err)
+	}
+	a := filepath.Join(dir+".worktrees", "a")
+	b := filepath.Join(dir+".worktrees", "b")
+	for _, path := range []string{a, b} {
+		if err := AddWorktree(dir, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, from := range []string{dir, b} {
+		if got, err := Worktrees(from); err != nil || !slices.Equal(got, []string{a, b}) {
+			t.Errorf("worktrees from %s = %v, %v", from, got, err)
+		}
+	}
+	if err := os.RemoveAll(a); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Worktrees(dir); err != nil || !slices.Equal(got, []string{b}) {
+		t.Errorf("worktrees with one gone = %v, %v", got, err)
+	}
+	if _, err := Worktrees(t.TempDir()); err == nil {
+		t.Error("worktrees outside a repository")
+	}
+}
+
+// The files a worktree needs are the ignored ones the include file names,
+// and no others.
+func TestIncluded(t *testing.T) {
+	dir := repo(t)
+	if got, err := Included(dir); err != nil || got != nil {
+		t.Errorf("without an include file = %v, %v", got, err)
+	}
+
+	writeFile(t, dir, ".gitignore", "ignored/\n.env\n*.key\n")
+	writeFile(t, dir, IncludeFile, ".env\nconfig/\nkept.txt\nloose.txt\n")
+	writeFile(t, dir, ".env", "SECRET=1\n")
+	writeFile(t, dir, "secret.key", "x\n")
+	writeFile(t, dir, "loose.txt", "x\n")
+	writeFile(t, dir, "ignored/config/local.toml", "x\n")
+	writeFile(t, dir, "config/.env", "x\n")
+	got, err := Included(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// secret.key is ignored but not named, kept.txt is tracked, loose.txt
+	// is not ignored.
+	if want := []string{".env", "config/.env", "ignored/config/local.toml"}; !slices.Equal(got, want) {
+		t.Errorf("included = %v, want %v", got, want)
+	}
+
+	// Naming files that are not there gives none.
+	writeFile(t, dir, IncludeFile, "missing.txt\n")
+	if got, err := Included(dir); err != nil || got != nil {
+		t.Errorf("with nothing to include = %v, %v", got, err)
+	}
+}
+
+// A work tree with a file that cannot be deleted, ignored or not, is told
+// apart before removing it, and so is what a removal leaves behind.
+func TestWorktreeUndeletable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root may delete anything")
+	}
+	dir := repo(t)
+	writeFile(t, dir, ".gitignore", "build\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-q", "-m", "ignore")
+	path := filepath.Join(dir+".worktrees", "fix")
+	if err := AddWorktree(dir, path); err != nil {
+		t.Fatal(err)
+	}
+	if got := Undeletable(path); got != "" {
+		t.Errorf("undeletable in a new work tree: %q", got)
+	}
+	writeFile(t, path, "build/out/a.o", "x\n")
+	locked := filepath.Join(path, "build", "out")
+	if err := os.Chmod(locked, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if !Clean(path) {
+		t.Error("an ignored file is a change")
+	}
+	if got := Undeletable(path); got != locked {
+		t.Errorf("undeletable = %q, want %q", got, locked)
+	}
+	err := RemoveWorktree(path)
+	if !errors.Is(err, ErrLeftBehind) {
+		t.Fatalf("removing = %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Error("nothing is left behind")
 	}
 }
 

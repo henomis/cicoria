@@ -17,6 +17,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -323,7 +324,7 @@ func TestWorkspace(t *testing.T) {
 	w.see("▸ api/", "main.go")
 	w.line("ping")
 	w.see("got ping")
-	// 140 columns less the panels (28 + 36) and the border; 40 rows less the
+	// 140 columns less the panels (32 + 32) and the border; 40 rows less the
 	// status bar and the border.
 	w.line("size")
 	w.see("size 37 74")
@@ -995,8 +996,6 @@ func TestNotes(t *testing.T) {
 	// panel, where g alone would go to the top.
 	w.prefix('g')
 	w.see("Sessions")
-	w.prefix('o')
-	w.see("ctrl+a / finds a file now")
 
 	// In a file, several lines are selected first.
 	w.prefix('/')
@@ -1139,9 +1138,9 @@ func TestHidePanelsBySide(t *testing.T) {
 	w.prefix('[')
 	w.gone("Sessions")
 	w.see("Changes")
-	// The agent gets the room of the left panels: 140 less 36 and the border.
+	// The agent gets the room of the left panels: 140 less 32 and the border.
 	w.line("size")
-	w.see("size 37 102")
+	w.see("size 37 106")
 
 	w.prefix(']')
 	w.gone("Changes")
@@ -1229,7 +1228,7 @@ func TestNarrowTerminalKeepsTheSideOnScreen(t *testing.T) {
 	}
 	// The agent still has the keys, and its size.
 	w.line("size")
-	w.see("size 17 40")
+	w.see("size 17 42")
 	w.quit()
 }
 
@@ -1979,6 +1978,15 @@ func TestWorktree(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	// Of the files git ignores, the ones the include file names go into a
+	// worktree.
+	for name, content := range map[string]string{".gitignore": ".env\n*.key\n", ".worktreeinclude": ".env\n", ".env": "SECRET=1\n", "local.key": "x\n"} {
+		if err := os.WriteFile(filepath.Join(w.dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git(w.dir, "add", "-A")
+	git(w.dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "include")
 	head := git(w.dir, "rev-parse", "--short", "HEAD")
 
 	create := func() {
@@ -2000,6 +2008,12 @@ func TestWorktree(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(tree, "main.go")); err != nil {
 		t.Fatal(err)
 	}
+	if st, err := os.Stat(filepath.Join(tree, ".env")); err != nil || st.Mode().Perm() != 0o600 {
+		t.Errorf(".env in the worktree: %v, %v", st, err)
+	}
+	if _, err := os.Stat(filepath.Join(tree, "local.key")); err == nil {
+		t.Error("a file the include file does not name is in the worktree")
+	}
 
 	// What is changed there is not a change of the first session.
 	w.line("echo draft > draft.txt")
@@ -2015,10 +2029,11 @@ func TestWorktree(t *testing.T) {
 	w.prefix('2')
 	w.see("aider-1 · aider", head)
 
-	// One with work that is not committed outlives its session.
+	// One with work that is not committed outlives its session, when the
+	// agent is not asked to fix that.
 	w.prefix('x')
-	w.see("close aider-1 and stop its agent?")
-	w.typeText("y")
+	w.see("closing aider-1 keeps its worktree: it has changes that are not committed. ask its agent to fix that first?")
+	w.typeText("n")
 	w.see("worktree kept at", "it has changes that are not committed")
 	if _, err := os.Stat(tree); err != nil {
 		t.Fatal(err)
@@ -2067,11 +2082,296 @@ func TestWorktree(t *testing.T) {
 	git(tree, "add", "-A")
 	git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "work")
 	w.prefix('x')
-	w.see("close aider-1 and stop its agent?")
-	w.typeText("y")
+	w.see("closing aider-1 keeps its worktree: it has commits that are on no branch")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("worktree kept at", "it has commits that are on no branch")
 	if _, err := os.Stat(tree); err != nil {
 		t.Fatal(err)
+	}
+	w.quit()
+}
+
+// A worktree of a repository the settings give a setup for gets a shell
+// session that runs it, next to the agent. One that works closes, however
+// soon; one that fails stays as a shell in the worktree.
+func TestWorktreeSetup(t *testing.T) {
+	w := newWorkspace(t)
+	w.set("close_on_exit = false")
+	home := filepath.Dir(w.dir)
+	// The setup fails once there is a file named fail next to the project.
+	script := "test -e ../../fail && exit 3; echo ok > setup.txt"
+	f, err := os.OpenFile(filepath.Join(home, "config.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = fmt.Fprintf(f, "\n[[worktree]]\nrepo = %q\nsetup = [\"sh\", \"-c\", %q]\n", w.dir, script)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	create := func(name string) {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("aider")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("aider in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: ")
+		w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+		w.typeText(name)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(name + " · aider")
+	}
+
+	create("first")
+	w.see("first-setup exited")
+	w.gone("first-setup")
+	tree := filepath.Join(w.dir+".worktrees", "first")
+	if out, err := os.ReadFile(filepath.Join(tree, "setup.txt")); err != nil || string(out) != "ok\n" {
+		t.Errorf("setup.txt = %q, %v", out, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(home, "fail"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	create("second")
+	w.see("second-setup")
+	w.prefix('4')
+	w.see("cicoria: the setup failed with status 3; this shell is in the worktree")
+	w.line("pwd")
+	w.see("project.worktrees/second")
+	w.quit()
+}
+
+// Each session has ports of its own, kept across restarts, which the setup
+// of its worktree shares. The teardown runs before a worktree is removed,
+// and one that fails keeps it.
+func TestWorktreePorts(t *testing.T) {
+	w := newWorkspace(t)
+	home := filepath.Dir(w.dir)
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := l.Addr().(*net.TCPAddr).Port
+	_ = l.Close()
+	if base+10 > 65535 {
+		base -= 10
+	}
+	w.set(fmt.Sprintf("port_base = %d\nports_per_session = 2", base))
+	// Out of the worktree, which a file it does not ignore would keep.
+	setup := "echo $CICORIA_PORT > ../../port.txt"
+	down := "test -e ../../fail && { echo containers still up; exit 4; }; pwd > ../../torn.txt"
+	f, err := os.OpenFile(filepath.Join(home, "config.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = fmt.Fprintf(f, "\n[[worktree]]\nrepo = %q\nsetup = [\"sh\", \"-c\", %q]\nteardown = [\"sh\", \"-c\", %q]\n", w.dir, setup, down)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	// claude-1 has the first two ports, so a new session has the next.
+	port := fmt.Sprintf("port=%d", base+2)
+	create := func(name string) string {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("aider")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("aider in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: ")
+		w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+		w.typeText(name)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(name + " · aider")
+		w.see(name + "-setup exited")
+		w.gone(name + "-setup")
+		tree := filepath.Join(w.dir+".worktrees", name)
+		if out, err := os.ReadFile(filepath.Join(home, "port.txt")); err != nil || "port="+strings.TrimSpace(string(out)) != port {
+			t.Errorf("the setup had port %q, %v; want %s", out, err, port)
+		}
+		w.line("echo port=$((CICORIA_PORT))")
+		w.see(port)
+		return tree
+	}
+	closeIt := func(name string) {
+		t.Helper()
+		w.prefix('x')
+		w.see("close " + name + " and stop its agent?")
+		w.typeText("y")
+		w.see("remove the worktree")
+		w.typeText("y")
+	}
+
+	tree := create("first")
+	// A restart keeps the ports of a session.
+	w.quit()
+	w.launch(140, 40)
+	w.see("first · aider")
+	w.prefix('2')
+	w.line("clear; echo port=$((CICORIA_PORT))")
+	w.see(port)
+	closeIt("first")
+	w.see("removed the worktree")
+	if out, err := os.ReadFile(filepath.Join(home, "torn.txt")); err != nil || strings.TrimSpace(string(out)) != tree {
+		t.Errorf("the teardown ran in %q, %v; want %s", out, err, tree)
+	}
+
+	// The ports of a closed session are free again. A teardown that fails
+	// keeps the worktree.
+	if err := os.WriteFile(filepath.Join(home, "fail"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tree = create("second")
+	closeIt("second")
+	w.see("worktree kept at", "its teardown failed: exit status 4: containers still up")
+	if _, err := os.Stat(tree); err != nil {
+		t.Error(err)
+	}
+	w.quit()
+}
+
+// With worktree_dir set, worktrees go there, under the name of their
+// repository. The list of worktrees tells which can go, and removes those.
+func TestOldWorktrees(t *testing.T) {
+	w := newWorkspace(t)
+	trees := filepath.Join(filepath.Dir(w.dir), "trees")
+	w.set(fmt.Sprintf("worktree_dir = %q", trees))
+	w.launch(160, 40)
+	w.see("claude-1 · claude · idle")
+
+	create := func(name string) {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("aider")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("aider in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: ")
+		w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+		w.typeText(name)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(name+" · aider", "trees/project/"+name)
+	}
+
+	// One a session works in, one with work not committed, and one that
+	// can go.
+	create("busy")
+	create("dirty")
+	w.line("echo x > x.txt")
+	w.see("Changes (1)")
+	w.prefix('x')
+	w.see("closing dirty keeps its worktree")
+	w.typeText("n")
+	w.see("worktree kept at")
+	create("spare")
+	w.prefix('x')
+	w.see("close spare and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree")
+	w.typeText("n")
+	w.gone("remove the worktree")
+
+	w.prefix('o')
+	w.see("remove worktree ›", "spare can be removed", "dirty kept: has changes that are not committed", "busy busy works there")
+	w.typeText("spare")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("remove the worktree")
+	w.typeText("y")
+	w.see("removed the worktree")
+	if _, err := os.Stat(filepath.Join(trees, "project", "spare")); err == nil {
+		t.Error("the worktree is still there")
+	}
+
+	// One that must be kept is not removed.
+	w.prefix('o')
+	w.see("remove worktree ›")
+	w.gone("spare")
+	w.typeText("dirty")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("worktree kept at", "it has changes that are not committed")
+	if _, err := os.Stat(filepath.Join(trees, "project", "dirty")); err != nil {
+		t.Error(err)
+	}
+	w.quit()
+}
+
+// The agent of a session whose worktree closing would keep can be asked to
+// fix that first. The session stays open, and closing it again once the
+// worktree is fixed offers to remove it.
+func TestWorktreeFixedByAgent(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(160, 40)
+	w.see("claude-1 · claude · idle")
+	tree := filepath.Join(w.dir+".worktrees", "claude-2")
+	git := func(args ...string) {
+		t.Helper()
+		args = append([]string{"-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("claude")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("give this session a worktree of its own?")
+	w.typeText("y")
+	w.see("session name: claude-2")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("claude-2 · claude · idle", "project.worktrees/claude-2")
+	if err := os.WriteFile(filepath.Join(tree, "work.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Escape leaves the session open, and so does asking its agent, which
+	// gets told why.
+	w.prefix('x')
+	w.see("closing claude-2 keeps its worktree: it has changes that are not committed. ask its agent to fix that first?")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("ask its agent to fix that first?")
+	w.see("claude-2 · claude · idle")
+	w.prefix('x')
+	w.see("ask its agent to fix that first?")
+	w.typeText("y")
+	w.see("asked claude-2 to fix its worktree", "got This session is about to close")
+	w.line("stop")
+	w.see("claude-2 · claude · idle")
+
+	// Once the work is on a branch, closing again offers to remove it.
+	git("switch", "-q", "-c", "fix")
+	git("add", "-A")
+	git("commit", "-q", "-m", "work")
+	w.prefix('x')
+	w.see("close claude-2 and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree")
+	w.typeText("y")
+	w.see("removed the worktree")
+	if _, err := os.Stat(tree); err == nil {
+		t.Error("the worktree is still there")
 	}
 	w.quit()
 }

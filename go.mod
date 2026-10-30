@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/x/vt v0.0.0-20261011004359-2acd7e345453
 	github.com/creack/pty v1.1.24
 	github.com/yuin/goldmark v1.8.6
+	golang.org/x/sys v0.47.0
 	rsc.io/qr v0.2.0
 )
 
@@ -30,5 +31,4 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 )

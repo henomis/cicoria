@@ -67,6 +67,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `-` | Split: show another session below, or close the split |
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
+| `o` | Old worktrees: list them, and remove the ones that can go |
 | `v` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
@@ -106,11 +107,27 @@ A session is one agent working in one directory, so one cicoria can hold session
 
 The files and changes panels show the project of the session on screen, so two sessions in one git work tree cannot be told apart by their changes, and their agents write over each other. When you create a session where another one already works, cicoria asks whether to give it a [git worktree](https://git-scm.com/docs/git-worktree) of its own: `y` makes one, `n` or `enter` puts the session in the same directory and warns you, `esc` gives up. A `shell` is a way to run a command without leaving cicoria, not a session at work: it is not asked, opens in the directory you give it, and is no reason to offer the next session a worktree.
 
-The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on the commit the directory was on and on no branch: cicoria does not make one, so naming it is up to the agent or to you. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart.
+The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on the commit the directory was on and on no branch: cicoria does not make one, so naming it is up to the agent or to you. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart. With `worktree_dir` in the settings, worktrees go there instead, in a directory named after the repository: with `worktree_dir = "~/worktrees"`, `~/worktrees/app/fix-login`.
 
-Closing the session offers to remove the worktree. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, or with commits that are on no branch, is kept too: the status bar says where it is. Making a branch, and merging it, is up to you, or to an agent you ask.
+Closing the session offers to remove the worktree, once its agent has ended. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, with commits that are on no branch, or with files you cannot delete (such as a `node_modules` a container made as root) is kept too: the status bar says where it is. Files git ignores are deleted with the worktree.
 
-A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not copied to it. Claude Code asks whether it can trust the new folder, as it does for any.
+`ctrl+a o` lists the worktrees of the repository on screen, whoever made them, the ones that can go first: each says whether it can be removed, why it is kept, or which session works there. `enter` on one that can go asks before removing it, and what keeps a worktree is looked at again then.
+
+When closing a session would keep its worktree, cicoria asks instead whether its agent should fix that first. `y` tells the agent why the worktree cannot go and leaves the session open: close it again once the agent is done, and cicoria looks at the worktree again. `n` or `enter` closes the session and keeps the worktree, `esc` leaves the session open. Making a branch, and merging it, is up to you, or to the agent.
+
+A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not in it. The ones it needs can be named in a `.worktreeinclude` file at the top of the project, written as a `.gitignore` is, the file Claude Code reads for its own worktrees: of the files git ignores, cicoria copies the ones it names into each worktree it makes. A file git tracks, or one it does not ignore, is never copied. The copies are the worktree's own, so the agent changes none of the originals. Claude Code asks whether it can trust the new folder, as it does for any.
+
+```gitignore
+# .worktreeinclude
+.env
+config/local.toml
+```
+
+What is installed rather than copied, such as `node_modules`, is the work of a setup the settings give for the repository (see [Configure](#configure)). cicoria runs it in each worktree it makes from that repository, in a shell session named after the session with `-setup` at the end, next to the agent, which does not wait for it. The shell session closes once the setup works; when it fails, it stays as a shell in the worktree, to read what went wrong and fix it. The setup is in your settings, never in the project, so a repository you clone cannot run a command of its own.
+
+A `teardown` in the same settings runs in a worktree before cicoria removes it, such as `docker compose down`. When it fails, or takes more than two minutes, the worktree is kept, and the status bar says why.
+
+Each session has 10 ports of its own, so that the dev servers of two worktrees do not fight over one: the first is in `CICORIA_PORT`, for the agent and for the setup of its worktree, which can write it where the project reads its port. Sessions take ranges from 20000 up, skipping one where a program listens already, and a session keeps its range after a restart. `port_base` and `ports_per_session` change that, and `port_base = 0` gives sessions no ports.
 
 ### Two sessions on screen
 
@@ -208,6 +225,9 @@ ignored_files = true     # false opens with the files git ignores left out of th
 close_on_exit = true     # false keeps a session whose agent has exited, to restart or close by hand
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 web_address = "0.0.0.0:0"  # where the web cockpit listens: every address, a free port; "127.0.0.1:0" keeps it to this machine
+port_base = 20000        # the first port given to sessions, in CICORIA_PORT; 0 gives none
+ports_per_session = 10   # how many ports each session has to itself
+worktree_dir = ""        # where worktrees go, as ~/worktrees/<repository>/<session>; "" puts them next to the repository
 
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.
@@ -225,6 +245,14 @@ command = ["ollama", "launch", "copilot", "--model", "gemma4:cloud", "--"]
 
 [agents.codex]
 command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]
+
+# What to run in each worktree made from a repository, by its main
+# work tree; ~ is the home directory. One [[worktree]] per repository,
+# with a setup, a teardown or both.
+[[worktree]]
+repo = "~/src/app"
+setup = ["npm", "ci"]
+teardown = ["docker", "compose", "down"]
 ```
 
 A plain `shell` is always available as a session type.

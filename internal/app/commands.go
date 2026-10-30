@@ -15,13 +15,16 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -58,6 +61,7 @@ func init() {
 		{"-", "Split: show another session below, or close the split", (*Model).askSplit, false},
 		{"tab", "Go to the other pane of the split", (*Model).focusOther, false},
 		{"w", "Open another workspace…", (*Model).askWorkspace, false},
+		{"o", "Old worktrees: remove the ones that can go…", (*Model).askWorktrees, false},
 		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
@@ -99,11 +103,6 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 		if c.key == key {
 			return m.runCommand(c.keepsView, c.run)
 		}
-	}
-	// Finding a file was on o until v0.0.6: say where it went for a while.
-	if key == "o" {
-		m.say(fmt.Sprintf("%s / finds a file now", m.cfg.Prefix))
-		return nil
 	}
 	m.say(fmt.Sprintf("%s %s is not a command (%s ? for help)", m.cfg.Prefix, key, m.cfg.Prefix))
 	return nil
@@ -299,13 +298,21 @@ func (m *Model) toggleSide(hide *bool) tea.Cmd {
 // dir and puts it on screen. With worktree, the session works in a git
 // worktree of its own instead, made for it from the commit dir is on.
 func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea.Cmd {
-	made := ""
+	made, problem := "", ""
+	var setup *session.Session
 	if worktree {
+		src := dir
+		main, _ := git.Main(src)
 		var err error
-		if made, dir, err = addWorktree(name, dir); err != nil {
+		if made, dir, err = addWorktree(m.cfg.WorktreeDir, name, dir); err != nil {
 			m.say(err.Error())
 			return nil
 		}
+		// The session starts without a file that could not be copied.
+		if err := copyIncluded(src, made); err != nil {
+			problem = err.Error()
+		}
+		setup = m.setupSession(name, main, made)
 	}
 	// One session to a directory is how the panels tell whose work is whose.
 	// A shell does no work of its own.
@@ -318,15 +325,48 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 			break
 		}
 	}
+	if problem != "" {
+		m.say(problem)
+	}
 	s := session.New(session.NewID(), name, dir, a)
 	s.Worktree = made
+	s.Port = m.freePorts()
 	s.Base, _ = git.Head(dir)
 	s.Uncommitted = m.cfg.Changes != config.ChangesSession
 	m.sessions = append(m.sessions, s)
+	i := len(m.sessions) - 1
+	cmds := []tea.Cmd{m.start(s)}
+	// The agent does not wait for the setup: both are in sight.
+	if setup != nil {
+		// The setup has the agent's ports, to write the port where the
+		// project reads it.
+		setup.Port = s.Port
+		m.sessions = append(m.sessions, setup)
+		cmds = append(cmds, m.start(setup))
+	}
 	// The session list grew, which can change the size of the panes.
 	m.resize()
 	m.play(ui.Liftoff, "launching "+s.Name, nil)
-	return tea.Batch(m.start(s), m.switchTo(len(m.sessions)-1))
+	return tea.Batch(append(cmds, m.switchTo(i))...)
+}
+
+// setupScript runs the command line it is given and, when it fails, leaves
+// a shell where it ran, so that what went wrong can be read and fixed.
+const setupScript = `"$@" || { printf '\ncicoria: the setup failed with status %s; this shell is in the worktree\n' "$?"; exec "${SHELL:-sh}"; }`
+
+// setupSession returns a shell session, named after the session given the
+// worktree at top, that runs there the setup the settings give for the
+// worktrees of the repository whose main work tree is main. It is nil when
+// they give none.
+func (m *Model) setupSession(name, main, top string) *session.Session {
+	argv := m.cfg.Worktree(main).Setup
+	if argv == nil {
+		return nil
+	}
+	a := agent.NewGeneric(config.Shell, append([]string{"sh", "-c", setupScript, "setup"}, argv...))
+	s := session.New(session.NewID(), name+"-setup", top, a)
+	s.Setup = true
+	return s
 }
 
 // askDir asks where a new session for an agent should work, offering the
@@ -398,33 +438,37 @@ func slug(name string) string {
 	return notSlug.ReplaceAllString(name, "-")
 }
 
-// worktreeOf returns where the worktree of a session of that name goes,
-// next to the main work tree of its repository.
-func worktreeOf(main, name string) string {
+// worktreeOf returns where the worktree of a session of that name goes:
+// in base, in a directory named after the main work tree of its repository,
+// or next to that work tree when base is "".
+func worktreeOf(base, main, name string) string {
+	if base != "" {
+		return filepath.Join(base, filepath.Base(main), slug(name))
+	}
 	return filepath.Join(main+".worktrees", slug(name))
 }
 
 // worktreeFree reports whether a session of that name can have a worktree
 // in the repository of dir: one that was made before may still be there.
-func worktreeFree(name, dir string) bool {
+func worktreeFree(base, name, dir string) bool {
 	main, ok := git.Main(dir)
 	if !ok {
 		return true
 	}
-	_, err := os.Stat(worktreeOf(main, name))
+	_, err := os.Stat(worktreeOf(base, main, name))
 	return err != nil
 }
 
-// addWorktree makes a git worktree named after a session, next to the
-// repository of dir, on the commit dir is on and on no branch. It returns the top of the
-// worktree and the directory in it that stands for dir.
-func addWorktree(name, dir string) (top, in string, err error) {
+// addWorktree makes a git worktree named after a session, where worktreeOf
+// puts it, on the commit dir is on and on no branch. It returns the top of
+// the worktree and the directory in it that stands for dir.
+func addWorktree(base, name, dir string) (top, in string, err error) {
 	root, ok := git.Root(dir)
 	main, isMain := git.Main(dir)
 	if !ok || !isMain {
 		return "", "", errors.New("not a git repository")
 	}
-	top = worktreeOf(main, name)
+	top = worktreeOf(base, main, name)
 	if _, err := os.Stat(top); err == nil {
 		return "", "", fmt.Errorf("a worktree named %s already exists", slug(name))
 	}
@@ -441,33 +485,165 @@ func addWorktree(name, dir string) (top, in string, err error) {
 	return top, in, nil
 }
 
-// askRemoveWorktree offers to remove the worktree that was made for a
-// session that is now closed. One that holds work not committed is kept, so
-// is one whose commits are on no branch, and so is one another session
-// works in.
-func (m *Model) askRemoveWorktree(path string) {
-	if _, err := os.Stat(path); path == "" || err != nil {
-		return
+// copyIncluded copies into the worktree at top the files git ignores that
+// the work tree of dir names in its include file, such as .env: git does not
+// put them in a worktree. They are copies, so the agent changes none of the
+// originals. It goes on past a file it cannot copy, and names the first.
+func copyIncluded(dir, top string) error {
+	root, ok := git.Root(dir)
+	if !ok {
+		return nil
 	}
-	for _, s := range m.sessions {
-		if rel, err := filepath.Rel(path, s.Dir); err == nil && filepath.IsLocal(rel) {
-			return
+	files, err := git.Included(root)
+	if err != nil {
+		return err
+	}
+	var first error
+	for _, f := range files {
+		if err := copyFile(filepath.Join(root, f), filepath.Join(top, f)); err != nil && first == nil {
+			first = fmt.Errorf("could not copy %s into the worktree: %w", f, err)
 		}
 	}
-	if !git.Clean(path) {
-		m.say("worktree kept at " + tilde(path) + ": it has changes that are not committed")
-		return
+	return first
+}
+
+// copyFile copies the file at src to dst, with its permissions, making the
+// directories it goes in. A symbolic link is copied as one.
+func copyFile(src, dst string) error {
+	st, err := os.Lstat(src)
+	if err != nil {
+		return err
 	}
-	if !git.OnBranch(path) {
-		m.say("worktree kept at " + tilde(path) + ": it has commits that are on no branch")
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	if st.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(src)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(target, dst)
+	}
+	if !st.Mode().IsRegular() {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, st.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// askRemoveWorktree checks, once the agent of a closed session has ended,
+// whether the worktree that was made for it can go. One another session
+// works in is kept.
+func (m *Model) askRemoveWorktree(path string) tea.Cmd {
+	if _, err := os.Stat(path); path == "" || err != nil || m.worksIn(path, nil) {
+		return nil
+	}
+	return func() tea.Msg { return worktreeMsg{path, keepWorktree(path)} }
+}
+
+// offerRemoveWorktree asks whether to remove the worktree at path, unless
+// it must be kept. It is checked again once the answer is yes, for the
+// question may wait a long time.
+func (m *Model) offerRemoveWorktree(path, kept string) {
+	switch {
+	case m.worksIn(path, nil):
+		return
+	case kept != "":
+		m.say("worktree kept at " + tilde(path) + ": " + kept)
+		return
+	case m.confirm != nil:
+		// Another question is not pushed away.
+		m.say("worktree kept at " + tilde(path))
 		return
 	}
 	m.confirm = &confirm{
 		question: fmt.Sprintf("remove the worktree %s?", tilde(path)),
 		yes: func() tea.Cmd {
-			return func() tea.Msg { return removedMsg{path, git.RemoveWorktree(path)} }
+			cfg := m.cfg
+			return func() tea.Msg {
+				if kept := keepWorktree(path); kept != "" {
+					return worktreeMsg{path, kept}
+				}
+				if kept := teardown(cfg, path); kept != "" {
+					return worktreeMsg{path, kept}
+				}
+				return removedMsg{path, git.RemoveWorktree(path)}
+			}
 		},
 	}
+}
+
+// teardownTimeout is how long the teardown of a worktree can take before
+// it is stopped, and the worktree kept.
+const teardownTimeout = 2 * time.Minute
+
+// teardown runs in the worktree at path the teardown cfg gives for the
+// worktrees of its repository. It says why the worktree must be kept when
+// the teardown fails, or "" when it worked or there is none.
+func teardown(cfg config.Config, path string) string {
+	main, _ := git.Main(path)
+	argv := cfg.Worktree(main).Teardown
+	if argv == nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), teardownTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = path
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return ""
+	}
+	// The last line it wrote mostly tells what went wrong.
+	if last := lastLine(string(out)); last != "" {
+		err = fmt.Errorf("%w: %s", err, last)
+	}
+	return "its teardown failed: " + err.Error()
+}
+
+// lastLine returns the last line of out that is not blank.
+func lastLine(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+// worksIn reports whether a session other than except works in the
+// worktree at path.
+func (m *Model) worksIn(path string, except *session.Session) bool {
+	for _, s := range m.sessions {
+		if rel, err := filepath.Rel(path, s.Dir); s != except && err == nil && filepath.IsLocal(rel) {
+			return true
+		}
+	}
+	return false
+}
+
+// keepWorktree says why the worktree at path must be kept, or "" when it
+// can go: when it holds work not committed, commits on no branch, or files
+// that removing it would fail to delete.
+func keepWorktree(path string) string {
+	if !git.Clean(path) {
+		return "it has changes that are not committed"
+	}
+	if !git.OnBranch(path) {
+		return "it has commits that are on no branch"
+	}
+	if f := git.Undeletable(path); f != "" {
+		return "it has files you cannot delete, in " + tilde(f)
+	}
+	return ""
 }
 
 // askName asks what to call a new session, offering a name that is free.
@@ -476,7 +652,7 @@ func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
 	// The name of a worktree that is still there is not offered again.
 	var free func(string) bool
 	if worktree {
-		free = func(name string) bool { return worktreeFree(name, dir) }
+		free = func(name string) bool { return worktreeFree(m.cfg.WorktreeDir, name, dir) }
 	}
 	p := &prompt{input: ui.Input{Prompt: "session name: "}}
 	p.input.Set(m.newName(a, free))
@@ -558,6 +734,8 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askMessage(ask(v))
 	case workspace:
 		return m.askOpen(v)
+	case oldWorktree:
+		m.chooseWorktree(v)
 	case string:
 		m.tree().Reveal(v)
 		m.showFile(v)
@@ -615,12 +793,64 @@ func (m *Model) askClose() tea.Cmd {
 	if s.Status == agent.Exited && len(s.Queue) == 0 {
 		return closeIt()
 	}
-	question := fmt.Sprintf("close %s and stop its agent?", s.Name)
-	if n := len(s.Queue); n > 0 {
-		question = fmt.Sprintf("close %s, stop its agent and drop %d queued message(s)?", s.Name, n)
+	// An agent that is still there can be asked to fix a worktree that
+	// closing would keep.
+	if path := s.Worktree; path != "" && s.Status != agent.Exited && !m.worksIn(path, s) {
+		return func() tea.Msg { return closingMsg{id, keepWorktree(path)} }
 	}
-	m.confirm = &confirm{question: question, yes: closeIt}
+	m.askCloseWith(id, "")
 	return nil
+}
+
+// askCloseWith asks whether to close the session. When kept says why its
+// worktree would be kept, it asks instead whether its agent should fix that
+// first: no closes it all the same, and closing again once the agent is
+// done looks at the worktree again.
+func (m *Model) askCloseWith(id, kept string) {
+	s, _ := m.byID(id)
+	if s == nil {
+		return
+	}
+	closeIt := func() tea.Cmd {
+		if s, i := m.byID(id); s != nil {
+			return m.closeSession(i)
+		}
+		return nil
+	}
+	if kept == "" {
+		question := fmt.Sprintf("close %s and stop its agent?", s.Name)
+		if n := len(s.Queue); n > 0 {
+			question = fmt.Sprintf("close %s, stop its agent and drop %d queued message(s)?", s.Name, n)
+		}
+		m.confirm = &confirm{question: question, yes: closeIt}
+		return
+	}
+	question := fmt.Sprintf("closing %s keeps its worktree: %s. ask its agent to fix that first?", s.Name, kept)
+	if n := len(s.Queue); n > 0 {
+		question = fmt.Sprintf("closing %s drops %d queued message(s) and keeps its worktree: %s. ask its agent to fix that first?", s.Name, n, kept)
+	}
+	m.confirm = &confirm{
+		question: question,
+		yes: func() tea.Cmd {
+			s, _ := m.byID(id)
+			if s == nil {
+				return nil
+			}
+			m.say("asked " + s.Name + " to fix its worktree: close it again once it is done")
+			return m.enqueue(s, session.Message{Text: fixPrompt(s.Worktree, kept)})
+		},
+		no: closeIt,
+	}
+}
+
+// fixPrompt asks an agent to make its worktree safe to remove, saying why
+// it is not.
+func fixPrompt(path, kept string) string {
+	return fmt.Sprintf("This session is about to close, and cicoria removes its git worktree %s then. "+
+		"It cannot do so now: %s. Make the worktree safe to remove without losing any work, "+
+		"for example by committing changes or by putting commits on a branch. "+
+		"Do not discard or delete work to get there. "+
+		"If you cannot fix it, explain why and tell me what to do.", path, kept)
 }
 
 func (m *Model) closeSession(i int) tea.Cmd {
@@ -632,7 +862,6 @@ func (m *Model) closeSession(i int) tea.Cmd {
 		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
 	}
 	closed := m.sessions[i]
-	made := closed.Worktree
 	m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
 	if m.active > i || m.active >= len(m.sessions) {
 		m.active = max(m.active-1, 0)
@@ -645,9 +874,9 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	m.resize()
 	m.seen()
 	m.save()
-	m.askRemoveWorktree(made)
 	// The agent is given a moment to end, which is not for the screen to
-	// wait for. Quitting in that moment waits for it.
+	// wait for. Quitting in that moment waits for it. Its worktree is
+	// looked at once it has ended, for it may still write there.
 	m.stopping = append(m.stopping, closed)
 	stop := func() tea.Msg { closed.Close(); return stoppedMsg{closed} }
 	return tea.Batch(stop, m.showProject())

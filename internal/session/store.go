@@ -42,6 +42,8 @@ type Saved struct {
 	Base string `json:"base,omitempty"`
 	// Worktree is the git worktree that was made for the session, if any.
 	Worktree string `json:"worktree,omitempty"`
+	// Port is the first of the ports the session has to itself.
+	Port int `json:"port,omitempty"`
 	// Notes are the remarks on code not yet sent to the agent.
 	Notes []Note `json:"notes,omitempty"`
 	// Queue and Paused are the messages waiting to be sent and whether they

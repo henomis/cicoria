@@ -55,6 +55,9 @@ type Session struct {
 	// Worktree is the top of the git worktree that was made for the session,
 	// when one was: what to offer to remove when the session is closed.
 	Worktree string
+	// Port is the first of the ports the session has to itself, or 0 when
+	// it has none.
+	Port int
 	// Uncommitted narrows the changes shown to what is not committed. It
 	// starts as the settings say.
 	Uncommitted bool
@@ -87,6 +90,9 @@ type Session struct {
 	Answer string
 	// Web says the session is shared in the web cockpit.
 	Web bool
+	// Setup says the session runs the setup of a worktree: it closes when
+	// its command ends, however soon. It is not remembered.
+	Setup bool
 
 	// Answering is the question of another session the agent is working on:
 	// what it says at the end of its turn goes back there.
@@ -234,7 +240,7 @@ func (s *Session) Start(o agent.LaunchOpts, width, height int) error {
 		s.Term = nil
 	}
 
-	o.SessionID, o.Dir, o.Resume = s.ID, s.Dir, s.Conversation
+	o.SessionID, o.Dir, o.Resume, o.Port = s.ID, s.Dir, s.Conversation, s.Port
 	t, err := term.Start(s.Adapter.Command(o), width, height)
 	s.Err = err
 	if err != nil {
