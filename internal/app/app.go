@@ -253,11 +253,12 @@ type (
 		setups []*session.Session
 	}
 	// worktreeMsg reports why the worktree of a closed session must be
-	// kept, or that it can go when kept is "".
-	worktreeMsg struct{ path, kept string }
-	// closingMsg reports why closing the session would keep its worktree,
-	// or "" when it would not.
-	closingMsg struct{ id, kept string }
+	// kept, or that it can go when kept is "". lost says that what keeps
+	// it is work that removing it would lose.
+	worktreeMsg struct {
+		path, kept string
+		lost       bool
+	}
 )
 
 // New returns a workspace opened on dir, with the sessions it had last time.
@@ -720,10 +721,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.showWorktrees(msg)
 
 	case worktreeMsg:
-		m.offerRemoveWorktree(msg.path, msg.kept)
-
-	case closingMsg:
-		m.askCloseWith(msg.id, msg.kept)
+		m.offerRemoveWorktree(msg)
 
 	case submitMsg:
 		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term && s.Status != agent.Exited {

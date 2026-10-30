@@ -165,7 +165,7 @@ func (m *Model) chooseWorktree(w oldWorktree) {
 	case w.user != "":
 	case w.kept == "":
 		// Whether it can go is looked at again once the answer is yes.
-		add("Remove", "", func(m *Model) tea.Cmd { m.offerRemoveWorktree(w.path, ""); return nil })
+		add("Remove", "", func(m *Model) tea.Cmd { m.offerRemoveWorktree(worktreeMsg{path: w.path}); return nil })
 	case w.lost != "":
 		add("Remove anyway", strings.TrimPrefix(w.lost, "it ")+", lost with it",
 			func(m *Model) tea.Cmd { m.offerDiscardWorktree(w.path, w.lost); return nil })
@@ -198,19 +198,21 @@ func (m *Model) askSessionIn(dir string, shell bool) tea.Cmd {
 }
 
 // offerDiscardWorktree asks whether to remove the worktree at path with the
-// work it holds, which lost says.
+// work it holds, which lost says, and keeps it on a no.
 func (m *Model) offerDiscardWorktree(path, lost string) {
 	if s := m.workingIn(path); s != nil {
 		m.say(s.Name + " works in " + tilde(path) + ": close it first")
 		return
 	}
 	m.confirm = &confirm{
-		question: fmt.Sprintf("remove the worktree %s anyway? %s, and they go with it", tilde(path), lost),
+		// The question comes first: the reason can go past the status bar.
+		question: fmt.Sprintf("remove the worktree %s anyway? %s, lost with it", filepath.Base(path), lost),
+		no:       func() tea.Cmd { m.say(keptAt(path, lost)); return nil },
 		yes: func() tea.Cmd {
 			cfg := m.cfg
 			return func() tea.Msg {
 				if kept := teardown(cfg, path); kept != "" {
-					return worktreeMsg{path, kept}
+					return worktreeMsg{path: path, kept: kept}
 				}
 				return removedMsg{path, git.DiscardWorktree(path)}
 			}
