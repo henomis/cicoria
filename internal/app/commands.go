@@ -63,7 +63,7 @@ func init() {
 		{"-", "Split: show another session below, or close the split", (*Model).askSplit, false},
 		{"tab", "Go to the other pane of the split", (*Model).focusOther, false},
 		{"w", "Open another workspace…", (*Model).askWorkspace, false},
-		{"o", "Old worktrees: remove the ones that can go…", (*Model).askWorktrees, false},
+		{"o", "Worktrees: open a session in one, or remove it…", (*Model).askWorktrees, false},
 		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
@@ -664,14 +664,23 @@ func (m *Model) setupsOf(s *session.Session) []*session.Session {
 // can go: when it holds work not committed, commits on no branch, or files
 // that removing it would fail to delete.
 func keepWorktree(path string) string {
+	if lost := unsaved(path); lost != "" {
+		return lost
+	}
+	if f := git.Undeletable(path); f != "" {
+		return "it has files you cannot delete, in " + tilde(f)
+	}
+	return ""
+}
+
+// unsaved says what work removing the worktree at path would lose, or ""
+// when there is none.
+func unsaved(path string) string {
 	if !git.Clean(path) {
 		return "it has changes that are not committed"
 	}
 	if !git.OnBranch(path) {
 		return "it has commits that are on no branch"
-	}
-	if f := git.Undeletable(path); f != "" {
-		return "it has files you cannot delete, in " + tilde(f)
 	}
 	return ""
 }
@@ -766,6 +775,10 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askOpen(v)
 	case oldWorktree:
 		m.chooseWorktree(v)
+	case worktreeAction:
+		return v.run(m)
+	case sessionIn:
+		return m.askWorktree(v.a, v.dir)
 	case string:
 		m.tree().Reveal(v)
 		m.showFile(v)

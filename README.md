@@ -67,7 +67,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `-` | Split: show another session below, or close the split |
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
-| `o` | Old worktrees: list them, and remove the ones that can go |
+| `o` | Worktrees: list them, open a session or a shell in one, or remove it |
 | `v` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
@@ -111,7 +111,7 @@ The worktree is named after the session: for a session `fix-login` on `~/src/app
 
 Closing the session offers to remove the worktree, once its agent has ended. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, with commits that are on no branch, or with files you cannot delete (such as a `node_modules` a container made as root) is kept too: the status bar says where it is. Files git ignores are deleted with the worktree.
 
-`ctrl+a o` lists the worktrees of the repository on screen, whoever made them, the ones that can go first: each says whether it can be removed, why it is kept, or which session works there. `enter` on one that can go asks before removing it, and what keeps a worktree is looked at again then.
+`ctrl+a o` lists the worktrees of the repository on screen, whoever made them, the ones that can go first: each says whether it can be removed, why it is kept, or which session works there. `enter` on one offers what can be done with it: go to the session that works there, start a new session there, such as an agent to commit or branch what a kept worktree holds, open a shell there, or remove it. Removing one that can go asks first, and what keeps it is looked at again then. One kept for changes that are not committed or commits on no branch can be removed anyway: cicoria says what is lost and asks first, and its teardown still runs. One kept for files you cannot delete cannot be removed from cicoria.
 
 When closing a session would keep its worktree, cicoria asks instead whether its agent should fix that first. `y` tells the agent why the worktree cannot go and leaves the session open: close it again once the agent is done, and cicoria looks at the worktree again. `n` or `enter` closes the session and keeps the worktree, `esc` leaves the session open. Making a branch, and merging it, is up to you, or to the agent.
 
