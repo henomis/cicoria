@@ -351,6 +351,11 @@ func TestWorktree(t *testing.T) {
 	if !OnBranch(path) {
 		t.Error("a commit on a branch is on none")
 	}
+	// One the branch left, by an amend, does not keep the work tree.
+	gitCmd(t, path, "commit", "-q", "--amend", "-m", "work again")
+	if !OnBranch(path) {
+		t.Error("a commit the branch was amended from keeps the work tree")
+	}
 	if err := RemoveWorktree(path); err != nil {
 		t.Fatal(err)
 	}
