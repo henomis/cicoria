@@ -15,8 +15,12 @@
 package app
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -32,13 +36,32 @@ func TestTeardownTimeout(t *testing.T) {
 	defer func(d time.Duration) { teardownTimeout = d }(teardownTimeout)
 	teardownTimeout = 200 * time.Millisecond
 	// The sleep is a program the shell starts, and holds its output open.
-	cfg := config.Config{Worktrees: []config.WorktreeConfig{{Repo: dir, Teardown: []string{"sh", "-c", "sleep 30; true"}}}}
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	script := "sleep 30 & echo $! > " + pidFile + "; wait"
+	cfg := config.Config{Worktrees: []config.WorktreeConfig{{Repo: dir, Teardown: []string{"sh", "-c", script}}}}
 	start := time.Now()
 	kept := teardown(cfg, dir)
-	if d := time.Since(start); d > 5*time.Second {
+	// Waiting for the output to close would take the WaitDelay of a second
+	// more: stopping the whole group closes it at once.
+	if d := time.Since(start); d >= time.Second {
 		t.Errorf("the teardown was stopped after %s", d)
 	}
 	if !strings.Contains(kept, "took more than") {
 		t.Errorf("teardown = %q, want it kept for taking too long", kept)
+	}
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The sleep is gone once whatever adopted it has reaped it.
+	for deadline := time.Now().Add(2 * time.Second); syscall.Kill(pid, 0) == nil; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+			t.Fatalf("the sleep the teardown started, %d, is still running", pid)
+		}
 	}
 }

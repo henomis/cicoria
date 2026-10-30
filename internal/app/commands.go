@@ -859,10 +859,18 @@ func (m *Model) askCloseWith(id, kept string) {
 		m.confirm = &confirm{question: question, yes: closeIt}
 		return
 	}
-	question := fmt.Sprintf("closing %s keeps its worktree: %s. ask its agent to fix that first?", s.Name, kept)
-	if n := len(s.Queue); n > 0 {
-		question = fmt.Sprintf("closing %s drops %d queued message(s) and keeps its worktree: %s. ask its agent to fix that first?", s.Name, n, kept)
+	var loses []string
+	if len(m.setupsOf(s)) > 0 {
+		loses = append(loses, "stops its setup")
 	}
+	if n := len(s.Queue); n > 0 {
+		loses = append(loses, fmt.Sprintf("drops %d queued message(s)", n))
+	}
+	lead := ""
+	if len(loses) > 0 {
+		lead = strings.Join(loses, ", ") + " and "
+	}
+	question := fmt.Sprintf("closing %s %skeeps its worktree: %s. ask its agent to fix that first?", s.Name, lead, kept)
 	m.confirm = &confirm{
 		question: question,
 		yes: func() tea.Cmd {

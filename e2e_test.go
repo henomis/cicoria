@@ -2267,6 +2267,18 @@ func TestWorktreePorts(t *testing.T) {
 	w.typeText("third")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("third · aider", "third-setup")
+	// The question that offers a fix says the setup closes too.
+	wip := filepath.Join(w.dir+".worktrees", "third", "wip.txt")
+	if err := os.WriteFile(wip, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.prefix('x')
+	w.see("closing third stops its setup and keeps its worktree: it has changes that are not committed. ask its agent to fix that first?")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("ask its agent to fix that first?")
+	if err := os.Remove(wip); err != nil {
+		t.Fatal(err)
+	}
 	w.prefix('x')
 	w.see("close third and stop its agent and the setup of its worktree?")
 	w.typeText("y")
