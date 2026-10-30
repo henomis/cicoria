@@ -27,6 +27,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // maxWalk bounds how many files are listed outside of a repository, and how
@@ -467,6 +469,10 @@ func AddWorktree(dir, path string) error {
 	return err
 }
 
+// ErrLeftBehind is what RemoveWorktree fails with when git let go of the
+// work tree but could not delete all of it.
+var ErrLeftBehind = errors.New("git let go of the worktree, but some of it is left behind")
+
 // RemoveWorktree takes the work tree at path away from its repository. git
 // refuses when it holds changes that are not committed, and a branch it is on
 // is left alone.
@@ -476,7 +482,29 @@ func RemoveWorktree(path string) error {
 		return errors.New("not a git repository")
 	}
 	_, err := run(main, "worktree", "remove", path)
+	// git lets go of the work tree before it deletes the files: one it
+	// cannot delete leaves the rest behind, no longer a work tree.
+	if _, gone := Main(path); err != nil && !gone {
+		if _, serr := os.Stat(path); serr == nil {
+			return fmt.Errorf("%w: %w", ErrLeftBehind, err)
+		}
+	}
 	return err
+}
+
+// Undeletable returns a file in the tree at dir that cannot be deleted, as
+// one in a directory the user may not change, or "" when there is none.
+// Ignored files count too: removing a work tree deletes them.
+func Undeletable(dir string) string {
+	var found string
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() && unix.Access(path, unix.R_OK|unix.W_OK|unix.X_OK) != nil {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 // OnBranch reports whether every commit the work tree containing dir has

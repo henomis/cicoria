@@ -441,33 +441,69 @@ func addWorktree(name, dir string) (top, in string, err error) {
 	return top, in, nil
 }
 
-// askRemoveWorktree offers to remove the worktree that was made for a
-// session that is now closed. One that holds work not committed is kept, so
-// is one whose commits are on no branch, and so is one another session
-// works in.
-func (m *Model) askRemoveWorktree(path string) {
-	if _, err := os.Stat(path); path == "" || err != nil {
+// askRemoveWorktree checks, once the agent of a closed session has ended,
+// whether the worktree that was made for it can go. One another session
+// works in is kept.
+func (m *Model) askRemoveWorktree(path string) tea.Cmd {
+	if _, err := os.Stat(path); path == "" || err != nil || m.worksIn(path, nil) {
+		return nil
+	}
+	return func() tea.Msg { return worktreeMsg{path, keepWorktree(path)} }
+}
+
+// offerRemoveWorktree asks whether to remove the worktree at path, unless
+// it must be kept. It is checked again once the answer is yes, for the
+// question may wait a long time.
+func (m *Model) offerRemoveWorktree(path, kept string) {
+	switch {
+	case m.worksIn(path, nil):
 		return
-	}
-	for _, s := range m.sessions {
-		if rel, err := filepath.Rel(path, s.Dir); err == nil && filepath.IsLocal(rel) {
-			return
-		}
-	}
-	if !git.Clean(path) {
-		m.say("worktree kept at " + tilde(path) + ": it has changes that are not committed")
+	case kept != "":
+		m.say("worktree kept at " + tilde(path) + ": " + kept)
 		return
-	}
-	if !git.OnBranch(path) {
-		m.say("worktree kept at " + tilde(path) + ": it has commits that are on no branch")
+	case m.confirm != nil:
+		// Another question is not pushed away.
+		m.say("worktree kept at " + tilde(path))
 		return
 	}
 	m.confirm = &confirm{
 		question: fmt.Sprintf("remove the worktree %s?", tilde(path)),
 		yes: func() tea.Cmd {
-			return func() tea.Msg { return removedMsg{path, git.RemoveWorktree(path)} }
+			return func() tea.Msg {
+				if kept := keepWorktree(path); kept != "" {
+					return worktreeMsg{path, kept}
+				}
+				return removedMsg{path, git.RemoveWorktree(path)}
+			}
 		},
 	}
+}
+
+// worksIn reports whether a session other than except works in the
+// worktree at path.
+func (m *Model) worksIn(path string, except *session.Session) bool {
+	for _, s := range m.sessions {
+		if rel, err := filepath.Rel(path, s.Dir); s != except && err == nil && filepath.IsLocal(rel) {
+			return true
+		}
+	}
+	return false
+}
+
+// keepWorktree says why the worktree at path must be kept, or "" when it
+// can go: when it holds work not committed, commits on no branch, or files
+// that removing it would fail to delete.
+func keepWorktree(path string) string {
+	if !git.Clean(path) {
+		return "it has changes that are not committed"
+	}
+	if !git.OnBranch(path) {
+		return "it has commits that are on no branch"
+	}
+	if f := git.Undeletable(path); f != "" {
+		return "it has files you cannot delete, in " + tilde(f)
+	}
+	return ""
 }
 
 // askName asks what to call a new session, offering a name that is free.
@@ -615,12 +651,64 @@ func (m *Model) askClose() tea.Cmd {
 	if s.Status == agent.Exited && len(s.Queue) == 0 {
 		return closeIt()
 	}
-	question := fmt.Sprintf("close %s and stop its agent?", s.Name)
-	if n := len(s.Queue); n > 0 {
-		question = fmt.Sprintf("close %s, stop its agent and drop %d queued message(s)?", s.Name, n)
+	// An agent that is still there can be asked to fix a worktree that
+	// closing would keep.
+	if path := s.Worktree; path != "" && s.Status != agent.Exited && !m.worksIn(path, s) {
+		return func() tea.Msg { return closingMsg{id, keepWorktree(path)} }
 	}
-	m.confirm = &confirm{question: question, yes: closeIt}
+	m.askCloseWith(id, "")
 	return nil
+}
+
+// askCloseWith asks whether to close the session. When kept says why its
+// worktree would be kept, it asks instead whether its agent should fix that
+// first: no closes it all the same, and closing again once the agent is
+// done looks at the worktree again.
+func (m *Model) askCloseWith(id, kept string) {
+	s, _ := m.byID(id)
+	if s == nil {
+		return
+	}
+	closeIt := func() tea.Cmd {
+		if s, i := m.byID(id); s != nil {
+			return m.closeSession(i)
+		}
+		return nil
+	}
+	if kept == "" {
+		question := fmt.Sprintf("close %s and stop its agent?", s.Name)
+		if n := len(s.Queue); n > 0 {
+			question = fmt.Sprintf("close %s, stop its agent and drop %d queued message(s)?", s.Name, n)
+		}
+		m.confirm = &confirm{question: question, yes: closeIt}
+		return
+	}
+	question := fmt.Sprintf("closing %s keeps its worktree: %s. ask its agent to fix that first?", s.Name, kept)
+	if n := len(s.Queue); n > 0 {
+		question = fmt.Sprintf("closing %s drops %d queued message(s) and keeps its worktree: %s. ask its agent to fix that first?", s.Name, n, kept)
+	}
+	m.confirm = &confirm{
+		question: question,
+		yes: func() tea.Cmd {
+			s, _ := m.byID(id)
+			if s == nil {
+				return nil
+			}
+			m.say("asked " + s.Name + " to fix its worktree: close it again once it is done")
+			return m.enqueue(s, session.Message{Text: fixPrompt(s.Worktree, kept)})
+		},
+		no: closeIt,
+	}
+}
+
+// fixPrompt asks an agent to make its worktree safe to remove, saying why
+// it is not.
+func fixPrompt(path, kept string) string {
+	return fmt.Sprintf("This session is about to close, and cicoria removes its git worktree %s then. "+
+		"It cannot do so now: %s. Make the worktree safe to remove without losing any work, "+
+		"for example by committing changes or by putting commits on a branch. "+
+		"Do not discard or delete work to get there. "+
+		"If you cannot fix it, explain why and tell me what to do.", path, kept)
 }
 
 func (m *Model) closeSession(i int) tea.Cmd {
@@ -632,7 +720,6 @@ func (m *Model) closeSession(i int) tea.Cmd {
 		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
 	}
 	closed := m.sessions[i]
-	made := closed.Worktree
 	m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
 	if m.active > i || m.active >= len(m.sessions) {
 		m.active = max(m.active-1, 0)
@@ -645,9 +732,9 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	m.resize()
 	m.seen()
 	m.save()
-	m.askRemoveWorktree(made)
 	// The agent is given a moment to end, which is not for the screen to
-	// wait for. Quitting in that moment waits for it.
+	// wait for. Quitting in that moment waits for it. Its worktree is
+	// looked at once it has ended, for it may still write there.
 	m.stopping = append(m.stopping, closed)
 	stop := func() tea.Msg { closed.Close(); return stoppedMsg{closed} }
 	return tea.Batch(stop, m.showProject())

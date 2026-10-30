@@ -15,6 +15,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -365,6 +366,44 @@ func TestWorktree(t *testing.T) {
 	// Its branch, and so the commit, stays.
 	if !Exists(dir, "fix") {
 		t.Error("the branch went with the work tree")
+	}
+}
+
+// A work tree with a file that cannot be deleted, ignored or not, is told
+// apart before removing it, and so is what a removal leaves behind.
+func TestWorktreeUndeletable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root may delete anything")
+	}
+	dir := repo(t)
+	writeFile(t, dir, ".gitignore", "build\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-q", "-m", "ignore")
+	path := filepath.Join(dir+".worktrees", "fix")
+	if err := AddWorktree(dir, path); err != nil {
+		t.Fatal(err)
+	}
+	if got := Undeletable(path); got != "" {
+		t.Errorf("undeletable in a new work tree: %q", got)
+	}
+	writeFile(t, path, "build/out/a.o", "x\n")
+	locked := filepath.Join(path, "build", "out")
+	if err := os.Chmod(locked, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if !Clean(path) {
+		t.Error("an ignored file is a change")
+	}
+	if got := Undeletable(path); got != locked {
+		t.Errorf("undeletable = %q, want %q", got, locked)
+	}
+	err := RemoveWorktree(path)
+	if !errors.Is(err, ErrLeftBehind) {
+		t.Fatalf("removing = %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Error("nothing is left behind")
 	}
 }
 

@@ -108,7 +108,9 @@ The files and changes panels show the project of the session on screen, so two s
 
 The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on the commit the directory was on and on no branch: cicoria does not make one, so naming it is up to the agent or to you. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart.
 
-Closing the session offers to remove the worktree. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, or with commits that are on no branch, is kept too: the status bar says where it is. Making a branch, and merging it, is up to you, or to an agent you ask.
+Closing the session offers to remove the worktree, once its agent has ended. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, with commits that are on no branch, or with files you cannot delete (such as a `node_modules` a container made as root) is kept too: the status bar says where it is. Files git ignores are deleted with the worktree.
+
+When closing a session would keep its worktree, cicoria asks instead whether its agent should fix that first. `y` tells the agent why the worktree cannot go and leaves the session open: close it again once the agent is done, and cicoria looks at the worktree again. `n` or `enter` closes the session and keeps the worktree, `esc` leaves the session open. Making a branch, and merging it, is up to you, or to the agent.
 
 A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not copied to it. Claude Code asks whether it can trust the new folder, as it does for any.
 

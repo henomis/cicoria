@@ -197,7 +197,8 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>Name</td><td>Anything but letters, digits, <code>-</code> and <code>_</code> becomes <code>-</code></td></tr>
         </tbody>
       </table></div>
-      <p>The session works there from then on, after restarts too. Closing it offers to remove the worktree. A branch made there is always kept, and a worktree with uncommitted changes, or with commits on no branch, is kept too: the status bar says where it is. Making a branch, and merging it, is up to you, or to an agent you ask.</p>
+      <p>The session works there from then on, after restarts too. Closing it offers to remove the worktree, once its agent has ended. A branch made there is always kept, and a worktree with uncommitted changes, with commits on no branch, or with files you cannot delete is kept too: the status bar says where it is. Ignored files are deleted with the worktree.</p>
+      <p>When closing would keep the worktree, cicoria asks whether the session's agent should fix that first. <kbd>y</kbd> tells the agent why and leaves the session open: close it again once the agent is done, and cicoria looks at the worktree again. <kbd>n</kbd> or <kbd>enter</kbd> closes and keeps the worktree, <kbd>esc</kbd> leaves the session open. Making a branch, and merging it, is up to you, or to the agent.</p>
       <p>A worktree holds only what git tracks: <code>.env</code>, <code>node_modules</code> and other ignored or untracked files are not copied. Claude Code asks whether to trust the new folder, as it does for any. A <code>shell</code> session is never asked and is no reason to offer the next session a worktree.</p>
     </section>
 
