@@ -84,9 +84,9 @@ func (m *Model) layout() layout {
 	l := layout{body: rect{0, 0, m.width, max(m.height-1, 1)}}
 	l.agentBox, l.agent = l.body, l.body
 
-	left, right := 28, 36
+	left, right := 32, 32
 	if m.width < 120 {
-		left, right = 24, 28
+		left, right = 26, 26
 	}
 	if m.hideLeft {
 		left = 0
@@ -375,11 +375,12 @@ func (m *Model) renderSessions(r rect) []string {
 		if i < 9 {
 			num = fmt.Sprint(i + 1)
 		}
-		name := s.Name
+		// The sessions on screen are marked and coloured, to stand out.
+		lead, name := " ", s.Name
 		if i == m.active || s == m.other() {
-			name = ui.Bold.Render(name)
+			lead, name = ui.Accent.Render("▸"), ui.Accent.Bold(true).Render(name)
 		}
-		row := fmt.Sprintf("%s %s %s", ui.Dim.Render(num), badge(s), name)
+		row := fmt.Sprintf("%s%s %s %s", lead, ui.Dim.Render(num), badge(s), name)
 		if n := len(s.Queue); n > 0 {
 			row += ui.Dim.Render(fmt.Sprintf(" ⋯%d", n))
 		}

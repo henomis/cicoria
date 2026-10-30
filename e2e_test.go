@@ -324,7 +324,7 @@ func TestWorkspace(t *testing.T) {
 	w.see("▸ api/", "main.go")
 	w.line("ping")
 	w.see("got ping")
-	// 140 columns less the panels (28 + 36) and the border; 40 rows less the
+	// 140 columns less the panels (32 + 32) and the border; 40 rows less the
 	// status bar and the border.
 	w.line("size")
 	w.see("size 37 74")
@@ -1138,9 +1138,9 @@ func TestHidePanelsBySide(t *testing.T) {
 	w.prefix('[')
 	w.gone("Sessions")
 	w.see("Changes")
-	// The agent gets the room of the left panels: 140 less 36 and the border.
+	// The agent gets the room of the left panels: 140 less 32 and the border.
 	w.line("size")
-	w.see("size 37 102")
+	w.see("size 37 106")
 
 	w.prefix(']')
 	w.gone("Changes")
@@ -1228,7 +1228,7 @@ func TestNarrowTerminalKeepsTheSideOnScreen(t *testing.T) {
 	}
 	// The agent still has the keys, and its size.
 	w.line("size")
-	w.see("size 17 40")
+	w.see("size 17 42")
 	w.quit()
 }
 
