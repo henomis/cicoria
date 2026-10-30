@@ -23,7 +23,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -545,9 +547,13 @@ func copyFile(src, dst string) error {
 
 // askRemoveWorktree checks, once the agent of a closed session has ended,
 // whether the worktree that was made for it can go. One another session
-// works in is kept.
+// works in is kept, and the status bar says so.
 func (m *Model) askRemoveWorktree(path string) tea.Cmd {
-	if _, err := os.Stat(path); path == "" || err != nil || m.worksIn(path, nil) {
+	if _, err := os.Stat(path); path == "" || err != nil {
+		return nil
+	}
+	if s := m.workingIn(path); s != nil {
+		m.say("worktree kept at " + tilde(path) + ": " + s.Name + " works there")
 		return nil
 	}
 	return func() tea.Msg { return worktreeMsg{path, keepWorktree(path)} }
@@ -558,7 +564,7 @@ func (m *Model) askRemoveWorktree(path string) tea.Cmd {
 // question may wait a long time.
 func (m *Model) offerRemoveWorktree(path, kept string) {
 	switch {
-	case m.worksIn(path, nil):
+	case m.workingIn(path) != nil:
 		return
 	case kept != "":
 		m.say("worktree kept at " + tilde(path) + ": " + kept)
@@ -587,7 +593,7 @@ func (m *Model) offerRemoveWorktree(path, kept string) {
 
 // teardownTimeout is how long the teardown of a worktree can take before
 // it is stopped, and the worktree kept.
-const teardownTimeout = 2 * time.Minute
+var teardownTimeout = 2 * time.Minute
 
 // teardown runs in the worktree at path the teardown cfg gives for the
 // worktrees of its repository. It says why the worktree must be kept when
@@ -602,7 +608,16 @@ func teardown(cfg config.Config, path string) string {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = path
+	// It runs in a process group of its own, which is stopped as a whole:
+	// a program it started would otherwise hold its output open, and the
+	// wait with it, however long it hangs.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = time.Second
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return fmt.Sprintf("its teardown took more than %s and was stopped", teardownTimeout)
+	}
 	if err == nil {
 		return ""
 	}
@@ -619,15 +634,30 @@ func lastLine(out string) string {
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
-// worksIn reports whether a session other than except works in the
-// worktree at path.
-func (m *Model) worksIn(path string, except *session.Session) bool {
+// workingIn returns a session, other than those in except, that works in
+// the worktree at path, or nil.
+func (m *Model) workingIn(path string, except ...*session.Session) *session.Session {
 	for _, s := range m.sessions {
-		if rel, err := filepath.Rel(path, s.Dir); s != except && err == nil && filepath.IsLocal(rel) {
-			return true
+		if rel, err := filepath.Rel(path, s.Dir); !slices.Contains(except, s) && err == nil && filepath.IsLocal(rel) {
+			return s
 		}
 	}
-	return false
+	return nil
+}
+
+// setupsOf returns the sessions that run the setup of the worktree made for
+// s. They go with it: they are there only to ready its worktree.
+func (m *Model) setupsOf(s *session.Session) []*session.Session {
+	if s.Worktree == "" {
+		return nil
+	}
+	var setups []*session.Session
+	for _, o := range m.sessions {
+		if rel, err := filepath.Rel(s.Worktree, o.Dir); o.Setup && err == nil && filepath.IsLocal(rel) {
+			setups = append(setups, o)
+		}
+	}
+	return setups
 }
 
 // keepWorktree says why the worktree at path must be kept, or "" when it
@@ -795,7 +825,7 @@ func (m *Model) askClose() tea.Cmd {
 	}
 	// An agent that is still there can be asked to fix a worktree that
 	// closing would keep.
-	if path := s.Worktree; path != "" && s.Status != agent.Exited && !m.worksIn(path, s) {
+	if path := s.Worktree; path != "" && s.Status != agent.Exited && m.workingIn(path, append(m.setupsOf(s), s)...) == nil {
 		return func() tea.Msg { return closingMsg{id, keepWorktree(path)} }
 	}
 	m.askCloseWith(id, "")
@@ -818,9 +848,13 @@ func (m *Model) askCloseWith(id, kept string) {
 		return nil
 	}
 	if kept == "" {
-		question := fmt.Sprintf("close %s and stop its agent?", s.Name)
+		stop := "its agent"
+		if len(m.setupsOf(s)) > 0 {
+			stop = "its agent and the setup of its worktree"
+		}
+		question := fmt.Sprintf("close %s and stop %s?", s.Name, stop)
 		if n := len(s.Queue); n > 0 {
-			question = fmt.Sprintf("close %s, stop its agent and drop %d queued message(s)?", s.Name, n)
+			question = fmt.Sprintf("close %s, stop %s and drop %d queued message(s)?", s.Name, stop, n)
 		}
 		m.confirm = &confirm{question: question, yes: closeIt}
 		return
@@ -862,9 +896,15 @@ func (m *Model) closeSession(i int) tea.Cmd {
 		m.play(ui.Burst, m.sessions[i].Name+" closed", nil)
 	}
 	closed := m.sessions[i]
-	m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
-	if m.active > i || m.active >= len(m.sessions) {
-		m.active = max(m.active-1, 0)
+	// The setup of its worktree goes with it, before its worktree is
+	// looked at.
+	setups := m.setupsOf(closed)
+	for _, gone := range append(setups, closed) {
+		j := slices.Index(m.sessions, gone)
+		m.sessions = slices.Delete(m.sessions, j, j+1)
+		if m.active > j || m.active >= len(m.sessions) {
+			m.active = max(m.active-1, 0)
+		}
 	}
 	m.sessionCursor = max(min(m.sessionCursor, len(m.sessions)-1), 0)
 	// The session left on screen may be the one the pane was shared with.
@@ -878,7 +918,14 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	// wait for. Quitting in that moment waits for it. Its worktree is
 	// looked at once it has ended, for it may still write there.
 	m.stopping = append(m.stopping, closed)
-	stop := func() tea.Msg { closed.Close(); return stoppedMsg{closed} }
+	m.stopping = append(m.stopping, setups...)
+	stop := func() tea.Msg {
+		for _, setup := range setups {
+			setup.Close()
+		}
+		closed.Close()
+		return stoppedMsg{closed, setups}
+	}
 	return tea.Batch(stop, m.showProject())
 }
 

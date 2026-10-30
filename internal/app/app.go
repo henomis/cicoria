@@ -246,8 +246,12 @@ type (
 		path string
 		err  error
 	}
-	// stoppedMsg reports that the agent of a closed session has ended.
-	stoppedMsg struct{ s *session.Session }
+	// stoppedMsg reports that the agent of a closed session has ended, and
+	// the setups of its worktree that closed with it.
+	stoppedMsg struct {
+		s      *session.Session
+		setups []*session.Session
+	}
 	// worktreeMsg reports why the worktree of a closed session must be
 	// kept, or that it can go when kept is "".
 	worktreeMsg struct{ path, kept string }
@@ -445,8 +449,15 @@ func (m *Model) say(msg string) {
 
 // save remembers the sessions for the next run.
 func (m *Model) save() {
-	st := session.State{Dir: m.dir, Active: m.active}
-	for _, s := range m.sessions {
+	st := session.State{Dir: m.dir}
+	for i, s := range m.sessions {
+		// The setup of a worktree is not run again: it ended with cicoria.
+		if s.Setup {
+			continue
+		}
+		if i <= m.active {
+			st.Active = len(st.Sessions)
+		}
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
 			Worktree: s.Worktree, Port: s.Port, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
@@ -702,7 +713,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		}
 
 	case stoppedMsg:
-		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s })
+		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s || slices.Contains(msg.setups, s) })
 		return m.askRemoveWorktree(msg.s.Worktree)
 
 	case worktreesMsg:

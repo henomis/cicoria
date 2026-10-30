@@ -2153,7 +2153,7 @@ func TestWorktreeSetup(t *testing.T) {
 
 // Each session has ports of its own, kept across restarts, which the setup
 // of its worktree shares. The teardown runs before a worktree is removed,
-// and one that fails keeps it.
+// and one that fails keeps it. A setup that failed closes with its session.
 func TestWorktreePorts(t *testing.T) {
 	w := newWorkspace(t)
 	home := filepath.Dir(w.dir)
@@ -2168,7 +2168,7 @@ func TestWorktreePorts(t *testing.T) {
 	}
 	w.set(fmt.Sprintf("port_base = %d\nports_per_session = 2", base))
 	// Out of the worktree, which a file it does not ignore would keep.
-	setup := "echo $CICORIA_PORT > ../../port.txt"
+	setup := "test -e ../../setupfail && exit 3; echo $CICORIA_PORT > ../../port.txt"
 	down := "test -e ../../fail && { echo containers still up; exit 4; }; pwd > ../../torn.txt"
 	f, err := os.OpenFile(filepath.Join(home, "config.toml"), os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
@@ -2245,6 +2245,35 @@ func TestWorktreePorts(t *testing.T) {
 	if _, err := os.Stat(tree); err != nil {
 		t.Error(err)
 	}
+
+	// A setup that failed stays as a shell in the worktree, which does not
+	// keep the worktree once its session closes: the shell goes with it.
+	if err := os.Remove(filepath.Join(home, "fail")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "setupfail"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.prefix('c')
+	w.see("agent ›")
+	w.typeText("aider")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("aider in directory: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("a worktree of its own?")
+	w.typeText("y")
+	w.see("session name: ")
+	w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+	w.typeText("third")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("third · aider", "third-setup")
+	w.prefix('x')
+	w.see("close third and stop its agent and the setup of its worktree?")
+	w.typeText("y")
+	w.see("remove the worktree")
+	w.typeText("y")
+	w.see("removed the worktree")
+	w.gone("third-setup")
 	w.quit()
 }
 
