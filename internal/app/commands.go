@@ -63,7 +63,7 @@ func init() {
 		{"-", "Split: show another session below, or close the split", (*Model).askSplit, false},
 		{"tab", "Go to the other pane of the split", (*Model).focusOther, false},
 		{"w", "Open another workspace…", (*Model).askWorkspace, false},
-		{"o", "Old worktrees: remove the ones that can go…", (*Model).askWorktrees, false},
+		{"o", "Worktrees: open a session in one, or remove it…", (*Model).askWorktrees, false},
 		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
@@ -556,22 +556,33 @@ func (m *Model) askRemoveWorktree(path string) tea.Cmd {
 		m.say("worktree kept at " + tilde(path) + ": " + s.Name + " works there")
 		return nil
 	}
-	return func() tea.Msg { return worktreeMsg{path, keepWorktree(path)} }
+	return func() tea.Msg { return checkWorktree(path) }
 }
 
-// offerRemoveWorktree asks whether to remove the worktree at path, unless
-// it must be kept. It is checked again once the answer is yes, for the
-// question may wait a long time.
-func (m *Model) offerRemoveWorktree(path, kept string) {
+// offerRemoveWorktree asks whether to remove the worktree that was looked
+// at, unless it must be kept. It is checked again once the answer is yes,
+// for the question may wait a long time. One kept for work that removing it
+// would lose can be removed anyway; one kept for anything else is offered a
+// shell there, to fix that.
+func (m *Model) offerRemoveWorktree(w worktreeMsg) {
+	path := w.path
 	switch {
 	case m.workingIn(path) != nil:
 		return
-	case kept != "":
-		m.say("worktree kept at " + tilde(path) + ": " + kept)
-		return
 	case m.confirm != nil:
 		// Another question is not pushed away.
-		m.say("worktree kept at " + tilde(path))
+		m.say(keptAt(path, w.kept))
+		return
+	case w.lost:
+		m.offerDiscardWorktree(path, w.kept)
+		return
+	case w.kept != "":
+		m.confirm = &confirm{
+			// The question comes first: the reason can go past the status bar.
+			question: fmt.Sprintf("open a shell in the worktree %s? it is kept: %s", filepath.Base(path), w.kept),
+			yes:      func() tea.Cmd { return m.askSessionIn(path, true) },
+			no:       func() tea.Cmd { m.say(keptAt(path, w.kept)); return nil },
+		}
 		return
 	}
 	m.confirm = &confirm{
@@ -579,16 +590,24 @@ func (m *Model) offerRemoveWorktree(path, kept string) {
 		yes: func() tea.Cmd {
 			cfg := m.cfg
 			return func() tea.Msg {
-				if kept := keepWorktree(path); kept != "" {
-					return worktreeMsg{path, kept}
+				if w := checkWorktree(path); w.kept != "" {
+					return w
 				}
 				if kept := teardown(cfg, path); kept != "" {
-					return worktreeMsg{path, kept}
+					return worktreeMsg{path: path, kept: kept}
 				}
 				return removedMsg{path, git.RemoveWorktree(path)}
 			}
 		},
 	}
+}
+
+// keptAt says that the worktree at path is kept, and why when kept says.
+func keptAt(path, kept string) string {
+	if kept == "" {
+		return "worktree kept at " + tilde(path)
+	}
+	return "worktree kept at " + tilde(path) + ": " + kept
 }
 
 // teardownTimeout is how long the teardown of a worktree can take before
@@ -664,14 +683,29 @@ func (m *Model) setupsOf(s *session.Session) []*session.Session {
 // can go: when it holds work not committed, commits on no branch, or files
 // that removing it would fail to delete.
 func keepWorktree(path string) string {
+	return checkWorktree(path).kept
+}
+
+// checkWorktree looks at whether the worktree at path can go, as
+// keepWorktree does, and whether what keeps it is work that would be lost.
+func checkWorktree(path string) worktreeMsg {
+	if lost := unsaved(path); lost != "" {
+		return worktreeMsg{path: path, kept: lost, lost: true}
+	}
+	if f := git.Undeletable(path); f != "" {
+		return worktreeMsg{path: path, kept: "it has files you cannot delete, in " + tilde(f)}
+	}
+	return worktreeMsg{path: path}
+}
+
+// unsaved says what work removing the worktree at path would lose, or ""
+// when there is none.
+func unsaved(path string) string {
 	if !git.Clean(path) {
 		return "it has changes that are not committed"
 	}
 	if !git.OnBranch(path) {
 		return "it has commits that are on no branch"
-	}
-	if f := git.Undeletable(path); f != "" {
-		return "it has files you cannot delete, in " + tilde(f)
 	}
 	return ""
 }
@@ -766,6 +800,10 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askOpen(v)
 	case oldWorktree:
 		m.chooseWorktree(v)
+	case worktreeAction:
+		return v.run(m)
+	case sessionIn:
+		return m.askWorktree(v.a, v.dir)
 	case string:
 		m.tree().Reveal(v)
 		m.showFile(v)
@@ -823,76 +861,18 @@ func (m *Model) askClose() tea.Cmd {
 	if s.Status == agent.Exited && len(s.Queue) == 0 {
 		return closeIt()
 	}
-	// An agent that is still there can be asked to fix a worktree that
-	// closing would keep.
-	if path := s.Worktree; path != "" && s.Status != agent.Exited && m.workingIn(path, append(m.setupsOf(s), s)...) == nil {
-		return func() tea.Msg { return closingMsg{id, keepWorktree(path)} }
-	}
-	m.askCloseWith(id, "")
-	return nil
-}
-
-// askCloseWith asks whether to close the session. When kept says why its
-// worktree would be kept, it asks instead whether its agent should fix that
-// first: no closes it all the same, and closing again once the agent is
-// done looks at the worktree again.
-func (m *Model) askCloseWith(id, kept string) {
-	s, _ := m.byID(id)
-	if s == nil {
-		return
-	}
-	closeIt := func() tea.Cmd {
-		if s, i := m.byID(id); s != nil {
-			return m.closeSession(i)
-		}
-		return nil
-	}
-	if kept == "" {
-		stop := "its agent"
-		if len(m.setupsOf(s)) > 0 {
-			stop = "its agent and the setup of its worktree"
-		}
-		question := fmt.Sprintf("close %s and stop %s?", s.Name, stop)
-		if n := len(s.Queue); n > 0 {
-			question = fmt.Sprintf("close %s, stop %s and drop %d queued message(s)?", s.Name, stop, n)
-		}
-		m.confirm = &confirm{question: question, yes: closeIt}
-		return
-	}
-	var loses []string
+	// What keeps its worktree, if anything, is asked about once its agent
+	// has ended.
+	stop := "its agent"
 	if len(m.setupsOf(s)) > 0 {
-		loses = append(loses, "stops its setup")
+		stop = "its agent and the setup of its worktree"
 	}
+	question := fmt.Sprintf("close %s and stop %s?", s.Name, stop)
 	if n := len(s.Queue); n > 0 {
-		loses = append(loses, fmt.Sprintf("drops %d queued message(s)", n))
+		question = fmt.Sprintf("close %s, stop %s and drop %d queued message(s)?", s.Name, stop, n)
 	}
-	lead := ""
-	if len(loses) > 0 {
-		lead = strings.Join(loses, ", ") + " and "
-	}
-	question := fmt.Sprintf("closing %s %skeeps its worktree: %s. ask its agent to fix that first?", s.Name, lead, kept)
-	m.confirm = &confirm{
-		question: question,
-		yes: func() tea.Cmd {
-			s, _ := m.byID(id)
-			if s == nil {
-				return nil
-			}
-			m.say("asked " + s.Name + " to fix its worktree: close it again once it is done")
-			return m.enqueue(s, session.Message{Text: fixPrompt(s.Worktree, kept)})
-		},
-		no: closeIt,
-	}
-}
-
-// fixPrompt asks an agent to make its worktree safe to remove, saying why
-// it is not.
-func fixPrompt(path, kept string) string {
-	return fmt.Sprintf("This session is about to close, and cicoria removes its git worktree %s then. "+
-		"It cannot do so now: %s. Make the worktree safe to remove without losing any work, "+
-		"for example by committing changes or by putting commits on a branch. "+
-		"Do not discard or delete work to get there. "+
-		"If you cannot fix it, explain why and tell me what to do.", path, kept)
+	m.confirm = &confirm{question: question, yes: closeIt}
+	return nil
 }
 
 func (m *Model) closeSession(i int) tea.Cmd {

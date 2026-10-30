@@ -369,6 +369,28 @@ func TestWorktree(t *testing.T) {
 	}
 }
 
+func TestDiscardWorktree(t *testing.T) {
+	dir := repo(t)
+	path := filepath.Join(t.TempDir(), "wt")
+	if err := AddWorktree(dir, path); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, "new.txt", "x\n")
+	writeFile(t, path, "kept.txt", "changed\n")
+	if err := RemoveWorktree(path); err == nil {
+		t.Fatal("removed with changes in it")
+	}
+	if err := DiscardWorktree(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("the work tree is still there")
+	}
+	if paths, err := Worktrees(dir); err != nil || len(paths) != 0 {
+		t.Errorf("worktrees after discarding = %v, %v", paths, err)
+	}
+}
+
 // The work trees of a repository are the ones added to it, seen from any of
 // them, and not one whose directory is gone.
 func TestWorktrees(t *testing.T) {

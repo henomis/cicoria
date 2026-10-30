@@ -2029,10 +2029,12 @@ func TestWorktree(t *testing.T) {
 	w.prefix('2')
 	w.see("aider-1 · aider", head)
 
-	// One with work that is not committed outlives its session, when the
-	// agent is not asked to fix that.
+	// One with work that is not committed outlives its session, unless it
+	// is removed anyway.
 	w.prefix('x')
-	w.see("closing aider-1 keeps its worktree: it has changes that are not committed. ask its agent to fix that first?")
+	w.see("close aider-1 and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree aider-1 anyway? it has changes that are not committed, lost with it")
 	w.typeText("n")
 	w.see("worktree kept at", "it has changes that are not committed")
 	if _, err := os.Stat(tree); err != nil {
@@ -2082,7 +2084,9 @@ func TestWorktree(t *testing.T) {
 	git(tree, "add", "-A")
 	git(tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "work")
 	w.prefix('x')
-	w.see("closing aider-1 keeps its worktree: it has commits that are on no branch")
+	w.see("close aider-1 and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree aider-1 anyway? it has commits that are on no branch, lost with it")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("worktree kept at", "it has commits that are on no branch")
 	if _, err := os.Stat(tree); err != nil {
@@ -2241,6 +2245,8 @@ func TestWorktreePorts(t *testing.T) {
 	}
 	tree = create("second")
 	closeIt("second")
+	w.see("open a shell in the worktree second? it is kept: its teardown failed: exit status 4: containers still up")
+	w.typeText("n")
 	w.see("worktree kept at", "its teardown failed: exit status 4: containers still up")
 	if _, err := os.Stat(tree); err != nil {
 		t.Error(err)
@@ -2267,18 +2273,6 @@ func TestWorktreePorts(t *testing.T) {
 	w.typeText("third")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("third · aider", "third-setup")
-	// The question that offers a fix says the setup closes too.
-	wip := filepath.Join(w.dir+".worktrees", "third", "wip.txt")
-	if err := os.WriteFile(wip, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	w.prefix('x')
-	w.see("closing third stops its setup and keeps its worktree: it has changes that are not committed. ask its agent to fix that first?")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
-	w.gone("ask its agent to fix that first?")
-	if err := os.Remove(wip); err != nil {
-		t.Fatal(err)
-	}
 	w.prefix('x')
 	w.see("close third and stop its agent and the setup of its worktree?")
 	w.typeText("y")
@@ -2290,7 +2284,7 @@ func TestWorktreePorts(t *testing.T) {
 }
 
 // With worktree_dir set, worktrees go there, under the name of their
-// repository. The list of worktrees tells which can go, and removes those.
+// repository. The list of worktrees tells which can go, and acts on one.
 func TestOldWorktrees(t *testing.T) {
 	w := newWorkspace(t)
 	trees := filepath.Join(filepath.Dir(w.dir), "trees")
@@ -2322,7 +2316,9 @@ func TestOldWorktrees(t *testing.T) {
 	w.line("echo x > x.txt")
 	w.see("Changes (1)")
 	w.prefix('x')
-	w.see("closing dirty keeps its worktree")
+	w.see("close dirty and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree dirty anyway?")
 	w.typeText("n")
 	w.see("worktree kept at")
 	create("spare")
@@ -2334,8 +2330,11 @@ func TestOldWorktrees(t *testing.T) {
 	w.gone("remove the worktree")
 
 	w.prefix('o')
-	w.see("remove worktree ›", "spare can be removed", "dirty kept: has changes that are not committed", "busy busy works there")
+	w.see("worktree ›", "spare can be removed", "dirty kept: has changes that are not committed", "busy busy works there")
 	w.typeText("spare")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("spare ›", "New session there", "Shell there", "Remove")
+	w.typeText("Remove")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
 	w.see("remove the worktree")
 	w.typeText("y")
@@ -2344,12 +2343,27 @@ func TestOldWorktrees(t *testing.T) {
 		t.Error("the worktree is still there")
 	}
 
-	// One that must be kept is not removed.
+	// One a session works in can be gone to, not removed.
 	w.prefix('o')
-	w.see("remove worktree ›")
+	w.see("worktree ›")
 	w.gone("spare")
+	w.typeText("busy")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("busy ›", "Go to busy")
+	w.gone("Remove")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("busy ›")
+
+	// One kept for its work is removed only anyway, once that is said.
+	w.prefix('o')
+	w.see("worktree ›")
 	w.typeText("dirty")
 	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("dirty ›", "Remove anyway", "has changes that are not committed, lost with it")
+	w.typeText("anyway")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("remove the worktree dirty anyway?")
+	w.typeText("n")
 	w.see("worktree kept at", "it has changes that are not committed")
 	if _, err := os.Stat(filepath.Join(trees, "project", "dirty")); err != nil {
 		t.Error(err)
@@ -2357,63 +2371,68 @@ func TestOldWorktrees(t *testing.T) {
 	w.quit()
 }
 
-// The agent of a session whose worktree closing would keep can be asked to
-// fix that first. The session stays open, and closing it again once the
-// worktree is fixed offers to remove it.
-func TestWorktreeFixedByAgent(t *testing.T) {
+// A worktree its session leaves with work in it can be removed anyway once
+// its agent has ended, and one with files that cannot be deleted is offered
+// a shell there.
+func TestWorktreeKeptOnClose(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(160, 40)
 	w.see("claude-1 · claude · idle")
-	tree := filepath.Join(w.dir+".worktrees", "claude-2")
-	git := func(args ...string) {
+	newTree := func(name string) string {
 		t.Helper()
-		args = append([]string{"-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)
-		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("claude")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("claude in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("give this session a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: ")
+		w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+		w.typeText(name)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(name+" · claude · idle", "project.worktrees/"+name)
+		return filepath.Join(w.dir+".worktrees", name)
 	}
-	w.prefix('c')
-	w.see("agent ›")
-	w.typeText("claude")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("claude in directory: ")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("give this session a worktree of its own?")
-	w.typeText("y")
-	w.see("session name: claude-2")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
-	w.see("claude-2 · claude · idle", "project.worktrees/claude-2")
+
+	// Work that is not committed goes with it, once that is said.
+	tree := newTree("work")
 	if err := os.WriteFile(filepath.Join(tree, "work.txt"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	// Escape leaves the session open, and so does asking its agent, which
-	// gets told why.
 	w.prefix('x')
-	w.see("closing claude-2 keeps its worktree: it has changes that are not committed. ask its agent to fix that first?")
-	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
-	w.gone("ask its agent to fix that first?")
-	w.see("claude-2 · claude · idle")
-	w.prefix('x')
-	w.see("ask its agent to fix that first?")
+	w.see("close work and stop its agent?")
 	w.typeText("y")
-	w.see("asked claude-2 to fix its worktree", "got This session is about to close")
-	w.line("stop")
-	w.see("claude-2 · claude · idle")
-
-	// Once the work is on a branch, closing again offers to remove it.
-	git("switch", "-q", "-c", "fix")
-	git("add", "-A")
-	git("commit", "-q", "-m", "work")
-	w.prefix('x')
-	w.see("close claude-2 and stop its agent?")
-	w.typeText("y")
-	w.see("remove the worktree")
+	w.see("remove the worktree work anyway? it has changes that are not committed, lost with it")
 	w.typeText("y")
 	w.see("removed the worktree")
 	if _, err := os.Stat(tree); err == nil {
 		t.Error("the worktree is still there")
 	}
+
+	// Removing it anyway would not delete a file that cannot be: a shell
+	// there can.
+	tree = newTree("locked")
+	locked := filepath.Join(tree, "locked")
+	if err := os.MkdirAll(filepath.Join(locked, "d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if err := os.WriteFile(filepath.Join(w.dir, ".git", "info", "exclude"), []byte("locked/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w.prefix('x')
+	w.see("close locked and stop its agent?")
+	w.typeText("y")
+	w.see("open a shell in the worktree locked? it is kept: it has files you cannot delete")
+	w.typeText("y")
+	w.see("session name: ")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("· shell", "project.worktrees/locked")
 	w.quit()
 }
 

@@ -16,12 +16,15 @@ package app
 
 import (
 	"cmp"
+	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/henomis/cicoria/internal/agent"
 	"github.com/henomis/cicoria/internal/git"
 	"github.com/henomis/cicoria/internal/ui"
 )
@@ -30,9 +33,23 @@ import (
 // worktrees shows it.
 type oldWorktree struct {
 	path string
-	// user is a session that works there, and kept why it must be kept.
-	// When both are "", it can go.
-	user, kept string
+	// user is a session that works there, by name and id, and kept why it
+	// must be kept. When both are "", it can go.
+	user, userID, kept string
+	// lost is the work that removing it anyway would lose, when that is
+	// what keeps it.
+	lost string
+}
+
+// worktreeAction is something to do with a worktree picked from the list.
+type worktreeAction struct {
+	run func(m *Model) tea.Cmd
+}
+
+// sessionIn is an agent picked to start a new session in dir.
+type sessionIn struct {
+	a   agent.Adapter
+	dir string
 }
 
 // worktreesMsg brings the worktrees of the repository on screen, looked at
@@ -43,17 +60,17 @@ type worktreesMsg struct {
 }
 
 // askWorktrees lists the worktrees of the repository on screen, the ones
-// that can go first, to remove them.
+// that can go first, to act on one.
 func (m *Model) askWorktrees() tea.Cmd {
 	dir := m.project()
 	if _, ok := git.Root(dir); !ok {
 		m.say("not a git repository")
 		return nil
 	}
-	type at struct{ name, dir string }
+	type at struct{ name, id, dir string }
 	var sessions []at
 	for _, s := range m.sessions {
-		sessions = append(sessions, at{s.Name, s.Dir})
+		sessions = append(sessions, at{s.Name, s.ID, s.Dir})
 	}
 	m.say("looking at the worktrees…")
 	return func() tea.Msg {
@@ -66,12 +83,17 @@ func (m *Model) askWorktrees() tea.Cmd {
 			w := oldWorktree{path: path}
 			for _, s := range sessions {
 				if rel, err := filepath.Rel(path, s.dir); err == nil && filepath.IsLocal(rel) {
-					w.user = s.name
+					w.user, w.userID = s.name, s.id
 					break
 				}
 			}
 			if w.user == "" {
 				w.kept = keepWorktree(path)
+				// Removing it anyway does not help with files that cannot
+				// be deleted.
+				if lost := unsaved(path); lost == w.kept {
+					w.lost = lost
+				}
 			}
 			list = append(list, w)
 		}
@@ -117,19 +139,83 @@ func (m *Model) showWorktrees(msg worktreesMsg) {
 		hint += " · " + tilde(filepath.Dir(w.path))
 		items = append(items, ui.Item{Label: filepath.Base(w.path), Hint: hint, Value: w})
 	}
-	m.openPalette("remove worktree › ", items)
+	m.openPalette("worktree › ", items)
 }
 
-// chooseWorktree offers to remove a worktree picked from the list, or says
-// why it cannot go.
+// chooseWorktree offers what can be done with a worktree picked from the
+// list: going to the session that works there, starting one there, as to
+// have an agent commit what it holds, opening a shell there, and removing it.
 func (m *Model) chooseWorktree(w oldWorktree) {
+	var items []ui.Item
+	add := func(label, hint string, run func(m *Model) tea.Cmd) {
+		items = append(items, ui.Item{Label: label, Hint: hint, Value: worktreeAction{run}})
+	}
+	if w.user != "" {
+		add("Go to "+w.user, "", func(m *Model) tea.Cmd {
+			if _, i := m.byID(w.userID); i >= 0 {
+				return m.switchTo(i)
+			}
+			m.say(w.user + " is closed")
+			return nil
+		})
+	}
+	add("New session there", "", func(m *Model) tea.Cmd { return m.askSessionIn(w.path, false) })
+	add("Shell there", "", func(m *Model) tea.Cmd { return m.askSessionIn(w.path, true) })
 	switch {
 	case w.user != "":
-		m.say(w.user + " works in " + tilde(w.path) + ": close it first")
-	case w.kept != "":
-		m.say("worktree kept at " + tilde(w.path) + ": " + w.kept)
-	default:
+	case w.kept == "":
 		// Whether it can go is looked at again once the answer is yes.
-		m.offerRemoveWorktree(w.path, "")
+		add("Remove", "", func(m *Model) tea.Cmd { m.offerRemoveWorktree(worktreeMsg{path: w.path}); return nil })
+	case w.lost != "":
+		add("Remove anyway", strings.TrimPrefix(w.lost, "it ")+", lost with it",
+			func(m *Model) tea.Cmd { m.offerDiscardWorktree(w.path, w.lost); return nil })
+	}
+	m.openPalette(filepath.Base(w.path)+" › ", items)
+}
+
+// askSessionIn starts a new session in dir: a shell, or one of the agents,
+// asking which.
+func (m *Model) askSessionIn(dir string, shell bool) tea.Cmd {
+	if _, err := os.Stat(dir); err != nil {
+		m.say(tilde(dir) + " is gone")
+		return nil
+	}
+	var agents []agent.Adapter
+	for _, a := range m.adapters {
+		if isShell(a) == shell {
+			agents = append(agents, a)
+		}
+	}
+	if len(agents) == 1 {
+		return m.askWorktree(agents[0], dir)
+	}
+	var items []ui.Item
+	for _, a := range agents {
+		items = append(items, ui.Item{Label: a.Name(), Value: sessionIn{a, dir}})
+	}
+	m.openPalette("agent › ", items)
+	return nil
+}
+
+// offerDiscardWorktree asks whether to remove the worktree at path with the
+// work it holds, which lost says, and keeps it on a no.
+func (m *Model) offerDiscardWorktree(path, lost string) {
+	if s := m.workingIn(path); s != nil {
+		m.say(s.Name + " works in " + tilde(path) + ": close it first")
+		return
+	}
+	m.confirm = &confirm{
+		// The question comes first: the reason can go past the status bar.
+		question: fmt.Sprintf("remove the worktree %s anyway? %s, lost with it", filepath.Base(path), lost),
+		no:       func() tea.Cmd { m.say(keptAt(path, lost)); return nil },
+		yes: func() tea.Cmd {
+			cfg := m.cfg
+			return func() tea.Msg {
+				if kept := teardown(cfg, path); kept != "" {
+					return worktreeMsg{path: path, kept: kept}
+				}
+				return removedMsg{path, git.DiscardWorktree(path)}
+			}
+		},
 	}
 }

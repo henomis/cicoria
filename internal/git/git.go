@@ -540,11 +540,25 @@ var ErrLeftBehind = errors.New("git let go of the worktree, but some of it is le
 // refuses when it holds changes that are not committed, and a branch it is on
 // is left alone.
 func RemoveWorktree(path string) error {
+	return removeWorktree(path, false)
+}
+
+// DiscardWorktree takes the work tree at path away from its repository as
+// RemoveWorktree does, with the changes it holds that are not committed.
+func DiscardWorktree(path string) error {
+	return removeWorktree(path, true)
+}
+
+func removeWorktree(path string, force bool) error {
 	main, ok := Main(path)
 	if !ok {
 		return errors.New("not a git repository")
 	}
-	_, err := run(main, "worktree", "remove", path)
+	args := []string{"worktree", "remove", path}
+	if force {
+		args = append(args, "--force")
+	}
+	_, err := run(main, args...)
 	// git lets go of the work tree before it deletes the files: one it
 	// cannot delete leaves the rest behind, no longer a work tree.
 	if _, gone := Main(path); err != nil && !gone {

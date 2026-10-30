@@ -67,7 +67,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `-` | Split: show another session below, or close the split |
 | `tab` | Go to the other pane of the split |
 | `w` | Open another workspace in place of this one |
-| `o` | Old worktrees: list them, and remove the ones that can go |
+| `o` | Worktrees: list them, open a session or a shell in one, or remove it |
 | `v` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
@@ -109,11 +109,11 @@ The files and changes panels show the project of the session on screen, so two s
 
 The worktree is named after the session: for a session `fix-login` on `~/src/app` it is `~/src/app.worktrees/fix-login`, on the commit the directory was on and on no branch: cicoria does not make one, so naming it is up to the agent or to you. In the name, anything but letters, digits, `-` and `_` becomes `-`. The session works there from then on, and comes back there after a restart. With `worktree_dir` in the settings, worktrees go there instead, in a directory named after the repository: with `worktree_dir = "~/worktrees"`, `~/worktrees/app/fix-login`.
 
-Closing the session offers to remove the worktree, once its agent has ended. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, with commits that are on no branch, or with files you cannot delete (such as a `node_modules` a container made as root) is kept too: the status bar says where it is. Files git ignores are deleted with the worktree.
+Closing the session offers to remove the worktree, once its agent has ended. A branch made there is always kept, so what was committed on it is not lost. A worktree with changes that are not committed, with commits that are on no branch, or with files you cannot delete (such as a `node_modules` a container made as root) is kept too, unless you say otherwise: see below. Files git ignores are deleted with the worktree.
 
-`ctrl+a o` lists the worktrees of the repository on screen, whoever made them, the ones that can go first: each says whether it can be removed, why it is kept, or which session works there. `enter` on one that can go asks before removing it, and what keeps a worktree is looked at again then.
+`ctrl+a o` lists the worktrees of the repository on screen, whoever made them, the ones that can go first: each says whether it can be removed, why it is kept, or which session works there. `enter` on one offers what can be done with it: go to the session that works there, start a new session there, such as an agent to commit or branch what a kept worktree holds, open a shell there, or remove it. Removing one that can go asks first, and what keeps it is looked at again then. One kept for changes that are not committed or commits on no branch can be removed anyway: cicoria says what is lost and asks first, and its teardown still runs. One kept for files you cannot delete cannot be removed from cicoria.
 
-When closing a session would keep its worktree, cicoria asks instead whether its agent should fix that first. `y` tells the agent why the worktree cannot go and leaves the session open: close it again once the agent is done, and cicoria looks at the worktree again. `n` or `enter` closes the session and keeps the worktree, `esc` leaves the session open. Making a branch, and merging it, is up to you, or to the agent.
+When the worktree of a closed session must be kept, cicoria asks what to do once its agent has ended. One kept for changes that are not committed or commits on no branch: `y` removes it anyway, and they are lost with it. One kept for files you cannot delete, or for a teardown that failed: `y` opens a shell there, to fix that, then `ctrl+a o` removes it. `n`, `enter` or `esc` keeps the worktree. Making a branch, and merging it, is up to you, or to an agent.
 
 A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not in it. The ones it needs can be named in a `.worktreeinclude` file at the top of the project, written as a `.gitignore` is, the file Claude Code reads for its own worktrees: of the files git ignores, cicoria copies the ones it names into each worktree it makes. A file git tracks, or one it does not ignore, is never copied. The copies are the worktree's own, so the agent changes none of the originals. Claude Code asks whether it can trust the new folder, as it does for any.
 
@@ -125,7 +125,7 @@ config/local.toml
 
 What is installed rather than copied, such as `node_modules`, is the work of a setup the settings give for the repository (see [Configure](#configure)). cicoria runs it in each worktree it makes from that repository, in a shell session named after the session with `-setup` at the end, next to the agent, which does not wait for it. The shell session closes once the setup works; when it fails, it stays as a shell in the worktree, to read what went wrong and fix it. The setup is in your settings, never in the project, so a repository you clone cannot run a command of its own.
 
-A `teardown` in the same settings runs in a worktree before cicoria removes it, such as `docker compose down`. When it fails, or takes more than two minutes, the worktree is kept, and the status bar says why.
+A `teardown` in the same settings runs in a worktree before cicoria removes it, such as `docker compose down`, also when it is removed anyway. When it fails, or takes more than two minutes, the worktree is kept, and cicoria offers a shell there.
 
 Each session has 10 ports of its own, so that the dev servers of two worktrees do not fight over one: the first is in `CICORIA_PORT`, for the agent and for the setup of its worktree, which can write it where the project reads its port. Sessions take ranges from 20000 up, skipping one where a program listens already, and a session keeps its range after a restart. `port_base` and `ports_per_session` change that, and `port_base = 0` gives sessions no ports.
 
