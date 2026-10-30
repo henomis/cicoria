@@ -696,6 +696,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.stopping = slices.DeleteFunc(m.stopping, func(s *session.Session) bool { return s == msg.s })
 		return m.askRemoveWorktree(msg.s.Worktree)
 
+	case worktreesMsg:
+		m.showWorktrees(msg)
+
 	case worktreeMsg:
 		m.offerRemoveWorktree(msg.path, msg.kept)
 

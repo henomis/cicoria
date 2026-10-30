@@ -462,6 +462,29 @@ func Main(dir string) (string, bool) {
 	return path, ok && path != ""
 }
 
+// Worktrees lists the work trees added to the repository of dir, in the
+// order git keeps them: all but the main one. One whose directory is gone,
+// which git prune would forget, is not one.
+func Worktrees(dir string) ([]string, error) {
+	out, err := run(dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for i, entry := range strings.Split(strings.TrimSpace(string(out)), "\n\n") {
+		path, ok := strings.CutPrefix(entry, "worktree ")
+		if i == 0 || !ok {
+			continue
+		}
+		path, _, _ = strings.Cut(path, "\n")
+		if strings.Contains("\n"+entry+"\n", "\nprunable") {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
 // AddWorktree adds a work tree at path to the repository of dir, on the
 // commit dir is on and on no branch: making one is up to whoever works there.
 func AddWorktree(dir, path string) error {

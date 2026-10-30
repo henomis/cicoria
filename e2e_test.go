@@ -995,8 +995,6 @@ func TestNotes(t *testing.T) {
 	// panel, where g alone would go to the top.
 	w.prefix('g')
 	w.see("Sessions")
-	w.prefix('o')
-	w.see("ctrl+a / finds a file now")
 
 	// In a file, several lines are selected first.
 	w.prefix('/')
@@ -2149,6 +2147,74 @@ func TestWorktreeSetup(t *testing.T) {
 	w.see("cicoria: the setup failed with status 3; this shell is in the worktree")
 	w.line("pwd")
 	w.see("project.worktrees/second")
+	w.quit()
+}
+
+// With worktree_dir set, worktrees go there, under the name of their
+// repository. The list of worktrees tells which can go, and removes those.
+func TestOldWorktrees(t *testing.T) {
+	w := newWorkspace(t)
+	trees := filepath.Join(filepath.Dir(w.dir), "trees")
+	w.set(fmt.Sprintf("worktree_dir = %q", trees))
+	w.launch(160, 40)
+	w.see("claude-1 · claude · idle")
+
+	create := func(name string) {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("aider")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("aider in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: ")
+		w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+		w.typeText(name)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(name+" · aider", "trees/project/"+name)
+	}
+
+	// One a session works in, one with work not committed, and one that
+	// can go.
+	create("busy")
+	create("dirty")
+	w.line("echo x > x.txt")
+	w.see("Changes (1)")
+	w.prefix('x')
+	w.see("closing dirty keeps its worktree")
+	w.typeText("n")
+	w.see("worktree kept at")
+	create("spare")
+	w.prefix('x')
+	w.see("close spare and stop its agent?")
+	w.typeText("y")
+	w.see("remove the worktree")
+	w.typeText("n")
+	w.gone("remove the worktree")
+
+	w.prefix('o')
+	w.see("remove worktree ›", "spare can be removed", "dirty kept: has changes that are not committed", "busy busy works there")
+	w.typeText("spare")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("remove the worktree")
+	w.typeText("y")
+	w.see("removed the worktree")
+	if _, err := os.Stat(filepath.Join(trees, "project", "spare")); err == nil {
+		t.Error("the worktree is still there")
+	}
+
+	// One that must be kept is not removed.
+	w.prefix('o')
+	w.see("remove worktree ›")
+	w.gone("spare")
+	w.typeText("dirty")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	w.see("worktree kept at", "it has changes that are not committed")
+	if _, err := os.Stat(filepath.Join(trees, "project", "dirty")); err != nil {
+		t.Error(err)
+	}
 	w.quit()
 }
 

@@ -369,6 +369,36 @@ func TestWorktree(t *testing.T) {
 	}
 }
 
+// The work trees of a repository are the ones added to it, seen from any of
+// them, and not one whose directory is gone.
+func TestWorktrees(t *testing.T) {
+	dir := repo(t)
+	if got, err := Worktrees(dir); err != nil || got != nil {
+		t.Errorf("worktrees of a repository without any = %v, %v", got, err)
+	}
+	a := filepath.Join(dir+".worktrees", "a")
+	b := filepath.Join(dir+".worktrees", "b")
+	for _, path := range []string{a, b} {
+		if err := AddWorktree(dir, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, from := range []string{dir, b} {
+		if got, err := Worktrees(from); err != nil || !slices.Equal(got, []string{a, b}) {
+			t.Errorf("worktrees from %s = %v, %v", from, got, err)
+		}
+	}
+	if err := os.RemoveAll(a); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Worktrees(dir); err != nil || !slices.Equal(got, []string{b}) {
+		t.Errorf("worktrees with one gone = %v, %v", got, err)
+	}
+	if _, err := Worktrees(t.TempDir()); err == nil {
+		t.Error("worktrees outside a repository")
+	}
+}
+
 // The files a worktree needs are the ignored ones the include file names,
 // and no others.
 func TestIncluded(t *testing.T) {

@@ -59,6 +59,7 @@ func init() {
 		{"-", "Split: show another session below, or close the split", (*Model).askSplit, false},
 		{"tab", "Go to the other pane of the split", (*Model).focusOther, false},
 		{"w", "Open another workspace…", (*Model).askWorkspace, false},
+		{"o", "Old worktrees: remove the ones that can go…", (*Model).askWorktrees, false},
 		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
@@ -100,11 +101,6 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 		if c.key == key {
 			return m.runCommand(c.keepsView, c.run)
 		}
-	}
-	// Finding a file was on o until v0.0.6: say where it went for a while.
-	if key == "o" {
-		m.say(fmt.Sprintf("%s / finds a file now", m.cfg.Prefix))
-		return nil
 	}
 	m.say(fmt.Sprintf("%s %s is not a command (%s ? for help)", m.cfg.Prefix, key, m.cfg.Prefix))
 	return nil
@@ -694,6 +690,8 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 		return m.askMessage(ask(v))
 	case workspace:
 		return m.askOpen(v)
+	case oldWorktree:
+		m.chooseWorktree(v)
 	case string:
 		m.tree().Reveal(v)
 		m.showFile(v)
