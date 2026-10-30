@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 
@@ -62,6 +63,19 @@ type Config struct {
 	// "claude", "copilot" or "codex" changes how Claude Code, Copilot CLI
 	// or Codex CLI is started.
 	Agents map[string]AgentConfig `toml:"agents"`
+	// Worktrees say what to do in a worktree made for a session, by the
+	// repository it is made from.
+	Worktrees []WorktreeConfig `toml:"worktree"`
+}
+
+// WorktreeConfig is what to do in the worktrees made from one repository.
+type WorktreeConfig struct {
+	// Repo is the main work tree of the repository. ~ stands for the home
+	// directory.
+	Repo string `toml:"repo"`
+	// Setup is the command line run in each new worktree, as dependencies
+	// are installed.
+	Setup []string `toml:"setup"`
 }
 
 // What the changes panel can show.
@@ -139,7 +153,51 @@ func Load(path string) (Config, error) {
 			return cfg, fmt.Errorf("%s: agent %q has no command", path, name)
 		}
 	}
+	for _, w := range cfg.Worktrees {
+		if w.Repo == "" {
+			return cfg, fmt.Errorf("%s: a worktree has no repo", path)
+		}
+		if len(w.Setup) == 0 {
+			return cfg, fmt.Errorf("%s: the worktree of %q has no setup", path, w.Repo)
+		}
+	}
 	return cfg, nil
+}
+
+// Setup returns the command line to run in a new worktree of the repository
+// whose main work tree is main, or nil when there is none.
+func (c Config) Setup(main string) []string {
+	for _, w := range c.Worktrees {
+		if samePath(expandHome(w.Repo), main) {
+			return w.Setup
+		}
+	}
+	return nil
+}
+
+// expandHome replaces a leading ~ with the home directory.
+func expandHome(path string) string {
+	rest, ok := strings.CutPrefix(path, "~")
+	if !ok || rest != "" && rest[0] != '/' {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, rest)
+}
+
+// samePath reports whether a and b name one directory, through symbolic
+// links too.
+func samePath(a, b string) bool {
+	resolve := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return filepath.Clean(p)
+	}
+	return resolve(a) == resolve(b)
 }
 
 // Shell is the name of the plain shell, which is always offered.

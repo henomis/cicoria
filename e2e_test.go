@@ -2092,6 +2092,66 @@ func TestWorktree(t *testing.T) {
 	w.quit()
 }
 
+// A worktree of a repository the settings give a setup for gets a shell
+// session that runs it, next to the agent. One that works closes, however
+// soon; one that fails stays as a shell in the worktree.
+func TestWorktreeSetup(t *testing.T) {
+	w := newWorkspace(t)
+	w.set("close_on_exit = false")
+	home := filepath.Dir(w.dir)
+	// The setup fails once there is a file named fail next to the project.
+	script := "test -e ../../fail && exit 3; echo ok > setup.txt"
+	f, err := os.OpenFile(filepath.Join(home, "config.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = fmt.Fprintf(f, "\n[[worktree]]\nrepo = %q\nsetup = [\"sh\", \"-c\", %q]\n", w.dir, script)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	create := func(name string) {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("aider")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("aider in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: ")
+		w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+		w.typeText(name)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(name + " · aider")
+	}
+
+	create("first")
+	w.see("first-setup exited")
+	w.gone("first-setup")
+	tree := filepath.Join(w.dir+".worktrees", "first")
+	if out, err := os.ReadFile(filepath.Join(tree, "setup.txt")); err != nil || string(out) != "ok\n" {
+		t.Errorf("setup.txt = %q, %v", out, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(home, "fail"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	create("second")
+	w.see("second-setup")
+	w.prefix('4')
+	w.see("cicoria: the setup failed with status 3; this shell is in the worktree")
+	w.line("pwd")
+	w.see("project.worktrees/second")
+	w.quit()
+}
+
 // The agent of a session whose worktree closing would keep can be asked to
 // fix that first. The session stays open, and closing it again once the
 // worktree is fixed offers to remove it.

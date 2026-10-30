@@ -120,6 +120,8 @@ A worktree holds what git tracks: files that are not committed or that git ignor
 config/local.toml
 ```
 
+What is installed rather than copied, such as `node_modules`, is the work of a setup the settings give for the repository (see [Configure](#configure)). cicoria runs it in each worktree it makes from that repository, in a shell session named after the session with `-setup` at the end, next to the agent, which does not wait for it. The shell session closes once the setup works; when it fails, it stays as a shell in the worktree, to read what went wrong and fix it. The setup is in your settings, never in the project, so a repository you clone cannot run a command of its own.
+
 ### Two sessions on screen
 
 `ctrl+a -` splits the agent pane in two: the session on screen stays above, and the one you pick is shown below it. `ctrl+a tab`, or a click in the other pane, moves the keys from one to the other; the pane that has them is the one with the lit border, and the side panels show its project. Going to a session (`ctrl+a n`, `p`, `1`-`9`) puts it in the pane that has the keys, or moves the keys when it is already in the other one. The wheel scrolls the pane it is over.
@@ -233,6 +235,12 @@ command = ["ollama", "launch", "copilot", "--model", "gemma4:cloud", "--"]
 
 [agents.codex]
 command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]
+
+# What to run in each worktree made from a repository, by its main
+# work tree; ~ is the home directory. One [[worktree]] per repository.
+[[worktree]]
+repo = "~/src/app"
+setup = ["npm", "ci"]
 ```
 
 A plain `shell` is always available as a session type.

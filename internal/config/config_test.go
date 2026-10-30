@@ -17,6 +17,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/henomis/cicoria/internal/agent"
@@ -100,6 +101,8 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"unknown key":   `prefx = "ctrl+b"`,
 		"empty command": "[agents.x]\ncommand = []",
 		"bad syntax":    `prefix = `,
+		"no repo":       "[[worktree]]\nsetup = [\"make\"]",
+		"no setup":      "[[worktree]]\nrepo = \"/src/app\"",
 	} {
 		if _, err := Load(write(t, content)); err == nil {
 			t.Errorf("%s: Load accepted it", name)
@@ -126,6 +129,31 @@ func TestLoadWebAddress(t *testing.T) {
 		if _, err := Load(write(t, `web_address = "`+bad+`"`)); err == nil {
 			t.Errorf("web_address %q was accepted", bad)
 		}
+	}
+}
+
+func TestSetup(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	app := filepath.Join(home, "src", "app")
+	if err := os.MkdirAll(app, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "app")
+	if err := os.Symlink(app, link); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(write(t, "[[worktree]]\nrepo = \"~/src/app\"\nsetup = [\"npm\", \"ci\"]\n\n[[worktree]]\nrepo = \"/elsewhere\"\nsetup = [\"make\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, main := range []string{app, app + "/", link} {
+		if got := cfg.Setup(main); !slices.Equal(got, []string{"npm", "ci"}) {
+			t.Errorf("setup of %s = %v", main, got)
+		}
+	}
+	if got := cfg.Setup(filepath.Join(home, "src", "other")); got != nil {
+		t.Errorf("setup of another repository = %v", got)
 	}
 }
 

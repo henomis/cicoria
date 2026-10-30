@@ -301,8 +301,10 @@ func (m *Model) toggleSide(hide *bool) tea.Cmd {
 // worktree of its own instead, made for it from the commit dir is on.
 func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea.Cmd {
 	made, problem := "", ""
+	var setup *session.Session
 	if worktree {
 		src := dir
+		main, _ := git.Main(src)
 		var err error
 		if made, dir, err = addWorktree(name, dir); err != nil {
 			m.say(err.Error())
@@ -312,6 +314,7 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 		if err := copyIncluded(src, made); err != nil {
 			problem = err.Error()
 		}
+		setup = m.setupSession(name, main, made)
 	}
 	// One session to a directory is how the panels tell whose work is whose.
 	// A shell does no work of its own.
@@ -332,10 +335,36 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 	s.Base, _ = git.Head(dir)
 	s.Uncommitted = m.cfg.Changes != config.ChangesSession
 	m.sessions = append(m.sessions, s)
+	i := len(m.sessions) - 1
+	cmds := []tea.Cmd{m.start(s)}
+	// The agent does not wait for the setup: both are in sight.
+	if setup != nil {
+		m.sessions = append(m.sessions, setup)
+		cmds = append(cmds, m.start(setup))
+	}
 	// The session list grew, which can change the size of the panes.
 	m.resize()
 	m.play(ui.Liftoff, "launching "+s.Name, nil)
-	return tea.Batch(m.start(s), m.switchTo(len(m.sessions)-1))
+	return tea.Batch(append(cmds, m.switchTo(i))...)
+}
+
+// setupScript runs the command line it is given and, when it fails, leaves
+// a shell where it ran, so that what went wrong can be read and fixed.
+const setupScript = `"$@" || { printf '\ncicoria: the setup failed with status %s; this shell is in the worktree\n' "$?"; exec "${SHELL:-sh}"; }`
+
+// setupSession returns a shell session, named after the session given the
+// worktree at top, that runs there the setup the settings give for the
+// worktrees of the repository whose main work tree is main. It is nil when
+// they give none.
+func (m *Model) setupSession(name, main, top string) *session.Session {
+	argv := m.cfg.Setup(main)
+	if argv == nil {
+		return nil
+	}
+	a := agent.NewGeneric(config.Shell, append([]string{"sh", "-c", setupScript, "setup"}, argv...))
+	s := session.New(session.NewID(), name+"-setup", top, a)
+	s.Setup = true
+	return s
 }
 
 // askDir asks where a new session for an agent should work, offering the

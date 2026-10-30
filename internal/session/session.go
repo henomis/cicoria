@@ -87,6 +87,9 @@ type Session struct {
 	Answer string
 	// Web says the session is shared in the web cockpit.
 	Web bool
+	// Setup says the session runs the setup of a worktree: it closes when
+	// its command ends, however soon. It is not remembered.
+	Setup bool
 
 	// Answering is the question of another session the agent is working on:
 	// what it says at the end of its turn goes back there.

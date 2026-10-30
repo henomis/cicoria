@@ -472,8 +472,9 @@ func (m *Model) Close() error {
 // read, a queue has messages, and what is open on top of the workspace may
 // be about this session.
 func (m *Model) closesOnExit(s *session.Session) bool {
-	return m.cfg.CloseOnExit &&
-		time.Since(s.Started) >= startupGrace &&
+	// The setup of a worktree that fails stays as a shell: one that ends
+	// has done its work.
+	return (s.Setup || m.cfg.CloseOnExit && time.Since(s.Started) >= startupGrace) &&
 		len(s.Queue) == 0 &&
 		m.mode == modeWorkspace && m.prompt == nil && m.confirm == nil
 }
