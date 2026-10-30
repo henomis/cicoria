@@ -103,6 +103,9 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"bad syntax":    `prefix = `,
 		"no repo":       "[[worktree]]\nsetup = [\"make\"]",
 		"no setup":      "[[worktree]]\nrepo = \"/src/app\"",
+		"no ports":      "ports_per_session = 0",
+		"low ports":     "port_base = 80",
+		"too many":      "port_base = 65530",
 	} {
 		if _, err := Load(write(t, content)); err == nil {
 			t.Errorf("%s: Load accepted it", name)
@@ -132,6 +135,18 @@ func TestLoadWebAddress(t *testing.T) {
 	}
 }
 
+func TestLoadPorts(t *testing.T) {
+	if cfg, err := Load(write(t, "")); err != nil || cfg.PortBase != 20000 || cfg.PortsPerSession != 10 {
+		t.Errorf("ports by default = %d, %d, %v", cfg.PortBase, cfg.PortsPerSession, err)
+	}
+	if cfg, err := Load(write(t, "port_base = 0")); err != nil || cfg.PortBase != 0 {
+		t.Errorf("port_base 0 = %d, %v", cfg.PortBase, err)
+	}
+	if cfg, err := Load(write(t, "port_base = 65535\nports_per_session = 1")); err != nil || cfg.PortBase != 65535 {
+		t.Errorf("the last port = %d, %v", cfg.PortBase, err)
+	}
+}
+
 func TestSetup(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -143,17 +158,20 @@ func TestSetup(t *testing.T) {
 	if err := os.Symlink(app, link); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(write(t, "[[worktree]]\nrepo = \"~/src/app\"\nsetup = [\"npm\", \"ci\"]\n\n[[worktree]]\nrepo = \"/elsewhere\"\nsetup = [\"make\"]\n"))
+	cfg, err := Load(write(t, "[[worktree]]\nrepo = \"~/src/app\"\nsetup = [\"npm\", \"ci\"]\n\n[[worktree]]\nrepo = \"/elsewhere\"\nteardown = [\"make\", \"down\"]\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, main := range []string{app, app + "/", link} {
-		if got := cfg.Setup(main); !slices.Equal(got, []string{"npm", "ci"}) {
+		if got := cfg.Worktree(main).Setup; !slices.Equal(got, []string{"npm", "ci"}) {
 			t.Errorf("setup of %s = %v", main, got)
 		}
 	}
-	if got := cfg.Setup(filepath.Join(home, "src", "other")); got != nil {
-		t.Errorf("setup of another repository = %v", got)
+	if got := cfg.Worktree("/elsewhere"); got.Setup != nil || !slices.Equal(got.Teardown, []string{"make", "down"}) {
+		t.Errorf("worktree with a teardown alone = %+v", got)
+	}
+	if got := cfg.Worktree(filepath.Join(home, "src", "other")); got.Setup != nil || got.Teardown != nil {
+		t.Errorf("worktree of another repository = %+v", got)
 	}
 }
 

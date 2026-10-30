@@ -17,6 +17,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -2147,6 +2148,103 @@ func TestWorktreeSetup(t *testing.T) {
 	w.see("cicoria: the setup failed with status 3; this shell is in the worktree")
 	w.line("pwd")
 	w.see("project.worktrees/second")
+	w.quit()
+}
+
+// Each session has ports of its own, kept across restarts, which the setup
+// of its worktree shares. The teardown runs before a worktree is removed,
+// and one that fails keeps it.
+func TestWorktreePorts(t *testing.T) {
+	w := newWorkspace(t)
+	home := filepath.Dir(w.dir)
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := l.Addr().(*net.TCPAddr).Port
+	_ = l.Close()
+	if base+10 > 65535 {
+		base -= 10
+	}
+	w.set(fmt.Sprintf("port_base = %d\nports_per_session = 2", base))
+	// Out of the worktree, which a file it does not ignore would keep.
+	setup := "echo $CICORIA_PORT > ../../port.txt"
+	down := "test -e ../../fail && { echo containers still up; exit 4; }; pwd > ../../torn.txt"
+	f, err := os.OpenFile(filepath.Join(home, "config.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = fmt.Fprintf(f, "\n[[worktree]]\nrepo = %q\nsetup = [\"sh\", \"-c\", %q]\nteardown = [\"sh\", \"-c\", %q]\n", w.dir, setup, down)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.launch(140, 40)
+	w.see("claude-1 · claude · idle")
+
+	// claude-1 has the first two ports, so a new session has the next.
+	port := fmt.Sprintf("port=%d", base+2)
+	create := func(name string) string {
+		t.Helper()
+		w.prefix('c')
+		w.see("agent ›")
+		w.typeText("aider")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("aider in directory: ")
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see("a worktree of its own?")
+		w.typeText("y")
+		w.see("session name: ")
+		w.tm.SendKey(uv.Key{Code: 'u', Mod: uv.ModCtrl})
+		w.typeText(name)
+		w.tm.SendKey(uv.Key{Code: uv.KeyEnter})
+		w.see(name + " · aider")
+		w.see(name + "-setup exited")
+		w.gone(name + "-setup")
+		tree := filepath.Join(w.dir+".worktrees", name)
+		if out, err := os.ReadFile(filepath.Join(home, "port.txt")); err != nil || "port="+strings.TrimSpace(string(out)) != port {
+			t.Errorf("the setup had port %q, %v; want %s", out, err, port)
+		}
+		w.line("echo port=$((CICORIA_PORT))")
+		w.see(port)
+		return tree
+	}
+	closeIt := func(name string) {
+		t.Helper()
+		w.prefix('x')
+		w.see("close " + name + " and stop its agent?")
+		w.typeText("y")
+		w.see("remove the worktree")
+		w.typeText("y")
+	}
+
+	tree := create("first")
+	// A restart keeps the ports of a session.
+	w.quit()
+	w.launch(140, 40)
+	w.see("first · aider")
+	w.prefix('2')
+	w.line("clear; echo port=$((CICORIA_PORT))")
+	w.see(port)
+	closeIt("first")
+	w.see("removed the worktree")
+	if out, err := os.ReadFile(filepath.Join(home, "torn.txt")); err != nil || strings.TrimSpace(string(out)) != tree {
+		t.Errorf("the teardown ran in %q, %v; want %s", out, err, tree)
+	}
+
+	// The ports of a closed session are free again. A teardown that fails
+	// keeps the worktree.
+	if err := os.WriteFile(filepath.Join(home, "fail"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tree = create("second")
+	closeIt("second")
+	w.see("worktree kept at", "its teardown failed: exit status 4: containers still up")
+	if _, err := os.Stat(tree); err != nil {
+		t.Error(err)
+	}
 	w.quit()
 }
 

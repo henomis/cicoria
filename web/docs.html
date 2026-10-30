@@ -203,6 +203,8 @@ cicoria -version                     <span class="c"># which version this is</sp
       <p>When closing would keep the worktree, cicoria asks whether the session's agent should fix that first. <kbd>y</kbd> tells the agent why and leaves the session open: close it again once the agent is done, and cicoria looks at the worktree again. <kbd>n</kbd> or <kbd>enter</kbd> closes and keeps the worktree, <kbd>esc</kbd> leaves the session open. Making a branch, and merging it, is up to you, or to the agent.</p>
       <p>A worktree holds only what git tracks: <code>.env</code>, <code>node_modules</code> and other ignored or untracked files are not in it. Name the ones it needs in a <code>.worktreeinclude</code> file at the top of the project, written as a <code>.gitignore</code> is, the file Claude Code reads for its own worktrees: of the files git ignores, cicoria copies the ones it names into each worktree it makes. A file git tracks, or one it does not ignore, is never copied, and the copies are the worktree's own. Claude Code asks whether to trust the new folder, as it does for any. A <code>shell</code> session is never asked and is no reason to offer the next session a worktree.</p>
       <p>What is installed rather than copied, such as <code>node_modules</code>, is the work of a <code>[[worktree]]</code> setup in the <a href="#configure">settings</a>. cicoria runs it in each worktree it makes from that repository, in a shell session named after the session with <code>-setup</code> at the end, next to the agent, which does not wait for it. The shell session closes once the setup works; when it fails, it stays as a shell in the worktree, to read what went wrong and fix it. The setup is in your settings, never in the project, so a repository you clone cannot run a command of its own.</p>
+      <p>A <code>teardown</code> in the same settings runs in a worktree before cicoria removes it, such as <code>docker compose down</code>. When it fails, or takes more than two minutes, the worktree is kept and the status bar says why.</p>
+      <p>Each session has ports of its own, so that the dev servers of two worktrees do not fight over one: the first is in <code>CICORIA_PORT</code>, for the agent and for the setup of its worktree, which can write it where the project reads its port. Sessions take ranges of <code>ports_per_session</code> from <code>port_base</code> up, 10 from 20000 by default, skipping one where a program listens already. A session keeps its range after a restart, and a closed session's range goes to the next one. <code>port_base = 0</code> gives sessions no ports.</p>
     </section>
 
     <section id="split">
@@ -422,6 +424,8 @@ Update the client to handle it.</pre>
           <tr><td>close_on_exit</td><td><code>true</code></td><td><code>false</code> keeps a session whose agent exited, to restart or close by hand</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and a session is created or closed</td></tr>
           <tr><td>web_address</td><td><code>"0.0.0.0:0"</code></td><td>Where the <a href="#web">web cockpit</a> listens, host and port: every address by default, and port 0 picks a free one. <code>"127.0.0.1:0"</code> keeps it to this machine</td></tr>
+          <tr><td>port_base</td><td><code>20000</code></td><td>The first of the ports given to sessions, each its own range, told in <code>CICORIA_PORT</code>. <code>0</code> gives sessions no ports</td></tr>
+          <tr><td>ports_per_session</td><td><code>10</code></td><td>How many ports each session has to itself, from <code>CICORIA_PORT</code> up</td></tr>
           <tr><td>worktree_dir</td><td><code>""</code></td><td>Where <a href="#worktrees">worktrees</a> go, as <code>&lt;worktree_dir&gt;/&lt;repository&gt;/&lt;session&gt;</code>: an absolute path, or one that starts with <code>~</code>. <code>""</code> puts them next to the repository</td></tr>
         </tbody>
       </table></div>
@@ -443,10 +447,12 @@ command = ["claude", "--model", "opus"]
 command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]
 
 <span class="c"># What to run in each worktree made from a repository,</span>
-<span class="c"># by its main work tree. One [[worktree]] per repository.</span>
+<span class="c"># by its main work tree. One [[worktree]] per repository,</span>
+<span class="c"># with a setup, a teardown or both.</span>
 [[worktree]]
 repo = "~/src/app"
-setup = ["npm", "ci"]</pre>
+setup = ["npm", "ci"]
+teardown = ["docker", "compose", "down"]</pre>
     </section>
 
     <section id="disk">
@@ -455,7 +461,7 @@ setup = ["npm", "ci"]</pre>
         <thead><tr><th>Path</th><th>What it holds</th></tr></thead>
         <tbody>
           <tr><td>~/.config/cicoria/config.toml</td><td>Settings, under <code>$XDG_CONFIG_HOME</code> when set</td></tr>
-          <tr><td>~/.local/state/cicoria/&lt;hash&gt;/sessions.json</td><td>One workspace: its directory, and each session's name, agent, directory, base, worktree, conversation, notes and queue. Under <code>$XDG_STATE_HOME</code> when set. The hash is the first 8 bytes of the SHA-256 of the workspace directory</td></tr>
+          <tr><td>~/.local/state/cicoria/&lt;hash&gt;/sessions.json</td><td>One workspace: its directory, and each session's name, agent, directory, base, worktree, ports, conversation, notes and queue. Under <code>$XDG_STATE_HOME</code> when set. The hash is the first 8 bytes of the SHA-256 of the workspace directory</td></tr>
           <tr><td>…/&lt;hash&gt;/lock</td><td>Held while a cicoria has the workspace open, so a second one asks before running the same agents twice</td></tr>
           <tr><td>$XDG_RUNTIME_DIR/cicoria-&lt;pid&gt;.sock</td><td>The socket hook events arrive on</td></tr>
           <tr><td>&lt;cache&gt;/cicoria/copilot</td><td>The plugin that gives Copilot CLI its hooks</td></tr>
@@ -470,6 +476,7 @@ setup = ["npm", "ci"]</pre>
           <tr><td>CICORIA_SOCK</td><td>The socket path of the running workspace</td></tr>
           <tr><td>CICORIA_SESSION</td><td>The session the process belongs to</td></tr>
           <tr><td>CICORIA_BIN</td><td>The cicoria binary, for the hooks of Copilot CLI and Codex CLI</td></tr>
+          <tr><td>CICORIA_PORT</td><td>The first of the ports the session has to itself, <code>ports_per_session</code> of them. Not set with <code>port_base = 0</code></td></tr>
         </tbody>
       </table></div>
     </section>

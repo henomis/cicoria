@@ -15,6 +15,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -328,6 +330,7 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 	}
 	s := session.New(session.NewID(), name, dir, a)
 	s.Worktree = made
+	s.Port = m.freePorts()
 	s.Base, _ = git.Head(dir)
 	s.Uncommitted = m.cfg.Changes != config.ChangesSession
 	m.sessions = append(m.sessions, s)
@@ -335,6 +338,9 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 	cmds := []tea.Cmd{m.start(s)}
 	// The agent does not wait for the setup: both are in sight.
 	if setup != nil {
+		// The setup has the agent's ports, to write the port where the
+		// project reads it.
+		setup.Port = s.Port
 		m.sessions = append(m.sessions, setup)
 		cmds = append(cmds, m.start(setup))
 	}
@@ -353,7 +359,7 @@ const setupScript = `"$@" || { printf '\ncicoria: the setup failed with status %
 // worktrees of the repository whose main work tree is main. It is nil when
 // they give none.
 func (m *Model) setupSession(name, main, top string) *session.Session {
-	argv := m.cfg.Setup(main)
+	argv := m.cfg.Worktree(main).Setup
 	if argv == nil {
 		return nil
 	}
@@ -565,14 +571,52 @@ func (m *Model) offerRemoveWorktree(path, kept string) {
 	m.confirm = &confirm{
 		question: fmt.Sprintf("remove the worktree %s?", tilde(path)),
 		yes: func() tea.Cmd {
+			cfg := m.cfg
 			return func() tea.Msg {
 				if kept := keepWorktree(path); kept != "" {
+					return worktreeMsg{path, kept}
+				}
+				if kept := teardown(cfg, path); kept != "" {
 					return worktreeMsg{path, kept}
 				}
 				return removedMsg{path, git.RemoveWorktree(path)}
 			}
 		},
 	}
+}
+
+// teardownTimeout is how long the teardown of a worktree can take before
+// it is stopped, and the worktree kept.
+const teardownTimeout = 2 * time.Minute
+
+// teardown runs in the worktree at path the teardown cfg gives for the
+// worktrees of its repository. It says why the worktree must be kept when
+// the teardown fails, or "" when it worked or there is none.
+func teardown(cfg config.Config, path string) string {
+	main, _ := git.Main(path)
+	argv := cfg.Worktree(main).Teardown
+	if argv == nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), teardownTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = path
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return ""
+	}
+	// The last line it wrote mostly tells what went wrong.
+	if last := lastLine(string(out)); last != "" {
+		err = fmt.Errorf("%w: %s", err, last)
+	}
+	return "its teardown failed: " + err.Error()
+}
+
+// lastLine returns the last line of out that is not blank.
+func lastLine(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 // worksIn reports whether a session other than except works in the

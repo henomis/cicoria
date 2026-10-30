@@ -296,6 +296,10 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 			s := session.New(saved.ID, saved.Name, sdir, a)
 			s.Conversation, s.Base, s.Notes = saved.Conversation, saved.Base, saved.Notes
 			s.Worktree = saved.Worktree
+			// A session keeps its ports, unless the settings changed since.
+			if m.ownPorts(saved.Port) {
+				s.Port = saved.Port
+			}
 			s.Uncommitted = cfg.Changes != config.ChangesSession
 			// A queue left from last time waits for a go: opening cicoria
 			// must not send messages by itself.
@@ -314,6 +318,11 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 		s.Base, _ = git.Head(dir)
 		s.Uncommitted = cfg.Changes != config.ChangesSession
 		m.sessions = append(m.sessions, s)
+	}
+	for _, s := range m.sessions {
+		if s.Port == 0 {
+			s.Port = m.freePorts()
+		}
 	}
 	m.active = max(min(st.Active, len(m.sessions)-1), 0)
 	m.sessionCursor = m.active
@@ -440,7 +449,7 @@ func (m *Model) save() {
 	for _, s := range m.sessions {
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
-			Worktree: s.Worktree, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
+			Worktree: s.Worktree, Port: s.Port, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
 		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {

@@ -125,6 +125,10 @@ config/local.toml
 
 What is installed rather than copied, such as `node_modules`, is the work of a setup the settings give for the repository (see [Configure](#configure)). cicoria runs it in each worktree it makes from that repository, in a shell session named after the session with `-setup` at the end, next to the agent, which does not wait for it. The shell session closes once the setup works; when it fails, it stays as a shell in the worktree, to read what went wrong and fix it. The setup is in your settings, never in the project, so a repository you clone cannot run a command of its own.
 
+A `teardown` in the same settings runs in a worktree before cicoria removes it, such as `docker compose down`. When it fails, or takes more than two minutes, the worktree is kept, and the status bar says why.
+
+Each session has 10 ports of its own, so that the dev servers of two worktrees do not fight over one: the first is in `CICORIA_PORT`, for the agent and for the setup of its worktree, which can write it where the project reads its port. Sessions take ranges from 20000 up, skipping one where a program listens already, and a session keeps its range after a restart. `port_base` and `ports_per_session` change that, and `port_base = 0` gives sessions no ports.
+
 ### Two sessions on screen
 
 `ctrl+a -` splits the agent pane in two: the session on screen stays above, and the one you pick is shown below it. `ctrl+a tab`, or a click in the other pane, moves the keys from one to the other; the pane that has them is the one with the lit border, and the side panels show its project. Going to a session (`ctrl+a n`, `p`, `1`-`9`) puts it in the pane that has the keys, or moves the keys when it is already in the other one. The wheel scrolls the pane it is over.
@@ -221,6 +225,8 @@ ignored_files = true     # false opens with the files git ignores left out of th
 close_on_exit = true     # false keeps a session whose agent has exited, to restart or close by hand
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
 web_address = "0.0.0.0:0"  # where the web cockpit listens: every address, a free port; "127.0.0.1:0" keeps it to this machine
+port_base = 20000        # the first port given to sessions, in CICORIA_PORT; 0 gives none
+ports_per_session = 10   # how many ports each session has to itself
 worktree_dir = ""        # where worktrees go, as ~/worktrees/<repository>/<session>; "" puts them next to the repository
 
 # Any command line can be an agent. Its status is guessed from terminal
@@ -241,10 +247,12 @@ command = ["ollama", "launch", "copilot", "--model", "gemma4:cloud", "--"]
 command = ["ollama", "launch", "codex", "--model", "gemma4:cloud", "--"]
 
 # What to run in each worktree made from a repository, by its main
-# work tree; ~ is the home directory. One [[worktree]] per repository.
+# work tree; ~ is the home directory. One [[worktree]] per repository,
+# with a setup, a teardown or both.
 [[worktree]]
 repo = "~/src/app"
 setup = ["npm", "ci"]
+teardown = ["docker", "compose", "down"]
 ```
 
 A plain `shell` is always available as a session type.

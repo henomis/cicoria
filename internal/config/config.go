@@ -59,6 +59,11 @@ type Config struct {
 	// WebAddress is the address the web cockpit listens on, host and port.
 	// Port 0 picks a free one.
 	WebAddress string `toml:"web_address"`
+	// PortBase is the first of the ports given to sessions, PortsPerSession
+	// to each: a session has its own range, whose first port it is told in
+	// CICORIA_PORT. A PortBase of 0 gives sessions no ports.
+	PortBase        int `toml:"port_base"`
+	PortsPerSession int `toml:"ports_per_session"`
 	// Agents are command lines to offer as agents, by name. An entry named
 	// "claude", "copilot" or "codex" changes how Claude Code, Copilot CLI
 	// or Codex CLI is started.
@@ -80,6 +85,9 @@ type WorktreeConfig struct {
 	// Setup is the command line run in each new worktree, as dependencies
 	// are installed.
 	Setup []string `toml:"setup"`
+	// Teardown is the command line run in a worktree before it is removed,
+	// as containers started there are stopped.
+	Teardown []string `toml:"teardown"`
 }
 
 // What the changes panel can show.
@@ -98,7 +106,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0"}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10}
 }
 
 // Path returns where the config file is looked for: under $XDG_CONFIG_HOME
@@ -157,6 +165,12 @@ func Load(path string) (Config, error) {
 			return cfg, fmt.Errorf("%s: agent %q has no command", path, name)
 		}
 	}
+	if cfg.PortsPerSession < 1 {
+		return cfg, fmt.Errorf("%s: ports_per_session is %d: it is at least 1", path, cfg.PortsPerSession)
+	}
+	if cfg.PortBase != 0 && (cfg.PortBase < 1024 || cfg.PortBase+cfg.PortsPerSession-1 > 65535) {
+		return cfg, fmt.Errorf("%s: port_base is %d: it is 0, or a port from 1024 that leaves room for ports_per_session", path, cfg.PortBase)
+	}
 	if cfg.WorktreeDir != "" {
 		cfg.WorktreeDir = expandHome(cfg.WorktreeDir)
 		if !filepath.IsAbs(cfg.WorktreeDir) {
@@ -168,22 +182,22 @@ func Load(path string) (Config, error) {
 		if w.Repo == "" {
 			return cfg, fmt.Errorf("%s: a worktree has no repo", path)
 		}
-		if len(w.Setup) == 0 {
-			return cfg, fmt.Errorf("%s: the worktree of %q has no setup", path, w.Repo)
+		if len(w.Setup) == 0 && len(w.Teardown) == 0 {
+			return cfg, fmt.Errorf("%s: the worktree of %q has no setup and no teardown", path, w.Repo)
 		}
 	}
 	return cfg, nil
 }
 
-// Setup returns the command line to run in a new worktree of the repository
-// whose main work tree is main, or nil when there is none.
-func (c Config) Setup(main string) []string {
+// Worktree returns what to do in the worktrees of the repository whose
+// main work tree is main: nothing when the settings do not name it.
+func (c Config) Worktree(main string) WorktreeConfig {
 	for _, w := range c.Worktrees {
 		if samePath(expandHome(w.Repo), main) {
-			return w.Setup
+			return w
 		}
 	}
-	return nil
+	return WorktreeConfig{}
 }
 
 // expandHome replaces a leading ~ with the home directory.

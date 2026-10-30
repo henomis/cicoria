@@ -18,6 +18,7 @@ package agent
 
 import (
 	"os/exec"
+	"strconv"
 
 	"github.com/henomis/cicoria/internal/ipc"
 )
@@ -63,7 +64,13 @@ type LaunchOpts struct {
 	Self string
 	// Socket is where hook events are reported.
 	Socket string
+	// Port is the first of the ports the session has to itself, or 0 when
+	// it has none.
+	Port int
 }
+
+// EnvPort tells the agent the first of the ports its session has to itself.
+const EnvPort = "CICORIA_PORT"
 
 // Update is what an adapter learned from one event.
 type Update struct {
@@ -125,5 +132,8 @@ func baseCommand(o LaunchOpts, argv []string) *exec.Cmd {
 		ipc.EnvSession+"="+o.SessionID,
 		ipc.EnvSelf+"="+o.Self,
 	)
+	if o.Port != 0 {
+		cmd.Env = append(cmd.Env, EnvPort+"="+strconv.Itoa(o.Port))
+	}
 	return cmd
 }
