@@ -112,7 +112,13 @@ Closing the session offers to remove the worktree, once its agent has ended. A b
 
 When closing a session would keep its worktree, cicoria asks instead whether its agent should fix that first. `y` tells the agent why the worktree cannot go and leaves the session open: close it again once the agent is done, and cicoria looks at the worktree again. `n` or `enter` closes the session and keeps the worktree, `esc` leaves the session open. Making a branch, and merging it, is up to you, or to the agent.
 
-A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not copied to it. Claude Code asks whether it can trust the new folder, as it does for any.
+A worktree holds what git tracks: files that are not committed or that git ignores, such as `.env` or `node_modules`, are not in it. The ones it needs can be named in a `.worktreeinclude` file at the top of the project, written as a `.gitignore` is, the file Claude Code reads for its own worktrees: of the files git ignores, cicoria copies the ones it names into each worktree it makes. A file git tracks, or one it does not ignore, is never copied. The copies are the worktree's own, so the agent changes none of the originals. Claude Code asks whether it can trust the new folder, as it does for any.
+
+```gitignore
+# .worktreeinclude
+.env
+config/local.toml
+```
 
 ### Two sessions on screen
 

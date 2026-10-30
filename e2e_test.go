@@ -1979,6 +1979,15 @@ func TestWorktree(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	// Of the files git ignores, the ones the include file names go into a
+	// worktree.
+	for name, content := range map[string]string{".gitignore": ".env\n*.key\n", ".worktreeinclude": ".env\n", ".env": "SECRET=1\n", "local.key": "x\n"} {
+		if err := os.WriteFile(filepath.Join(w.dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git(w.dir, "add", "-A")
+	git(w.dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "include")
 	head := git(w.dir, "rev-parse", "--short", "HEAD")
 
 	create := func() {
@@ -1999,6 +2008,12 @@ func TestWorktree(t *testing.T) {
 	create()
 	if _, err := os.Stat(filepath.Join(tree, "main.go")); err != nil {
 		t.Fatal(err)
+	}
+	if st, err := os.Stat(filepath.Join(tree, ".env")); err != nil || st.Mode().Perm() != 0o600 {
+		t.Errorf(".env in the worktree: %v, %v", st, err)
+	}
+	if _, err := os.Stat(filepath.Join(tree, "local.key")); err == nil {
+		t.Error("a file the include file does not name is in the worktree")
 	}
 
 	// What is changed there is not a change of the first session.

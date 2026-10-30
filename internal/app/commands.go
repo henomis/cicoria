@@ -17,6 +17,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -299,12 +300,17 @@ func (m *Model) toggleSide(hide *bool) tea.Cmd {
 // dir and puts it on screen. With worktree, the session works in a git
 // worktree of its own instead, made for it from the commit dir is on.
 func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea.Cmd {
-	made := ""
+	made, problem := "", ""
 	if worktree {
+		src := dir
 		var err error
 		if made, dir, err = addWorktree(name, dir); err != nil {
 			m.say(err.Error())
 			return nil
+		}
+		// The session starts without a file that could not be copied.
+		if err := copyIncluded(src, made); err != nil {
+			problem = err.Error()
 		}
 	}
 	// One session to a directory is how the panels tell whose work is whose.
@@ -317,6 +323,9 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 			m.say(other.Name + " already works in this directory: their changes will be mixed")
 			break
 		}
+	}
+	if problem != "" {
+		m.say(problem)
 	}
 	s := session.New(session.NewID(), name, dir, a)
 	s.Worktree = made
@@ -439,6 +448,64 @@ func addWorktree(name, dir string) (top, in string, err error) {
 		}
 	}
 	return top, in, nil
+}
+
+// copyIncluded copies into the worktree at top the files git ignores that
+// the work tree of dir names in its include file, such as .env: git does not
+// put them in a worktree. They are copies, so the agent changes none of the
+// originals. It goes on past a file it cannot copy, and names the first.
+func copyIncluded(dir, top string) error {
+	root, ok := git.Root(dir)
+	if !ok {
+		return nil
+	}
+	files, err := git.Included(root)
+	if err != nil {
+		return err
+	}
+	var first error
+	for _, f := range files {
+		if err := copyFile(filepath.Join(root, f), filepath.Join(top, f)); err != nil && first == nil {
+			first = fmt.Errorf("could not copy %s into the worktree: %w", f, err)
+		}
+	}
+	return first
+}
+
+// copyFile copies the file at src to dst, with its permissions, making the
+// directories it goes in. A symbolic link is copied as one.
+func copyFile(src, dst string) error {
+	st, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	if st.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(src)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(target, dst)
+	}
+	if !st.Mode().IsRegular() {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, st.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // askRemoveWorktree checks, once the agent of a closed session has ended,

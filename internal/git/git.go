@@ -469,6 +469,46 @@ func AddWorktree(dir, path string) error {
 	return err
 }
 
+// IncludeFile names the file at the top of a work tree that lists, as a
+// .gitignore does, the files git ignores that a new worktree needs too, such
+// as .env. Claude Code reads the same file for the worktrees it makes.
+const IncludeFile = ".worktreeinclude"
+
+// Included lists the files of the work tree at root, relative to it and
+// sorted, that git ignores and IncludeFile names. A file git tracks, or one
+// it does not ignore, is not one: it is already in a worktree, or not meant
+// to be copied.
+func Included(root string) ([]string, error) {
+	list := filepath.Join(root, IncludeFile)
+	if _, err := os.Stat(list); err != nil {
+		return nil, nil
+	}
+	out, err := run(root, "ls-files", "-z", "--others", "--ignored", "--exclude-from="+list)
+	if err != nil {
+		return nil, err
+	}
+	named := strings.TrimSuffix(string(out), "\x00")
+	if named == "" {
+		return nil, nil
+	}
+
+	// Of those, the ones git ignores. It exits with 1 when there is none.
+	cmd := exec.Command("git", "-C", root, "check-ignore", "-z", "--stdin")
+	cmd.Stdin = strings.NewReader(named + "\x00")
+	out, err = cmd.Output()
+	if exit := (*exec.ExitError)(nil); err != nil && (!errors.As(err, &exit) || exit.ExitCode() != 1) {
+		return nil, fmt.Errorf("git check-ignore: %w", err)
+	}
+	var files []string
+	for p := range strings.SplitSeq(string(out), "\x00") {
+		if p != "" {
+			files = append(files, p)
+		}
+	}
+	slices.Sort(files)
+	return files, nil
+}
+
 // ErrLeftBehind is what RemoveWorktree fails with when git let go of the
 // work tree but could not delete all of it.
 var ErrLeftBehind = errors.New("git let go of the worktree, but some of it is left behind")

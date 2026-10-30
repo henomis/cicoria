@@ -369,6 +369,38 @@ func TestWorktree(t *testing.T) {
 	}
 }
 
+// The files a worktree needs are the ignored ones the include file names,
+// and no others.
+func TestIncluded(t *testing.T) {
+	dir := repo(t)
+	if got, err := Included(dir); err != nil || got != nil {
+		t.Errorf("without an include file = %v, %v", got, err)
+	}
+
+	writeFile(t, dir, ".gitignore", "ignored/\n.env\n*.key\n")
+	writeFile(t, dir, IncludeFile, ".env\nconfig/\nkept.txt\nloose.txt\n")
+	writeFile(t, dir, ".env", "SECRET=1\n")
+	writeFile(t, dir, "secret.key", "x\n")
+	writeFile(t, dir, "loose.txt", "x\n")
+	writeFile(t, dir, "ignored/config/local.toml", "x\n")
+	writeFile(t, dir, "config/.env", "x\n")
+	got, err := Included(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// secret.key is ignored but not named, kept.txt is tracked, loose.txt
+	// is not ignored.
+	if want := []string{".env", "config/.env", "ignored/config/local.toml"}; !slices.Equal(got, want) {
+		t.Errorf("included = %v, want %v", got, want)
+	}
+
+	// Naming files that are not there gives none.
+	writeFile(t, dir, IncludeFile, "missing.txt\n")
+	if got, err := Included(dir); err != nil || got != nil {
+		t.Errorf("with nothing to include = %v, %v", got, err)
+	}
+}
+
 // A work tree with a file that cannot be deleted, ignored or not, is told
 // apart before removing it, and so is what a removal leaves behind.
 func TestWorktreeUndeletable(t *testing.T) {
