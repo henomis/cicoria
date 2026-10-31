@@ -6,7 +6,7 @@ Work with several coding agents at once, in your terminal: see which one needs y
 
 cicoria is an interface for you, not an orchestrator. It does not run workflows between agents or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.
 
-[![A recorded cicoria session: Claude Code writes a Go HTTP server while a README waits in the queue, a second session in a split pane counts the lines of main.go, and a note on the diff asks the first one for a new endpoint](assets/demo.gif)](https://henomis.github.io/cicoria/demo.mp4)
+[![A recorded cicoria session: Claude Code writes a Go HTTP server while a README waits in the queue, a second session gets a git worktree of its own and writes a Makefile there, both are shown in a split pane, a note on the diff asks the first one for a new endpoint, and the second commits on a branch and its worktree is removed](assets/demo.gif)](https://henomis.github.io/cicoria/demo.mp4)
 
 Website and full documentation: <https://henomis.github.io/cicoria/>
 

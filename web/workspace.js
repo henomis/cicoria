@@ -32,7 +32,7 @@
       ],
     },
     {
-      name: "checkout-ui", agent: "codex", dir: "~/src/shop.worktrees/checkout-ui", branch: "cicoria/checkout-ui", age: 410,
+      name: "checkout-ui", agent: "codex", dir: "~/src/shop.worktrees/checkout-ui", branch: "checkout-ui", age: 410,
       steps: [
         { status: "working", dur: 12, lines: [you("Build the payment step of the checkout"), dim("Explored 6 files"), out("Adding PaymentStep.tsx and its form state…")],
           files: [["A", "web/src/checkout/PaymentStep.tsx", 118, 0], ["M", "web/src/checkout/Checkout.tsx", 9, 2]], queue: [] },
