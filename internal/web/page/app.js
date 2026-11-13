@@ -58,6 +58,12 @@ function statusOf(s) {
   return { cls: s.status.replace(" ", "-"), text: s.status };
 }
 
+// prose draws an answer, with what is between backticks as code.
+function prose(text) {
+  return text.split(/(`[^`\n]+`)/).map((part) =>
+    part.length > 2 && part.startsWith("`") && part.endsWith("`") ? el("code", {}, part.slice(1, -1)) : part);
+}
+
 function toast(text) {
   const t = el("div", { class: "toast", role: "status" }, text);
   document.body.append(t);
@@ -84,12 +90,14 @@ function connect(watch) {
   if (source) source.close();
   watched = watch;
   source = new EventSource(`/events?t=${encodeURIComponent(token)}` + (watch ? `&watch=${encodeURIComponent(watch)}` : ""));
-  source.onopen = () => $("#conn").classList.add("on");
+  source.onopen = () => document.body.classList.add("online");
   source.onerror = () => {
-    $("#conn").classList.remove("on");
+    document.body.classList.remove("online");
     // A stream that is refused is not tried again: the token is not taken.
     if (source.readyState === EventSource.CLOSED) {
       view = null;
+      $("#list").replaceChildren();
+      document.body.dataset.route = "session";
       main.replaceChildren(el("p", { class: "empty" }, "This link is not valid any more: open the one cicoria shows."));
     }
   };
@@ -108,38 +116,60 @@ function route() {
 function render() {
   const id = route();
   main.replaceChildren();
-  $("#back").hidden = !id;
-  view = id ? sessionView(id) : listView();
+  document.body.dataset.route = id ? "session" : "list";
+  if (!id) document.title = "cicoria";
+  view = id ? sessionView(id) : homeView();
   update();
+  window.scrollTo(0, 0);
 }
 
 function update() {
+  paintList();
   view?.update();
 }
 
-// The list of the shared sessions.
-function listView() {
+// paintList draws the shared sessions, the one open marked. It is always
+// there on a wide screen, and is the whole page on a phone.
+function paintList() {
+  const list = $("#list");
+  const open = route();
+  $("#workspace").textContent = snap.workspace;
+  if (!loaded) return;
+  if (!snap.sessions.length) {
+    list.replaceChildren(el("p", { class: "empty" },
+      "No session is shared. In cicoria, open the web cockpit and press space on a session."));
+    return;
+  }
+  list.replaceChildren(el("ul", { class: "sessions" }, snap.sessions.map((s) => {
+    const st = statusOf(s);
+    const since = ago(s.since);
+    return el("li", {},
+      el("a", {
+        href: `#/s/${encodeURIComponent(s.id)}`,
+        class: st.cls,
+        "aria-current": s.id === open ? "page" : false,
+      },
+        el("span", { class: `badge ${st.cls}`, "aria-hidden": "true" }),
+        el("span", { class: "grow" },
+          el("span", { class: "name" }, s.name),
+          el("span", { class: "meta" },
+            el("span", { class: "said" }, since ? `${st.text} ${since}` : st.text),
+            s.agent ? el("span", {}, s.agent) : null,
+            s.project ? el("span", {}, s.project) : null)),
+        s.queue.length ? el("span", { class: "queued", title: `${s.queue.length} queued` }, `+${s.queue.length}`) : null));
+  })));
+}
+
+// homeView is what the main pane holds with no session open: on a phone,
+// nothing, since the list is the page.
+function homeView() {
   connect(null);
   tab = null;
   return {
     update() {
-      $("#title").textContent = "cicoria";
-      $("#subtitle").textContent = snap.workspace;
-      if (!snap.sessions.length) {
-        main.replaceChildren(el("p", { class: "empty" }, "No session is shared. In cicoria, open the web cockpit and press space on a session."));
-        return;
-      }
-      main.replaceChildren(el("ul", { class: "sessions" }, snap.sessions.map((s) => {
-        const st = statusOf(s);
-        const since = ago(s.since);
-        return el("li", {},
-          el("a", { href: `#/s/${encodeURIComponent(s.id)}`, class: s.status === "needs input" ? "attention" : "" },
-            el("span", { class: `badge ${st.cls}`, title: st.text }),
-            el("div", { class: "grow" },
-              el("div", { class: "name" }, s.name),
-              el("div", { class: "meta" }, [st.text, since, s.agent, s.project].filter(Boolean).join(" · "))),
-            s.queue.length ? el("span", { class: "queue" }, `⋯${s.queue.length}`) : null));
-      })));
+      main.replaceChildren(loaded && snap.sessions.length
+        ? el("p", { class: "empty pick" }, "Pick a session to read what it said, see its screen and its changes, and answer it.")
+        : "");
     },
   };
 }
@@ -149,20 +179,26 @@ function listView() {
 function sessionView(id) {
   // The tab is picked once the session is known: until then, no screen.
   connect(null);
+  const name = el("h2", { class: "name" });
+  const meta = el("div", { class: "meta" });
+  const head = el("div", { class: "session-head" },
+    el("a", { class: "back", href: "#", "aria-label": "All sessions" }, "‹"),
+    el("div", { class: "grow" }, name, meta),
+    el("span", { class: "conn", role: "status" }));
   const status = el("div", { class: "status" });
   const tabs = el("div", { class: "tabs", role: "tablist" });
   const body = el("div");
-  const keys = el("div", { class: "keys" },
+  const keys = el("div", { class: "keys", role: "group", "aria-label": "Keys to press in the agent" },
     ["y", "n", "1", "2", "3", "esc", "enter", "up", "down", "left", "right", "tab"].map((k) =>
-      el("button", { onclick: () => post(id, "key", { text: k }) },
+      el("button", { class: k.length > 1 && k !== "esc" ? "glyph" : "", "aria-label": k, onclick: () => post(id, "key", { text: k }) },
         { esc: "Esc", enter: "⏎", up: "↑", down: "↓", left: "←", right: "→", tab: "⇥" }[k] || k)));
-  const queueHead = el("h2", {});
-  const queue = el("ul", { class: "queue" });
+  const queueHead = el("h3", {});
+  const queue = el("ol", { class: "queue" });
   const text = el("textarea", { rows: 2, placeholder: "Message to the agent", enterkeyhint: "send" });
   const sendNow = el("button", { class: "primary" }, "Send");
   const queueIt = el("button", {}, "Queue");
   const composer = el("div", { class: "composer" }, text, el("div", { class: "actions" }, queueIt, sendNow));
-  const root = el("div", { class: "session", hidden: true }, status, tabs, body, keys, queueHead, queue, composer);
+  const root = el("div", { class: "session", hidden: true }, head, status, tabs, body, keys, queueHead, queue, composer);
   const gone = el("p", { class: "empty", hidden: true }, "This session is not shared any more.");
   main.append(root, gone);
 
@@ -200,13 +236,16 @@ function sessionView(id) {
     if (tab === "changes" && !force && shown === "changes") return;
     shown = tab;
     if (tab === "answer") {
-      body.replaceChildren(el("div", { class: "card" },
-        el("p", { class: "answer" }, s?.answer || "No answer yet: it comes at the end of a turn.")));
+      body.replaceChildren(s?.answer
+        ? el("p", { class: "answer" }, prose(s.answer))
+        : el("p", { class: "empty" }, "No answer yet: it comes at the end of a turn."));
     } else if (tab === "screen") {
       body.replaceChildren(el("pre", { class: "screen" }, s?.screen || "…"));
     } else if (diff) {
       body.replaceChildren(
-        el("div", { class: "actions" }, el("button", { onclick: () => { diff = null; paint(true); } }, "‹ Files")),
+        el("div", { class: "diff-head" },
+          el("button", { class: "quiet", onclick: () => { diff = null; paint(true); } }, "‹ Files"),
+          el("span", { class: "path" }, diff.path)),
         el("pre", { class: "diff" }, diff.text.split("\n").map((l) => el("span", {
           class: l.startsWith("@@") ? "hunk"
             : /^(diff |index |--- |\+\+\+ )/.test(l) ? "head"
@@ -216,15 +255,16 @@ function sessionView(id) {
       body.replaceChildren(el("p", { class: "empty" }, "Loading…"));
     } else if (!changes.length) {
       body.replaceChildren(el("p", { class: "empty" }, "No changes."),
-        el("div", { class: "actions" }, el("button", { onclick: loadChanges }, "Refresh")));
+        el("div", { class: "actions" }, el("button", { class: "quiet", onclick: loadChanges }, "Refresh")));
     } else {
       body.replaceChildren(
         el("ul", { class: "files" }, changes.map((c) => el("li", {},
           el("button", { onclick: () => openDiff(c.path) },
             el("span", { class: `mark ${c.mark}` }, c.mark),
             el("span", { class: "path" }, c.path),
-            el("span", { class: "count" }, `+${c.added} −${c.deleted}`))))),
-        el("div", { class: "actions" }, el("button", { onclick: loadChanges }, "Refresh")));
+            el("span", { class: "count" },
+              el("span", { class: "plus" }, `+${c.added}`), " ", el("span", { class: "minus" }, `−${c.deleted}`)))))),
+        el("div", { class: "actions" }, el("button", { class: "quiet", onclick: loadChanges }, "Refresh")));
     }
   }
 
@@ -240,25 +280,23 @@ function sessionView(id) {
       const s = snap.sessions.find((x) => x.id === id);
       root.hidden = !s;
       gone.hidden = !!s || !loaded;
-      if (!s) {
-        $("#title").textContent = loaded ? "Not shared" : "cicoria";
-        $("#subtitle").textContent = "";
-        return;
-      }
+      if (!s) return;
       // An agent that does not tell its answers shows its screen.
       if (!tab) return select(s.answer ? "answer" : "screen");
 
-      $("#title").textContent = s.name;
-      $("#subtitle").textContent = [s.agent, s.project].join(" · ");
+      document.title = `${s.name} · cicoria`;
+      name.textContent = s.name;
+      meta.replaceChildren(...[s.agent, s.project].filter(Boolean).map((t) => el("span", {}, t)));
       const st = statusOf(s);
       status.className = `status ${st.cls}`;
-      status.replaceChildren(el("span", { class: `badge ${st.cls}` }), el("strong", {}, st.text),
+      status.replaceChildren(el("span", { class: `badge ${st.cls}`, "aria-hidden": "true" }), el("strong", {}, st.text),
         ago(s.since) ? el("span", {}, `for ${ago(s.since)}`) : null);
       tabs.replaceChildren(...[["answer", "Answer"], ["screen", "Screen"], ["changes", "Changes"]].map(([k, label]) =>
         el("button", { role: "tab", "aria-selected": String(tab === k), onclick: () => select(k) }, label)));
       paint(false);
 
-      queueHead.replaceChildren(`Queue (${s.queue.length})${s.paused ? " · paused" : ""}`);
+      queueHead.replaceChildren(s.paused ? "Queued, paused" : "Queued next",
+        el("span", { class: "count" }, String(s.queue.length)));
       queueHead.hidden = queue.hidden = !s.queue.length;
       queue.replaceChildren(...s.queue.map((m) => el("li", {}, el("span", {}, m))));
       sendNow.disabled = !s.running;
