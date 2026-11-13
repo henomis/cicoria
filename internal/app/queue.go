@@ -31,8 +31,10 @@ import (
 const submitAfter = 150 * time.Millisecond
 
 // askQueue asks for a message to queue for the session on screen.
-func (m *Model) askQueue() tea.Cmd {
-	s := m.current()
+func (m *Model) askQueue() tea.Cmd { return m.askQueueFor(m.current()) }
+
+// askQueueFor asks for a message to queue for a session.
+func (m *Model) askQueueFor(s *session.Session) tea.Cmd {
 	if s == nil {
 		m.say(errNoSession.Error())
 		return nil

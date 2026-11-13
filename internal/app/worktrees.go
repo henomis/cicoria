@@ -187,7 +187,7 @@ func (m *Model) askSessionIn(dir string, shell bool) tea.Cmd {
 		}
 	}
 	if len(agents) == 1 {
-		return m.askWorktree(agents[0], dir)
+		return m.askWorktree(agents[0], dir, nil)
 	}
 	var items []ui.Item
 	for _, a := range agents {

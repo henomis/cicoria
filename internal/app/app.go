@@ -52,6 +52,9 @@ const (
 	messageFor = 4 * time.Second
 	// hintFor is how long the message about other workspaces stays.
 	hintFor = 15 * time.Second
+	// readyAfter is how long after an agent says it started the first
+	// message of its queue is sent.
+	readyAfter = time.Second
 )
 
 // focus is the part of the workspace that receives keys.
@@ -75,6 +78,7 @@ const (
 	modePalette
 	modeHelp
 	modeWeb
+	modeBoard
 )
 
 // Model is the root Bubble Tea model.
@@ -163,6 +167,11 @@ type Model struct {
 	// helpTop is the first line of help on screen.
 	helpTop int
 
+	// cards is the backlog: work written down for sessions not started yet,
+	// in the order the user gave it. board is what the board shows.
+	cards []session.Card
+	board board
+
 	// web is the web cockpit, while it runs; webQR is the code of its link,
 	// and webCursor the session under the cursor of its box.
 	web       *web.Server
@@ -193,6 +202,8 @@ type confirm struct {
 	// unless always says it must be answered: then any other key is a no.
 	no     func() tea.Cmd
 	always bool
+	// yesFirst makes yes the answer enter gives.
+	yesFirst bool
 }
 
 // Messages.
@@ -238,6 +249,18 @@ type (
 	}
 	// editorMsg reports that the external editor was closed.
 	editorMsg struct{ err error }
+	// cardEditedMsg reports that the editor a card was written in was
+	// closed: id is the card's, or "" for a new one, and path the file.
+	cardEditedMsg struct {
+		id, path string
+		err      error
+	}
+	// readyMsg is the time to look again at an agent that just said it is
+	// ready, to send it what waits in its queue.
+	readyMsg struct {
+		id   string
+		term *term.Terminal
+	}
 	// openedMsg reports that a file could not be opened outside cicoria.
 	openedMsg struct{ err error }
 	// removedMsg reports that the worktree of a closed session was removed,
@@ -331,6 +354,7 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 	}
 	m.active = max(min(st.Active, len(m.sessions)-1), 0)
 	m.sessionCursor = m.active
+	m.cards = st.Cards
 
 	return m, nil
 }
@@ -391,6 +415,10 @@ func (m *Model) current() *session.Session {
 // under the cursor while the sessions panel has the keys, else the one on
 // screen.
 func (m *Model) target() *session.Session {
+	// On the board, it is the card under the cursor.
+	if m.mode == modeBoard {
+		return m.boardItem().s
+	}
 	i := m.active
 	if m.focus == focusSessions {
 		i = m.sessionCursor
@@ -450,7 +478,7 @@ func (m *Model) say(msg string) {
 
 // save remembers the sessions for the next run.
 func (m *Model) save() {
-	st := session.State{Dir: m.dir}
+	st := session.State{Dir: m.dir, Cards: m.cards}
 	for i, s := range m.sessions {
 		// The setup of a worktree is not run again: it ended with cicoria.
 		if s.Setup {
@@ -723,6 +751,18 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case worktreeMsg:
 		m.offerRemoveWorktree(msg)
 
+	case boardMsg:
+		m.board.polling = false
+		m.board.info = msg.info
+
+	case cardEditedMsg:
+		m.cardEdited(msg)
+
+	case readyMsg:
+		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term {
+			return m.trySend(s)
+		}
+
 	case submitMsg:
 		if s, _ := m.byID(msg.id); s != nil && s.Term == msg.term && s.Status != agent.Exited {
 			s.Term.SendKey(uv.Key{Code: uv.KeyEnter})
@@ -827,6 +867,7 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 	if u.TurnEnded {
 		cmds = append(cmds, m.trySend(s))
 	}
+	cmds = append(cmds, whenReady(s, before))
 	if u.File != "" && i == m.active {
 		cmds = append(cmds, m.refresh())
 	}
@@ -836,9 +877,23 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// whenReady sends an agent that has just started, and is ready now, the
+// first message of its queue, such as the prompt of the card it was started
+// from. It is given a moment to show where that is typed.
+func whenReady(s *session.Session, before agent.Status) tea.Cmd {
+	if before != agent.Starting || s.Status != agent.Idle || len(s.Queue) == 0 || s.Paused {
+		return nil
+	}
+	id, t := s.ID, s.Term
+	return tea.Tick(readyAfter, func(time.Time) tea.Msg { return readyMsg{id, t} })
+}
+
 func (m *Model) handleTick(now time.Time) tea.Cmd {
+	var ready []tea.Cmd
 	for i, s := range m.sessions {
+		before := s.Status
 		s.Tick(m.watching(i), now)
+		ready = append(ready, whenReady(s, before))
 	}
 	if m.message != "" && now.Sub(m.messageAt) > messageFor {
 		m.message = ""
@@ -846,11 +901,15 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 	m.ticks++
 	m.publish()
 	// Nobody sees the panels of a terminal that is not in front: the work
-	// tree is looked at again when it comes back.
+	// tree is looked at again when it comes back. The board looks at the
+	// work of every session, while it is open.
 	if m.ticks%refreshTicks == 0 && !m.blurred {
-		return m.refresh()
+		ready = append(ready, m.refresh())
+		if m.mode == modeBoard {
+			ready = append(ready, m.pollBoard())
+		}
 	}
-	return nil
+	return tea.Batch(ready...)
 }
 
 func (m *Model) applyRefresh(msg refreshMsg) {

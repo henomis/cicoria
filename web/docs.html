@@ -59,6 +59,7 @@
           <li><a href="#notes">Notes</a></li>
           <li><a href="#queue">Queue</a></li>
           <li><a href="#ask">Asking a session</a></li>
+          <li><a href="#board">Board</a></li>
           <li><a href="#web">Web cockpit</a></li>
         </ol>
       </div>
@@ -149,6 +150,7 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>tab</td><td>Go to the other pane of the split</td></tr>
           <tr><td>w</td><td>Open another saved workspace in place of this one</td></tr>
           <tr><td>o</td><td>Worktrees: list them, open a session or a shell in one, or remove it</td></tr>
+          <tr><td>0</td><td>Board: the backlog, and every session by what it needs</td></tr>
           <tr><td>v</td><td>Web cockpit: share sessions with a phone or a browser</td></tr>
           <tr><td>s f g</td><td>Focus the sessions, files, changes panel</td></tr>
           <tr><td>l</td><td>Focus the commits panel</td></tr>
@@ -339,6 +341,42 @@ It answered:
 Update the client to handle it.</pre>
       <p>The answer is the agent's last message in the <code>Stop</code> hook's payload, so only Claude Code and Codex CLI can be asked. Copilot CLI's hooks do not carry it, and cicoria does not read transcripts, so for Copilot the choice says <code>not supported</code>.</p>
       <p>Only the turn the question starts counts. When another message was taken first, which is how an interrupted turn shows, or the turn ends on an error, or the agent says nothing, no answer goes back and the status bar says so. Claude Code names the message a turn is for, which settles this exactly. A question still being answered when cicoria closes is lost.</p>
+    </section>
+
+    <section id="board">
+      <h2>Board</h2>
+      <p><kbd>ctrl+a</kbd> <kbd>0</kbd> shows the board on the whole screen: the backlog, then every session in the column of what it needs from you.</p>
+      <div class="table"><table>
+        <thead><tr><th>Column</th><th>Holds</th></tr></thead>
+        <tbody>
+          <tr><td>Backlog</td><td>Cards you wrote for work not started yet, in the order you give them</td></tr>
+          <tr><td>▲ Needs you</td><td>Sessions whose agent asks a question or a permission, or could not start</td></tr>
+          <tr><td>● Working</td><td>Sessions whose agent is at work</td></tr>
+          <tr><td>✓ To review</td><td>Idle sessions with something to look at: a turn that ended while you were elsewhere, changes or commits since they started, or notes not sent</td></tr>
+          <tr><td>○ Settled</td><td>The others: idle with nothing new, or exited</td></tr>
+        </tbody>
+      </table></div>
+      <p>Where a session is follows from its state, so it moves when that does. A card cannot be moved to another column, and the board never starts or sends anything by itself.</p>
+      <div class="table"><table>
+        <thead><tr><th>Key, on the board</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>h l, j k, g G</td><td>Go from column to column, from card to card, to the first and the last</td></tr>
+          <tr><td>a</td><td>Go to the next session that needs you</td></tr>
+          <tr><td>enter</td><td>On a session, go to it. On a card, start it</td></tr>
+          <tr><td>space</td><td>Show the end of the session's screen over the board</td></tr>
+          <tr><td>m d</td><td>Queue a message for the session; go to it with its changes panel</td></tr>
+          <tr><td>r x ,</td><td>Restart, close, rename the session</td></tr>
+          <tr><td>c e x</td><td>Write a card, rewrite it, delete it</td></tr>
+          <tr><td>J K</td><td>Move a card down, up</td></tr>
+          <tr><td>q esc</td><td>Back to the workspace, as <kbd>ctrl+a</kbd> <kbd>0</kbd> is</td></tr>
+        </tbody>
+      </table></div>
+      <p>A card is written in <code>$VISUAL</code> or <code>$EDITOR</code>: the first line is its title, and what follows is the first message its agent gets. A card of one line is its own message.</p>
+      <pre>Fix the login form
+
+The form sends the password twice. Look at api/auth.go,
+and add a test for it.</pre>
+      <p><kbd>enter</kbd> on a card starts it as <kbd>ctrl+a</kbd> <kbd>c</kbd> starts a session: the agent, then the directory, offering the one the card was written in, then, in a git repository, whether to give it a worktree of its own, even when no other session works there, with <kbd>enter</kbd> taking it, then a name made from the title. The board stays on screen, with the cursor on the new session, and the card leaves the backlog; its agent gets the text once it says it is ready. Giving up on the way keeps the card. The backlog is saved with the workspace.</p>
     </section>
 
     <section id="web">

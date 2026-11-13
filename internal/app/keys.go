@@ -46,7 +46,7 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 	// A pending question or text field takes every key.
 	if c := m.confirm; c != nil {
 		m.confirm = nil
-		if key == "y" || key == "Y" {
+		if key == "y" || key == "Y" || key == "enter" && c.yesFirst {
 			return c.yes()
 		}
 		// Enter takes the answer the question offers, which is no.
@@ -95,6 +95,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case modeWeb:
 		return m.webKey(key)
+	case modeBoard:
+		return m.boardKey(k)
 	case modePalette:
 		if key == "esc" {
 			m.mode, m.palette = m.paletteFrom, nil
@@ -364,6 +366,8 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case modeHelp:
 		m.helpTop = max(m.helpTop+wheel, 0)
 		return nil
+	case modeBoard:
+		return m.boardMouse(msg)
 	case modePalette, modeWeb:
 		return nil
 	}

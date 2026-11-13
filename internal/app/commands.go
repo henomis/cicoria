@@ -64,6 +64,7 @@ func init() {
 		{"tab", "Go to the other pane of the split", (*Model).focusOther, false},
 		{"w", "Open another workspace…", (*Model).askWorkspace, false},
 		{"o", "Worktrees: open a session in one, or remove it…", (*Model).askWorktrees, false},
+		{"0", "Board: the backlog, and every session by what it needs", (*Model).openBoard, false},
 		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
@@ -114,6 +115,10 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 // full-screen view it is for the session on screen, and the view stays when
 // the command keeps it; otherwise the workspace comes back first.
 func (m *Model) runCommand(keepsView bool, run func(m *Model) tea.Cmd) tea.Cmd {
+	// From the board, every command is one of the workspace.
+	if m.mode == modeBoard {
+		m.closeBoard()
+	}
 	if m.mode == modeView {
 		// The cursor of the sessions panel is not on screen.
 		m.sessionCursor = m.active
@@ -298,8 +303,10 @@ func (m *Model) toggleSide(hide *bool) tea.Cmd {
 
 // newSession creates a session of the given name for an agent working in
 // dir and puts it on screen. With worktree, the session works in a git
-// worktree of its own instead, made for it from the commit dir is on.
-func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea.Cmd {
+// worktree of its own instead, made for it from the commit dir is on. With a
+// card of the backlog, the session is the one it becomes: its agent gets the
+// card's prompt first, and the card leaves the backlog.
+func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool, card *session.Card) tea.Cmd {
 	made, problem := "", ""
 	var setup *session.Session
 	if worktree {
@@ -335,6 +342,11 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 	s.Port = m.freePorts()
 	s.Base, _ = git.Head(dir)
 	s.Uncommitted = m.cfg.Changes != config.ChangesSession
+	if card != nil {
+		// It goes out once the agent says it is ready for it.
+		s.Enqueue(session.Message{Text: card.Prompt})
+		m.dropCard(card.ID)
+	}
 	m.sessions = append(m.sessions, s)
 	i := len(m.sessions) - 1
 	cmds := []tea.Cmd{m.start(s)}
@@ -348,8 +360,16 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool) tea
 	}
 	// The session list grew, which can change the size of the panes.
 	m.resize()
+	cmds = append(cmds, m.switchTo(i))
+	// A card started from the board leaves the board on screen, with the
+	// cursor on its session.
+	if m.mode == modeBoard {
+		m.boardCursorOn(s)
+		m.say("started " + s.Name)
+		return tea.Batch(cmds...)
+	}
 	m.play(ui.Liftoff, "launching "+s.Name, nil)
-	return tea.Batch(append(cmds, m.switchTo(i))...)
+	return tea.Batch(cmds...)
 }
 
 // setupScript runs the command line it is given and, when it fails, leaves
@@ -372,21 +392,24 @@ func (m *Model) setupSession(name, main, top string) *session.Session {
 }
 
 // askDir asks where a new session for an agent should work, offering the
-// project on screen.
-func (m *Model) askDir(a agent.Adapter) tea.Cmd {
+// project on screen, or the directory a card of the backlog was written for.
+func (m *Model) askDir(a agent.Adapter, card *session.Card) tea.Cmd {
 	base := m.project()
 	p := &prompt{
 		input:    ui.Input{Prompt: a.Name() + " in directory: "},
 		complete: func(text string) string { return completeDir(base, text) },
 	}
 	p.input.Set(tilde(base))
+	if card != nil && card.Dir != "" {
+		p.input.Set(tilde(card.Dir))
+	}
 	p.done = func(text string) tea.Cmd {
 		dir, err := resolveDir(base, text)
 		if err != nil {
 			m.say(err.Error())
 			return nil
 		}
-		return m.askWorktree(a, dir)
+		return m.askWorktree(a, dir, card)
 	}
 	m.prompt = p
 	return nil
@@ -395,16 +418,23 @@ func (m *Model) askDir(a agent.Adapter) tea.Cmd {
 // askWorktree offers a new session a git worktree of its own when another
 // session works in the work tree of dir, where their changes would be mixed.
 // A shell is not offered one: it is there to look at the work of the others.
-func (m *Model) askWorktree(a agent.Adapter, dir string) tea.Cmd {
+// The session of a card of the backlog is always offered one, which enter
+// takes: a card is work of its own.
+func (m *Model) askWorktree(a agent.Adapter, dir string, card *session.Card) tea.Cmd {
 	other := m.sharing(dir)
 	// A worktree starts from a commit.
-	if _, ok := git.Head(dir); other == nil || !ok || isShell(a) {
-		return m.askName(a, dir, false)
+	if _, ok := git.Head(dir); other == nil && card == nil || !ok || isShell(a) {
+		return m.askName(a, dir, false, card)
+	}
+	question := "give this session a worktree of its own?"
+	if other != nil {
+		question = other.Name + " already works in this repository: " + question
 	}
 	m.confirm = &confirm{
-		question: other.Name + " already works in this repository: give this session a worktree of its own?",
-		yes:      func() tea.Cmd { return m.askName(a, dir, true) },
-		no:       func() tea.Cmd { return m.askName(a, dir, false) },
+		question: question,
+		yes:      func() tea.Cmd { return m.askName(a, dir, true, card) },
+		no:       func() tea.Cmd { return m.askName(a, dir, false, card) },
+		yesFirst: card != nil,
 	}
 	return nil
 }
@@ -710,21 +740,26 @@ func unsaved(path string) string {
 	return ""
 }
 
-// askName asks what to call a new session, offering a name that is free.
-// With worktree, the name is also that of the worktree made for it.
-func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
+// askName asks what to call a new session, offering a name that is free:
+// one made from the title of the card it starts from, if any. With
+// worktree, the name is also that of the worktree made for it.
+func (m *Model) askName(a agent.Adapter, dir string, worktree bool, card *session.Card) tea.Cmd {
 	// The name of a worktree that is still there is not offered again.
 	var free func(string) bool
 	if worktree {
 		free = func(name string) bool { return worktreeFree(m.cfg.WorktreeDir, name, dir) }
 	}
+	offer := m.newName(a, free)
+	if card != nil {
+		offer = m.cardName(a, card.Title, free)
+	}
 	p := &prompt{input: ui.Input{Prompt: "session name: "}}
-	p.input.Set(m.newName(a, free))
+	p.input.Set(offer)
 	p.done = func(name string) tea.Cmd {
 		if name == "" {
-			name = m.newName(a, free)
+			name = offer
 		}
-		return m.newSession(a, name, dir, worktree)
+		return m.newSession(a, name, dir, worktree, card)
 	}
 	m.prompt = p
 	return nil
@@ -732,7 +767,7 @@ func (m *Model) askName(a agent.Adapter, dir string, worktree bool) tea.Cmd {
 
 func (m *Model) askNewSession() tea.Cmd {
 	if len(m.adapters) == 1 {
-		return m.askDir(m.adapters[0])
+		return m.askDir(m.adapters[0], nil)
 	}
 	var items []ui.Item
 	for _, a := range m.adapters {
@@ -787,7 +822,9 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 	}
 	switch v := it.Value.(type) {
 	case agent.Adapter:
-		return m.askDir(v)
+		return m.askDir(v, nil)
+	case cardAgent:
+		return m.askDir(v.a, &v.card)
 	case sendNotes:
 		return m.sendReview(v.queue)
 	case split:
@@ -803,7 +840,7 @@ func (m *Model) choose(it ui.Item) tea.Cmd {
 	case worktreeAction:
 		return v.run(m)
 	case sessionIn:
-		return m.askWorktree(v.a, v.dir)
+		return m.askWorktree(v.a, v.dir, nil)
 	case string:
 		m.tree().Reveal(v)
 		m.showFile(v)
@@ -1002,6 +1039,12 @@ func (m *Model) edit(path string) tea.Cmd {
 	if path == "" {
 		return nil
 	}
+	return tea.ExecProcess(m.editor(path), func(err error) tea.Msg { return editorMsg{err} })
+}
+
+// editor returns the command that opens a file in the user's editor, in
+// the project on screen.
+func (m *Model) editor(path string) *exec.Cmd {
 	editor := os.Getenv("VISUAL")
 	if editor == "" {
 		editor = os.Getenv("EDITOR")
@@ -1012,7 +1055,7 @@ func (m *Model) edit(path string) tea.Cmd {
 	argv := append(strings.Fields(editor), path)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = m.project()
-	return tea.ExecProcess(cmd, func(err error) tea.Msg { return editorMsg{err} })
+	return cmd
 }
 
 // open hands a file to the program the system opens it with, such as the

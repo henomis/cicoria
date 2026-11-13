@@ -162,10 +162,14 @@ func (m *Model) View() tea.View {
 		rows = m.renderView()
 	case modeHelp:
 		rows = m.renderHelp()
+	case modeBoard:
+		rows = m.renderBoard()
 	default:
 		l := m.layout()
 		if m.mode == modePalette && m.paletteFrom == modeView {
 			rows = m.renderView()
+		} else if m.mode == modePalette && m.paletteFrom == modeBoard {
+			rows = m.renderBoard()
 		} else {
 			rows = m.renderWorkspace(l)
 		}
@@ -644,6 +648,18 @@ func (m *Model) renderHelp() []string {
 		"    question, and with what you want done with the answer, if you say so.",
 		"    Claude Code and Codex CLI can be asked.",
 		"",
+		ui.Bold.Render("  Board"),
+		"    "+p+" 0 shows the backlog, and every session in the column of what it",
+		"    needs: needs you, working, to review, settled. A session moves when its",
+		"    state does; nothing on the board starts by itself.",
+		"    h/l column · j/k card · a next that needs you · q back",
+		"    session: enter go · space peek · m queue · d changes · r restart · x close",
+		"    backlog: c new card · e edit · x delete · J/K move · enter start",
+		"    A card is written in the editor: its title, then the first message its",
+		"    agent gets. Started, it asks for the agent, the directory and a name, as",
+		"    a new session does, and becomes that session; the board stays. In a git",
+		"    repository it is always offered a worktree of its own: enter takes it.",
+		"",
 		ui.Bold.Render("  Web cockpit"),
 		"    "+p+" v starts a web server and shows its link as a QR code, to open on a",
 		"    phone. The page shows the shared sessions: their status, last answer,",
@@ -706,7 +722,11 @@ func (m *Model) panelHint() string {
 func (m *Model) renderStatus() string {
 	switch {
 	case m.confirm != nil:
-		return ui.Fit(ui.Warn.Render(" "+m.confirm.question)+" [y/N]", m.width)
+		answers := " [y/N]"
+		if m.confirm.yesFirst {
+			answers = " [Y/n]"
+		}
+		return ui.Fit(ui.Warn.Render(" "+m.confirm.question)+answers, m.width)
 	case m.prompt != nil:
 		// When the text outgrows the line, keep its end, where the typing is.
 		text := " " + m.prompt.input.View()
@@ -758,6 +778,14 @@ func (m *Model) renderStatus() string {
 		right = "j/k space b g G scroll · any other key closes"
 	case modeWeb:
 		right = "j/k move · space share ⇄ stop sharing · x stop · esc back"
+	case modeBoard:
+		right = m.boardHint()
+		if m.board.peek {
+			right = "any key closes"
+		}
+		if m.mode == modePalette {
+			right = "esc back"
+		}
 	default:
 		if s := m.current(); s != nil {
 			if s.Status == agent.Exited {

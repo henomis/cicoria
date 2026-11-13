@@ -30,6 +30,8 @@ import (
 type workspace struct {
 	dir      string
 	sessions int
+	// cards is how many cards its backlog holds.
+	cards int
 	// here names its sessions that work in the directory this one was
 	// opened on.
 	here []string
@@ -48,7 +50,7 @@ func (m *Model) workspaces() []workspace {
 		if info, err := os.Stat(st.Dir); err != nil || !info.IsDir() {
 			continue
 		}
-		w := workspace{dir: st.Dir, sessions: len(st.Sessions), busy: session.InUse(st.Dir)}
+		w := workspace{dir: st.Dir, sessions: len(st.Sessions), cards: len(st.Cards), busy: session.InUse(st.Dir)}
 		for _, s := range st.Sessions {
 			if s.Dir != "" && filepath.Clean(s.Dir) == filepath.Clean(m.dir) {
 				w.here = append(w.here, s.Name)
@@ -92,6 +94,9 @@ func (m *Model) askWorkspace() tea.Cmd {
 	var items []ui.Item
 	for _, w := range all {
 		hint := fmt.Sprintf("%d session(s)", w.sessions)
+		if w.cards > 0 {
+			hint += fmt.Sprintf(", %d card(s)", w.cards)
+		}
 		if len(w.here) > 0 {
 			hint = strings.Join(w.here, ", ") + " works here"
 		}

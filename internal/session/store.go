@@ -59,6 +59,8 @@ type State struct {
 	Dir      string  `json:"dir,omitempty"`
 	Sessions []Saved `json:"sessions"`
 	Active   int     `json:"active"`
+	// Cards is the backlog: work written down for sessions not started yet.
+	Cards []Card `json:"cards,omitempty"`
 }
 
 // StatePath returns where the workspace opened on dir is saved.
@@ -108,7 +110,7 @@ func SaveState(path string, st State) error {
 }
 
 // Workspaces returns every saved workspace that says which directory it
-// belongs to and has sessions, ordered by directory.
+// belongs to and has sessions or a backlog, ordered by directory.
 func Workspaces() []State {
 	// Every workspace is filed next to this one.
 	root := filepath.Dir(filepath.Dir(StatePath("")))
@@ -116,7 +118,7 @@ func Workspaces() []State {
 	var all []State
 	for _, path := range paths {
 		st, err := LoadState(path)
-		if err == nil && st.Dir != "" && len(st.Sessions) > 0 {
+		if err == nil && st.Dir != "" && (len(st.Sessions) > 0 || len(st.Cards) > 0) {
 			all = append(all, st)
 		}
 	}
