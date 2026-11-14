@@ -15,12 +15,13 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"rsc.io/qr"
 )
 
-// TestQR reads the drawn code back module by module, on both themes.
+// TestQR reads the drawn code back module by module, black on white.
 func TestQR(t *testing.T) {
 	const url = "http://192.168.1.20:7777/?t=0123456789abcdef0123456789abcdef"
 	code, err := qr.Encode(url, qr.L)
@@ -29,27 +30,31 @@ func TestQR(t *testing.T) {
 	}
 	size := code.Size + 2*quiet
 
-	for _, dark := range []bool{false, true} {
-		rows, err := QR(url, dark)
-		if err != nil {
-			t.Fatal(err)
+	rows, err := QR(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, row := range rows {
+		if !strings.HasPrefix(row, paper) || !strings.HasSuffix(row, "\x1b[0m") {
+			t.Fatalf("row %d is not black on white: %q", i, row)
 		}
-		if len(rows) != (size+1)/2 {
-			t.Fatalf("dark=%v: %d rows, want %d", dark, len(rows), (size+1)/2)
+		rows[i] = strings.TrimSuffix(strings.TrimPrefix(row, paper), "\x1b[0m")
+	}
+	if len(rows) != (size+1)/2 {
+		t.Fatalf("%d rows, want %d", len(rows), (size+1)/2)
+	}
+	for y := range size {
+		cells := []rune(rows[y/2])
+		if len(cells) != size {
+			t.Fatalf("row %d is %d cells, want %d", y/2, len(cells), size)
 		}
-		for y := range size {
-			cells := []rune(rows[y/2])
-			if len(cells) != size {
-				t.Fatalf("dark=%v: row %d is %d cells, want %d", dark, y/2, len(cells), size)
-			}
-			for x := range size {
-				c := cells[x]
-				drawn := c == '█' || (y%2 == 0 && c == '▀') || (y%2 == 1 && c == '▄')
-				mx, my := x-quiet, y-quiet
-				black := mx >= 0 && my >= 0 && mx < code.Size && my < code.Size && code.Black(mx, my)
-				if want := black != dark; drawn != want {
-					t.Fatalf("dark=%v: module %d,%d drawn=%v, want %v", dark, x, y, drawn, want)
-				}
+		for x := range size {
+			c := cells[x]
+			drawn := c == '█' || (y%2 == 0 && c == '▀') || (y%2 == 1 && c == '▄')
+			mx, my := x-quiet, y-quiet
+			black := mx >= 0 && my >= 0 && mx < code.Size && my < code.Size && code.Black(mx, my)
+			if drawn != black {
+				t.Fatalf("module %d,%d drawn=%v, want %v", x, y, drawn, black)
 			}
 		}
 	}

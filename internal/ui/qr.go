@@ -23,29 +23,32 @@ import (
 // quiet is the margin of light modules a scanner needs around a QR code.
 const quiet = 4
 
+// paper sets the colours of a code: black on white, from the colours of
+// the 256-colour palette that themes leave alone, so that the code reads
+// the same on any terminal, light or dark.
+const paper = "\x1b[38;5;16;48;5;231m"
+
 // QR draws a QR code of text with half blocks, two modules to a cell, in
-// the terminal's own colours. dark says the background is dark: then the
-// light modules are the ones drawn, so that the code is dark on light
-// whatever the theme.
-func QR(text string, dark bool) ([]string, error) {
+// black on white.
+func QR(text string) ([]string, error) {
 	code, err := qr.Encode(text, qr.L)
 	if err != nil {
 		return nil, err
 	}
 	size := code.Size + 2*quiet
-	// ink reports whether the module at x, y is drawn, counting from the
+	// black reports whether the module at x, y is black, counting from the
 	// outer edge of the margin.
-	ink := func(x, y int) bool {
+	black := func(x, y int) bool {
 		x, y = x-quiet, y-quiet
-		black := x >= 0 && y >= 0 && x < code.Size && y < code.Size && code.Black(x, y)
-		return black != dark
+		return x >= 0 && y >= 0 && x < code.Size && y < code.Size && code.Black(x, y)
 	}
 
 	var rows []string
 	for y := 0; y < size; y += 2 {
 		var b strings.Builder
+		b.WriteString(paper)
 		for x := range size {
-			top, bottom := ink(x, y), y+1 < size && ink(x, y+1)
+			top, bottom := black(x, y), y+1 < size && black(x, y+1)
 			switch {
 			case top && bottom:
 				b.WriteString("█")
@@ -57,6 +60,7 @@ func QR(text string, dark bool) ([]string, error) {
 				b.WriteByte(' ')
 			}
 		}
+		b.WriteString("\x1b[0m")
 		rows = append(rows, b.String())
 	}
 	return rows, nil
