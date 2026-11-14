@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f7fc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#13142a" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<title>cicoria</title>
+<link rel="preload" href="fonts/martian-mono.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-route="home">
+<a class="skip" href="#main">Skip to the open session</a>
+<header class="bar">
+  <span class="logo" aria-hidden="true"></span>
+  <p class="brand">cicoria</p>
+  <p id="workspace"></p>
+  <p class="conn"><span class="dot" aria-hidden="true"></span><span id="conn">connecting</span></p>
+</header>
+<p id="offline" class="offline" role="alert" hidden>Offline: what you see may be out of date. Reconnecting…</p>
+<div class="layout">
+  <nav id="home" aria-label="Shared sessions"></nav>
+  <main id="main" tabindex="-1"></main>
+</div>
+<div id="announce" class="sr-only" aria-live="polite" aria-relevant="additions"></div>
+<script src="app.js"></script>
+</body>
+</html>

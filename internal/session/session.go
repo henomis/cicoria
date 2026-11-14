@@ -88,8 +88,15 @@ type Session struct {
 	// Answer is what the agent said at the end of its last turn, for the
 	// agents that tell.
 	Answer string
-	// Web says the session is shared in the web cockpit.
-	Web bool
+	// Web says the session is shared in the web cockpit, and WebWatch that
+	// the page may only watch it and queue messages: what the agent is sent
+	// at once, keys included, is left to the terminal.
+	Web      bool
+	WebWatch bool
+	// Tool is the tool the agent is about to use, while it waits to run, and
+	// Question what the agent asks while it needs input, when it tells.
+	Tool     agent.Tool
+	Question string
 	// Setup says the session runs the setup of a worktree: it closes when
 	// its command ends, however soon. It is not remembered.
 	Setup bool
@@ -280,6 +287,19 @@ func (s *Session) Apply(u agent.Update, active bool, now time.Time) {
 	s.lastOutput = now
 	if u.HasStatus && s.Status != agent.Exited {
 		s.setStatus(u.Status, active)
+	}
+	// A tool waits from the moment the agent reports it until the agent
+	// moves on; a question lasts as long as the need for input.
+	if u.Tool.Name != "" {
+		s.Tool = u.Tool
+	} else if u.HasStatus && u.Status != agent.NeedsInput {
+		s.Tool = agent.Tool{}
+	}
+	if u.HasStatus {
+		s.Question = ""
+		if u.Status == agent.NeedsInput {
+			s.Question = u.Question
+		}
 	}
 	if strings.TrimSpace(u.Answer) != "" {
 		s.Answer = u.Answer

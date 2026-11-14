@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/henomis/cicoria/internal/ipc"
 )
@@ -124,11 +125,11 @@ type claudeHook struct {
 	SessionID        string `json:"session_id"`
 	PromptID         string `json:"prompt_id"`
 	NotificationType string `json:"notification_type"`
+	Message          string `json:"message"`
 	LastMessage      string `json:"last_assistant_message"`
-	ToolInput        struct {
-		FilePath     string `json:"file_path"`
-		NotebookPath string `json:"notebook_path"`
-	} `json:"tool_input"`
+	ToolName         string `json:"tool_name"`
+	// ToolInput is an object for most tools, but not for all of them.
+	ToolInput json.RawMessage `json:"tool_input"`
 }
 
 // MapEvent implements Adapter.
@@ -152,15 +153,20 @@ func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 	case "UserPromptSubmit":
 		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
 	case "PreToolUse":
-		return Update{Status: Working, HasStatus: true}, true
+		return Update{Status: Working, HasStatus: true, Tool: toolOf(h.ToolName, h.ToolInput)}, true
 	case "PostToolUse":
-		file := h.ToolInput.FilePath
+		var input struct {
+			FilePath     string `json:"file_path"`
+			NotebookPath string `json:"notebook_path"`
+		}
+		_ = json.Unmarshal(h.ToolInput, &input)
+		file := input.FilePath
 		if file == "" {
-			file = h.ToolInput.NotebookPath
+			file = input.NotebookPath
 		}
 		return Update{Status: Working, HasStatus: true, File: file}, true
 	case "Notification":
-		return notification(h.NotificationType)
+		return notification(h.NotificationType, h.Message)
 	case "Stop", "StopFailure":
 		// A turn that ended on an error is over, but there is no answer to
 		// follow up on: what waits in the queue stays there.
@@ -177,11 +183,11 @@ func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 }
 
 // notification interprets a notification of the given type, which Claude
-// Code and Copilot CLI name alike.
-func notification(kind string) (Update, bool) {
+// Code and Copilot CLI name alike, and its message.
+func notification(kind, message string) (Update, bool) {
 	switch kind {
 	case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
-		return Update{Status: NeedsInput, HasStatus: true}, true
+		return Update{Status: NeedsInput, HasStatus: true, Question: strings.TrimSpace(message)}, true
 	case "idle_prompt":
 		return Update{Status: Idle, HasStatus: true}, true
 	}

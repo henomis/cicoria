@@ -21,7 +21,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Keeps a backlog on a board**: cards you write for work not started yet, next to every session in a column for what it needs from you. A card becomes a session only when you start it.
 - **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
-- **Follows you on your phone**: a web cockpit, turned on when you want it, shows the sessions you share, what each agent said last and its changes, and takes your replies and queued messages.
+- **Follows you on your phone**: a web cockpit, turned on when you want it, puts first the sessions that need you and what they ask, shows what each agent said last and its changes, and takes your answers and queued messages, or only queued messages for a session you share to watch.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
 Claude Code, GitHub Copilot CLI and Codex CLI get the full integration: their status comes from hooks, which cicoria gives the agents it launches without touching your settings, and the files they edit are highlighted. For any other agent, status is guessed from terminal activity.
@@ -220,17 +220,17 @@ Each card is drawn in a frame of its own, lit when the cursor is on it. A card o
 
 ## Web cockpit
 
-`ctrl+a v` starts a small web server inside cicoria and shows its link as a QR code: point your phone at it and the page opens. It shows the sessions you share, and nothing else. The session on screen is shared when the cockpit starts; in its box, `space` shares or stops sharing the session under the cursor, `x` stops the cockpit and `esc` closes the box. Shared sessions are marked `↗` in the sessions panel, and the status bar says `web` while the cockpit runs.
+`ctrl+a v` starts a small web server inside cicoria and shows its link as a QR code: point your phone at it and the page opens. It shows the sessions you share, and nothing else. The session on screen is shared when the cockpit starts; in its box, `space` shares or stops sharing the session under the cursor, `w` turns a shared session to watch only and back, `x` stops the cockpit and `esc` closes the box. A session shared to watch is marked `[w]`: the page can read it and queue messages for it, but not answer it, send it a message at once or interrupt it. Shared sessions are marked `↗` in the sessions panel, and the status bar says `web` while the cockpit runs.
 
-For each shared session the page shows:
+The page opens on the sessions that need you, the one that has waited longest first, each with what it asks in one line; then those at work, with what they are doing, those finished and those exited. A session's page shows:
 
-- its status, and for how long it has been in it;
-- **Answer**: what the agent said at the end of its last turn (Claude Code and Codex CLI);
-- **Screen**: the text of the agent's screen, live while you look at it;
-- **Changes**: the files the session changed, and their diffs;
-- its queue.
+- **what it asks**, while it needs input: the agent's own words, the tool it wants to use with the directory it works in, such as the command it would run, and the choices of the menu on its screen. You answer with one of them, in words; cicoria reads the screen again first and refuses if the question changed. A choice such as "No, and tell Claude what to do differently" opens a box for what to do instead, sent once the answer is taken. A question without a menu is answered in your own words;
+- **what it said last**, at the end of its turn (Claude Code and Codex CLI);
+- **its queue**, where each message can be taken back;
+- **its screen**, live, without frames, spinners and marks unless you switch on its exact layout, and what it is doing now. On a phone it is folded while the agent asks: the question says the same;
+- **its changes**, since the session started or not committed yet, updated as the agent works: beside the rest on a wide screen, a page away on a phone.
 
-From the page you can send a message now or queue it, and press the keys that answer an agent's question: `y`, `n`, `1`-`3`, `Esc`, `Enter`, the arrows and `tab`. The status bar says when a message came from the web. Sessions cannot be created, closed or restarted from there.
+You can send a message now or queue it, and interrupt an agent's turn after confirming it. While the agent shows a menu, a message is not sent at once, since it could pick one of the choices: answer first, or queue it. Each thing you do gets a receipt in words on the page, such as "Answered api: Yes" or why it was not done, and the status bar of cicoria says when something came from the web. A screen reader hears when a session changes status, and what it asks when it starts to need you; its screen is not redrawn while the reader is in it. The tab title names the session open and counts the sessions that need you. Sessions cannot be created, closed or restarted from there.
 
 It listens on every address, on a free port, so a phone on the same network opens it; `web_address` changes that (`127.0.0.1:0` for this machine only, a Tailscale address for your devices, `0.0.0.0:7777` for a fixed port). The link holds a token that is new at each start and stops working with the cockpit. It is plain HTTP: on a network you do not trust, use a VPN or `tailscale serve`.
 

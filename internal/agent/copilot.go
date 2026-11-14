@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/henomis/cicoria/internal/ipc"
 )
@@ -144,6 +145,8 @@ func copilotTranscript(sessionID string) string {
 type copilotHook struct {
 	SessionID        string `json:"sessionId"`
 	NotificationType string `json:"notification_type"`
+	Message          string `json:"message"`
+	Title            string `json:"title"`
 	ToolName         string `json:"toolName"`
 	// ToolArgs is an object for most tools, but not for all of them.
 	ToolArgs    json.RawMessage `json:"toolArgs"`
@@ -174,15 +177,23 @@ func (c *Copilot) mapHook(name string, h copilotHook) (Update, bool) {
 	case "preToolUse":
 		// A question to the user is a tool like the others.
 		if h.ToolName == "ask_user" {
-			return Update{Status: NeedsInput, HasStatus: true}, true
+			var args struct {
+				Question string `json:"question"`
+			}
+			_ = json.Unmarshal(h.ToolArgs, &args)
+			return Update{Status: NeedsInput, HasStatus: true, Question: strings.TrimSpace(args.Question)}, true
 		}
-		return Update{Status: Working, HasStatus: true}, true
+		return Update{Status: Working, HasStatus: true, Tool: toolOf(h.ToolName, h.ToolArgs)}, true
 	case "postToolUse":
 		return Update{Status: Working, HasStatus: true, File: h.edited()}, true
 	case "postToolUseFailure":
 		return Update{Status: Working, HasStatus: true}, true
 	case "notification":
-		return notification(h.NotificationType)
+		message := h.Message
+		if strings.TrimSpace(message) == "" {
+			message = h.Title
+		}
+		return notification(h.NotificationType, message)
 	case "errorOccurred":
 		// An error the agent recovers from is tried again: it is a sign of
 		// life and nothing more. Any other ends the turn without an answer,

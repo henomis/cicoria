@@ -93,6 +93,19 @@ func TestApply(t *testing.T) {
 		t.Errorf("conversation = %q, want 2", s.Conversation)
 	}
 
+	// A question for permission keeps the tool it is about, and both go
+	// once the agent moves on.
+	bash := agent.Tool{Name: "Bash", Detail: "rm -rf build"}
+	s.Apply(agent.Update{Status: agent.Working, HasStatus: true, Tool: bash}, true, now)
+	s.Apply(agent.Update{Status: agent.NeedsInput, HasStatus: true, Question: "May I run Bash?"}, true, now)
+	if s.Tool != bash || s.Question != "May I run Bash?" {
+		t.Errorf("while asking: tool %v question %q", s.Tool, s.Question)
+	}
+	s.Apply(agent.Update{Status: agent.Working, HasStatus: true}, true, now)
+	if s.Tool != (agent.Tool{}) || s.Question != "" {
+		t.Errorf("after the answer: tool %v question %q", s.Tool, s.Question)
+	}
+
 	// Nothing revives an exited session.
 	s.Exit(true)
 	s.Apply(agent.Update{Status: agent.Working, HasStatus: true}, true, now)

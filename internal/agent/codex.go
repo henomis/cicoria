@@ -136,9 +136,9 @@ func (c *Codex) mapHook(h codexHook) (Update, bool) {
 	case "UserPromptSubmit":
 		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
 	case "PreToolUse":
-		return Update{Status: Working, HasStatus: true}, true
+		return Update{Status: Working, HasStatus: true, Tool: toolOf(h.ToolName, h.ToolInput)}, true
 	case "PermissionRequest":
-		return Update{Status: NeedsInput, HasStatus: true}, true
+		return Update{Status: NeedsInput, HasStatus: true, Tool: toolOf(h.ToolName, h.ToolInput)}, true
 	case "PostToolUse":
 		return Update{Status: Working, HasStatus: true, File: h.edited()}, true
 	case "Interrupt":

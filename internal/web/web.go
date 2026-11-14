@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/henomis/cicoria/internal/agent"
 	"github.com/henomis/cicoria/internal/git"
 )
 
@@ -52,6 +53,11 @@ type Session struct {
 	Name    string `json:"name"`
 	Agent   string `json:"agent"`
 	Project string `json:"project"`
+	// Path is the directory the agent works in, as the user would write
+	// it, and Worktree the name of the git worktree made for the session,
+	// when one was.
+	Path     string `json:"path"`
+	Worktree string `json:"worktree,omitempty"`
 	// Status is the session's status as the workspace shows it, and Since
 	// when it got into it.
 	Status  string    `json:"status"`
@@ -61,6 +67,23 @@ type Session struct {
 	Paused  bool      `json:"paused"`
 	// Running says the agent is there to be sent messages and keys.
 	Running bool `json:"running"`
+	// Control says the page may answer the agent, send it messages at once
+	// and interrupt it; without it, the page watches and queues.
+	Control bool `json:"control"`
+	// Question is what the agent asks while it needs input, in its words,
+	// and Tool what it is about to do or doing: what a question for
+	// permission is about.
+	Question string      `json:"question,omitempty"`
+	Tool     *agent.Tool `json:"tool,omitempty"`
+	// Prompt and Choices are the menu the agent draws while it needs
+	// input: the line above it and the labels of its choices.
+	Prompt  string   `json:"prompt,omitempty"`
+	Choices []string `json:"choices,omitempty"`
+	// Touched is how many files the agent changed in the session.
+	Touched int `json:"touched"`
+	// FromStart says the changes are counted from where the session
+	// started; without it, they are what is not committed.
+	FromStart bool `json:"fromStart"`
 	// Answer is what the agent said at the end of its last turn, for the
 	// agents that tell.
 	Answer string `json:"answer"`
@@ -76,17 +99,39 @@ type Session struct {
 // Action is something the page asks of a session.
 type Action struct {
 	Session string
-	// Kind is ActSend, ActQueue or ActKey.
+	// Kind is ActSend, ActQueue, ActUnqueue, ActChoose or ActInterrupt.
 	Kind string
-	// Text is the message, or the name of the key.
-	Text string
+	// Text is the message. For ActUnqueue it is the message to take off
+	// the queue, and for ActChoose the label of the choice; Index is where
+	// the page saw it.
+	Text  string
+	Index int
+	// Done takes what came of the action: nil when it was done, or why it
+	// was not. It has room for one, so that answering never blocks.
+	Done chan error
 }
+
+// Reply tells the page what came of the action.
+func (a Action) Reply(err error) {
+	if a.Done != nil {
+		select {
+		case a.Done <- err:
+		default:
+		}
+	}
+}
+
+// replyWithin bounds the wait for the workspace to say what came of an
+// action.
+const replyWithin = 5 * time.Second
 
 // What the page can ask.
 const (
-	ActSend  = "send"
-	ActQueue = "queue"
-	ActKey   = "key"
+	ActSend      = "send"
+	ActQueue     = "queue"
+	ActUnqueue   = "unqueue"
+	ActChoose    = "choose"
+	ActInterrupt = "interrupt"
 )
 
 // heartbeat is how often an idle event stream is written to, so that a
@@ -376,30 +421,52 @@ func (s *Server) act(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Index int    `json:"index"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	a := Action{Session: r.PathValue("id"), Kind: r.PathValue("kind"), Text: body.Text}
+	a := Action{Session: r.PathValue("id"), Kind: r.PathValue("kind"), Text: body.Text, Index: body.Index, Done: make(chan error, 1)}
 	switch a.Kind {
-	case ActSend, ActQueue, ActKey:
+	case ActSend, ActQueue, ActUnqueue, ActChoose, ActInterrupt:
 	default:
 		http.NotFound(w, r)
 		return
 	}
-	if a.Text == "" {
+	if a.Text == "" && a.Kind != ActInterrupt {
 		http.Error(w, "nothing to send", http.StatusBadRequest)
 		return
 	}
-	if a.Kind != ActQueue && !ss.Running {
+	// What reaches the agent at once needs control of the session, and the
+	// agent there to take it.
+	direct := a.Kind == ActSend || a.Kind == ActChoose || a.Kind == ActInterrupt
+	if direct && !ss.Control {
+		http.Error(w, "this session is shared to watch: queue the message instead", http.StatusForbidden)
+		return
+	}
+	if direct && !ss.Running {
 		http.Error(w, "the agent is not running: queue the message instead", http.StatusConflict)
 		return
 	}
 	select {
 	case s.actions <- a:
+	case <-r.Context().Done():
+		return
+	case <-s.done:
+		http.Error(w, "cicoria stopped the cockpit", http.StatusServiceUnavailable)
+		return
+	}
+	select {
+	case err := <-a.Done:
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
+	case <-time.After(replyWithin):
+		http.Error(w, "cicoria did not answer in time: look at the session before trying again", http.StatusGatewayTimeout)
 	case <-r.Context().Done():
 	case <-s.done:
 		http.Error(w, "cicoria stopped the cockpit", http.StatusServiceUnavailable)

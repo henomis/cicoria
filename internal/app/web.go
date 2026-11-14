@@ -15,9 +15,11 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -62,7 +64,7 @@ func (m *Model) askWeb() tea.Cmd {
 			return nil
 		}
 		m.web, m.webQR = srv, nil
-		if qr, err := ui.QR(srv.URL(), m.dark); err == nil {
+		if qr, err := ui.QR(srv.URL()); err == nil {
 			m.webQR = qr
 		}
 		if s := m.current(); s != nil {
@@ -98,6 +100,16 @@ func (m *Model) webKey(key string) tea.Cmd {
 			s := m.sessions[m.webCursor]
 			s.Web = !s.Web
 		}
+	case "w":
+		// Watching is a way of sharing: it shares a session that was not.
+		if m.webCursor >= 0 && m.webCursor < len(m.sessions) {
+			s := m.sessions[m.webCursor]
+			if !s.Web {
+				s.Web, s.WebWatch = true, true
+			} else {
+				s.WebWatch = !s.WebWatch
+			}
+		}
 	case "x":
 		m.stopWeb()
 		m.mode = modeWorkspace
@@ -122,14 +134,31 @@ func (m *Model) publish() {
 			continue
 		}
 		ws := web.Session{
-			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Project: filepath.Base(s.Dir),
+			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Project: filepath.Base(s.Dir), Path: tilde(s.Dir),
 			Status: s.Status.String(), Since: s.Since, Stalled: s.Stalled(now),
 			Queue: []string{}, Paused: s.Paused, Answer: s.Answer, Dir: s.Dir,
 			Running: s.Term != nil && s.Status != agent.Exited,
+			Control: !s.WebWatch, Touched: len(s.Touched),
+		}
+		if s.Worktree != "" {
+			ws.Worktree = filepath.Base(s.Worktree)
+		}
+		if s.Tool.Name != "" {
+			tool := s.Tool
+			ws.Tool = &tool
+		}
+		if s.Status == agent.NeedsInput {
+			ws.Question = s.Question
+			if s.Term != nil {
+				if menu, ok := agent.ReadMenu(s.Term.String()); ok {
+					ws.Prompt, ws.Choices = menu.Prompt, menu.Choices
+				}
+			}
 		}
 		if !s.Uncommitted {
 			ws.Base = s.Base
 		}
+		ws.FromStart = ws.Base != ""
 		for _, q := range s.Queue {
 			ws.Queue = append(ws.Queue, q.Text)
 		}
@@ -150,57 +179,98 @@ func plainScreen(text string) string {
 	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
 }
 
-// handleWeb does what a page asked of a shared session.
+// handleWeb does what a page asked of a shared session, and tells the page
+// what came of it.
 func (m *Model) handleWeb(a web.Action) tea.Cmd {
 	s, _ := m.byID(a.Session)
 	if s == nil || !s.Web {
+		a.Reply(errors.New("this session is not shared any more"))
 		return nil
 	}
 	defer m.publish()
 	running := s.Term != nil && s.Status != agent.Exited
+	direct := a.Kind == web.ActSend || a.Kind == web.ActChoose || a.Kind == web.ActInterrupt
+	switch {
+	case direct && s.WebWatch:
+		a.Reply(errors.New("this session is shared to watch: queue the message instead"))
+		return nil
+	case direct && !running:
+		a.Reply(errors.New("the agent is not running: queue the message instead"))
+		return nil
+	case a.Kind == web.ActSend && s.Status == agent.NeedsInput:
+		// Typed into a menu, a message could pick one of its choices.
+		if _, menu := agent.ReadMenu(s.Term.String()); menu {
+			a.Reply(errors.New("it is asking you to pick an answer: answer it first, or queue the message"))
+			return nil
+		}
+	}
 
 	switch a.Kind {
 	case web.ActSend:
-		if !running {
-			return nil
-		}
 		m.say("from the web: a message for " + s.Name)
+		a.Reply(nil)
 		return m.deliver(s, a.Text)
 	case web.ActQueue:
 		m.say("from the web: a message queued for " + s.Name)
+		a.Reply(nil)
 		return m.enqueue(s, session.Message{Text: a.Text})
-	case web.ActKey:
-		if k, ok := webKeyPress(a.Text); ok && running {
-			s.NoteInput(time.Now())
-			s.Term.SendKey(k)
+	case web.ActUnqueue:
+		// The page names the message it saw: if the queue moved on since,
+		// the same message is looked for elsewhere, and nothing else goes.
+		i := a.Index
+		if i < 0 || i >= len(s.Queue) || s.Queue[i].Text != a.Text {
+			i = slices.IndexFunc(s.Queue, func(q session.Message) bool { return q.Text == a.Text })
 		}
+		if i < 0 {
+			a.Reply(errors.New("this message is not queued any more: it may have been sent"))
+			return nil
+		}
+		s.RemoveQueued(i)
+		m.save()
+		m.say("from the web: a queued message taken back from " + s.Name)
+		a.Reply(nil)
+	case web.ActChoose:
+		a.Reply(m.chooseFromWeb(s, a.Index, a.Text))
+	case web.ActInterrupt:
+		s.NoteInput(time.Now())
+		s.Term.SendKey(uv.Key{Code: uv.KeyEscape})
+		m.say("from the web: " + s.Name + " interrupted")
+		a.Reply(nil)
 	}
 	return nil
 }
 
-// webKeyPress returns the key a page names: a printable character, or one
-// of the few keys that answer an agent's questions.
-func webKeyPress(name string) (uv.Key, bool) {
-	switch name {
-	case "enter":
-		return uv.Key{Code: uv.KeyEnter}, true
-	case "esc":
-		return uv.Key{Code: uv.KeyEscape}, true
-	case "up":
-		return uv.Key{Code: uv.KeyUp}, true
-	case "down":
-		return uv.Key{Code: uv.KeyDown}, true
-	case "left":
-		return uv.Key{Code: uv.KeyLeft}, true
-	case "right":
-		return uv.Key{Code: uv.KeyRight}, true
-	case "tab":
-		return uv.Key{Code: uv.KeyTab}, true
+// chooseFromWeb answers the menu on the agent's screen with choice i, as the page
+// saw it. The menu is read again first: if the choice is not the same one
+// any more, nothing is pressed, so that an answer never goes to another
+// question.
+func (m *Model) chooseFromWeb(s *session.Session, i int, label string) error {
+	menu, ok := agent.ReadMenu(s.Term.String())
+	if !ok || s.Status != agent.NeedsInput {
+		return errors.New("the question is not on the screen any more: look again")
 	}
-	if r := []rune(name); len(r) == 1 && unicode.IsPrint(r[0]) {
-		return uv.Key{Code: r[0], Text: name}, true
+	if i < 0 || i >= len(menu.Choices) || menu.Choices[i] != label {
+		return errors.New("the question changed: look again before answering")
 	}
-	return uv.Key{}, false
+	s.NoteInput(time.Now())
+	if menu.Selected < 0 {
+		// A menu without a cursor takes the number of the choice.
+		for _, r := range strconv.Itoa(i + 1) {
+			s.Term.SendKey(uv.Key{Code: r, Text: string(r)})
+		}
+	} else {
+		// The cursor is moved onto the choice, which is then taken.
+		step := uv.Key{Code: uv.KeyDown}
+		if i < menu.Selected {
+			step = uv.Key{Code: uv.KeyUp}
+		}
+		for range max(i-menu.Selected, menu.Selected-i) {
+			s.Term.SendKey(step)
+		}
+	}
+	s.Term.SendKey(uv.Key{Code: uv.KeyEnter})
+	m.say(fmt.Sprintf("from the web: %q chosen for %s", label, s.Name))
+	return nil
 }
 
 // renderWeb draws the web cockpit box: the code to scan, the link, and the
@@ -216,12 +286,15 @@ func (m *Model) renderWeb(maxW, maxH int) []string {
 	var rows []string
 	for _, s := range m.sessions {
 		check := "[ ]"
-		if s.Web {
+		switch {
+		case s.Web && s.WebWatch:
+			check = ui.Info.Render("[w]")
+		case s.Web:
 			check = ui.Info.Render("[x]")
 		}
 		rows = append(rows, fmt.Sprintf(" %s %s %s %s ", check, badge(s), s.Name, ui.Dim.Render(s.Status.String())))
 	}
-	hint := ui.Dim.Render(" space share ⇄ stop sharing · x stop the cockpit · esc close")
+	hint := ui.Dim.Render(" space share ⇄ stop sharing · w watch only ⇄ control · x stop the cockpit · esc close")
 
 	width := 0
 	for _, l := range slices.Concat(lines, rows, []string{hint}) {

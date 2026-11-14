@@ -36,15 +36,17 @@ func TestCopilotMapEvent(t *testing.T) {
 		// The first hook to run comes with the first message.
 		{"sessionStart", `{"source":"new"}`, working, true},
 		{"userPromptSubmitted", `{"prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
-		{"preToolUse", `{"toolName":"bash","toolArgs":{"command":"ls"}}`, working, true},
-		{"preToolUse", `{"toolName":"ask_user","toolArgs":{"question":"which?"}}`, Update{Status: NeedsInput, HasStatus: true}, true},
+		{"preToolUse", `{"toolName":"bash","toolArgs":{"command":"ls"}}`, Update{Status: Working, HasStatus: true, Tool: Tool{Name: "bash", Detail: "ls"}}, true},
+		// A question to the user is asked in its own words.
+		{"preToolUse", `{"toolName":"ask_user","toolArgs":{"question":"which?"}}`, Update{Status: NeedsInput, HasStatus: true, Question: "which?"}, true},
 		{"postToolUse", `{"toolName":"edit","toolArgs":{"path":"/p/a.go","old_str":"a","new_str":"b"}}`, Update{Status: Working, HasStatus: true, File: "/p/a.go"}, true},
 		{"postToolUse", `{"toolName":"create","toolArgs":{"path":"/p/b.go"}}`, Update{Status: Working, HasStatus: true, File: "/p/b.go"}, true},
 		// A file that was only read is not one the agent changed.
 		{"postToolUse", `{"toolName":"view","toolArgs":{"path":"/p/a.go"}}`, working, true},
 		{"postToolUse", `{"toolName":"apply_patch","toolArgs":"*** Begin Patch"}`, working, true},
 		{"postToolUseFailure", `{"toolName":"edit","toolArgs":{"path":"/p/a.go"}}`, working, true},
-		{"notification", `{"notification_type":"permission_prompt","title":"Permission needed"}`, Update{Status: NeedsInput, HasStatus: true}, true},
+		{"notification", `{"notification_type":"permission_prompt","title":"Permission needed"}`, Update{Status: NeedsInput, HasStatus: true, Question: "Permission needed"}, true},
+		{"notification", `{"notification_type":"permission_prompt","title":"Permission needed","message":"Allow bash?"}`, Update{Status: NeedsInput, HasStatus: true, Question: "Allow bash?"}, true},
 		{"notification", `{"notification_type":"something_else"}`, Update{}, false},
 		// An error that is tried again changes nothing; one that is not ends
 		// the turn without an answer.

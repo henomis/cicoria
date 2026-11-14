@@ -17,8 +17,10 @@
 package agent
 
 import (
+	"encoding/json"
 	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/henomis/cicoria/internal/ipc"
 )
@@ -96,6 +98,55 @@ type Update struct {
 	Conversation string
 	// File is a file the agent just changed, if any.
 	File string
+	// Tool is what the agent is about to do, when it is about to use a
+	// tool: what a question for permission is about.
+	Tool Tool
+	// Question is the agent's own words for what it asks, when it reports
+	// that it needs input and tells why.
+	Question string
+}
+
+// Tool is one use of a tool: its name, and the detail that says what it does
+// with it, such as the command it runs or the file it writes.
+type Tool struct {
+	Name   string `json:"name"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// toolDetails are the inputs that say best what a tool does, in the order
+// they are looked for.
+var toolDetails = []string{"command", "file_path", "notebook_path", "path", "url", "pattern", "query", "question", "prompt", "description"}
+
+// maxToolDetail bounds the detail of a tool: a command is shown whole, a
+// file written is not.
+const maxToolDetail = 2000
+
+// toolOf describes the use of a tool from its name and its input, which is
+// an object for most tools and a string for some.
+func toolOf(name string, input json.RawMessage) Tool {
+	t := Tool{Name: name}
+	if name == "" {
+		return t
+	}
+	var fields map[string]any
+	if json.Unmarshal(input, &fields) == nil {
+		for _, k := range toolDetails {
+			if v, ok := fields[k].(string); ok && strings.TrimSpace(v) != "" {
+				t.Detail = v
+				break
+			}
+		}
+	} else {
+		var text string
+		if json.Unmarshal(input, &text) == nil {
+			t.Detail = text
+		}
+	}
+	t.Detail = strings.TrimSpace(t.Detail)
+	if r := []rune(t.Detail); len(r) > maxToolDetail {
+		t.Detail = string(r[:maxToolDetail]) + "…"
+	}
+	return t
 }
 
 // Adapter knows one kind of agent.

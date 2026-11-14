@@ -17,6 +17,7 @@ package web
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -133,42 +134,77 @@ func TestEvents(t *testing.T) {
 
 func TestActions(t *testing.T) {
 	s, c, base := start(t)
-	s.Publish(Snapshot{Sessions: []Session{{ID: "a", Running: true}, {ID: "b"}}})
+	s.Publish(Snapshot{Sessions: []Session{
+		{ID: "a", Running: true, Control: true},
+		{ID: "b", Control: true},
+		{ID: "w", Running: true},
+	}})
 
-	post := func(path, body string) int {
+	post := func(path, body string) (int, string) {
 		t.Helper()
 		r, err := c.Post(base+path, "application/json", strings.NewReader(body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_ = r.Body.Close()
-		return r.StatusCode
+		defer func() { _ = r.Body.Close() }()
+		text, _ := io.ReadAll(r.Body)
+		return r.StatusCode, strings.TrimSpace(string(text))
 	}
-	if code := post("/api/sessions/a/queue", `{"text":"run the tests"}`); code != http.StatusNoContent {
-		t.Fatalf("queue: %d", code)
-	}
-	select {
-	case a := <-s.Actions():
-		if a != (Action{Session: "a", Kind: ActQueue, Text: "run the tests"}) {
-			t.Errorf("action = %+v", a)
+	// answer plays the workspace: it takes the next action and says what
+	// came of it.
+	answer := func(want Action, err error) {
+		t.Helper()
+		select {
+		case a := <-s.Actions():
+			a.Reply(err)
+			a.Done = nil
+			if a != want {
+				t.Errorf("action = %+v, want %+v", a, want)
+			}
+		case <-time.After(time.Second):
+			t.Error("no action came")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("no action came")
 	}
+
+	// What the workspace answers is what the page is told.
+	go answer(Action{Session: "a", Kind: ActQueue, Text: "run the tests"}, nil)
+	if code, _ := post("/api/sessions/a/queue", `{"text":"run the tests"}`); code != http.StatusNoContent {
+		t.Errorf("queue: %d", code)
+	}
+	go answer(Action{Session: "a", Kind: ActChoose, Text: "Yes", Index: 0}, errors.New("the question changed"))
+	if code, why := post("/api/sessions/a/choose", `{"text":"Yes","index":0}`); code != http.StatusConflict || why != "the question changed" {
+		t.Errorf("choose: %d %q", code, why)
+	}
+	go answer(Action{Session: "a", Kind: ActInterrupt}, nil)
+	if code, _ := post("/api/sessions/a/interrupt", ``); code != http.StatusNoContent {
+		t.Errorf("interrupt: %d", code)
+	}
+
 	for path, want := range map[string]int{
 		"/api/sessions/c/send":  http.StatusNotFound,
 		"/api/sessions/a/close": http.StatusNotFound,
-		"/api/sessions/a/pause": http.StatusNotFound,
+		"/api/sessions/a/key":   http.StatusNotFound,
 		// An agent that is not running is only queued for.
-		"/api/sessions/b/send": http.StatusConflict,
-		"/api/sessions/b/key":  http.StatusConflict,
+		"/api/sessions/b/send":      http.StatusConflict,
+		"/api/sessions/b/choose":    http.StatusConflict,
+		"/api/sessions/b/interrupt": http.StatusConflict,
+		// A session shared to watch is only queued for.
+		"/api/sessions/w/send":      http.StatusForbidden,
+		"/api/sessions/w/choose":    http.StatusForbidden,
+		"/api/sessions/w/interrupt": http.StatusForbidden,
 	} {
-		if code := post(path, `{"text":"y"}`); code != want {
+		if code, _ := post(path, `{"text":"y"}`); code != want {
 			t.Errorf("%s: %d, want %d", path, code, want)
 		}
 	}
-	if code := post("/api/sessions/a/send", `{}`); code != http.StatusBadRequest {
+	if code, _ := post("/api/sessions/a/send", `{}`); code != http.StatusBadRequest {
 		t.Errorf("nothing to send: %d", code)
+	}
+
+	// Watching still lets a queued message be taken back.
+	go answer(Action{Session: "w", Kind: ActUnqueue, Text: "old", Index: 1}, nil)
+	if code, _ := post("/api/sessions/w/unqueue", `{"text":"old","index":1}`); code != http.StatusNoContent {
+		t.Errorf("unqueue: %d", code)
 	}
 }
 

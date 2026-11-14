@@ -45,6 +45,12 @@ while read -r cmd arg; do
   case "$cmd" in
     work) hook '{"hook_event_name":"UserPromptSubmit"}' ;;
     ask)  hook '{"hook_event_name":"Notification","notification_type":"permission_prompt"}' ;;
+    menu) hook '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm build"}}'
+          printf 'Do you want to proceed?\n\342\235\257 1. Yes\n  2. No, and tell me what to do (esc)\n'
+          hook '{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"May I run Bash?"}'
+          read -r ans
+          printf 'answer %s\n' "$ans" | cat -v
+          hook '{"hook_event_name":"PostToolUse"}' ;;
     stop) hook '{"hook_event_name":"Stop"}' ;;
     reply) hook "{\"hook_event_name\":\"Stop\",\"last_assistant_message\":\"$arg\"}" ;;
     fail) hook '{"hook_event_name":"StopFailure"}' ;;
@@ -2547,7 +2553,7 @@ func TestWebCockpit(t *testing.T) {
 		t.Fatalf("no event had %q", wants)
 		return ""
 	}
-	post := func(kind, body string) {
+	ask := func(kind, body string) int {
 		t.Helper()
 		req, _ := http.NewRequest(http.MethodPost, base+"/api/sessions/"+id+"/"+kind, strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -2556,8 +2562,12 @@ func TestWebCockpit(t *testing.T) {
 			t.Fatal(err)
 		}
 		_ = r.Body.Close()
-		if r.StatusCode != http.StatusNoContent {
-			t.Fatalf("%s: %s", kind, r.Status)
+		return r.StatusCode
+	}
+	post := func(kind, body string) {
+		t.Helper()
+		if code := ask(kind, body); code != http.StatusNoContent {
+			t.Fatalf("%s: %d", kind, code)
 		}
 	}
 	snapshot(`"name":"claude-1"`, `"status":"idle"`)
@@ -2570,6 +2580,51 @@ func TestWebCockpit(t *testing.T) {
 	// What the agent says at the end of its turn reaches the page.
 	post("send", `{"text":"reply all-done"}`)
 	snapshot(`"answer":"all-done"`, `"status":"idle"`)
+
+	// A question drawn as a menu is answered with one of its choices, and
+	// only if it is still the one on the screen.
+	w.line("menu")
+	snapshot(`"status":"needs input"`, `"question":"May I run Bash?"`, `"tool":{"name":"Bash","detail":"rm build"}`,
+		`"prompt":"Do you want to proceed?"`, `"choices":["Yes","No, and tell me what to do"]`)
+	if code := ask("choose", `{"text":"Maybe","index":1}`); code != http.StatusConflict {
+		t.Errorf("a choice not on the screen: %d", code)
+	}
+	// A message typed into the menu could pick a choice: it waits for the
+	// answer.
+	if code := ask("send", `{"text":"hello"}`); code != http.StatusConflict {
+		t.Errorf("send while a menu is on the screen: %d", code)
+	}
+	post("choose", `{"text":"No, and tell me what to do","index":1}`)
+	w.see("answer ^[[B")
+	snapshot(`"status":"working"`)
+	w.line("stop")
+	snapshot(`"status":"idle"`)
+
+	// A session shared to watch takes no message at once, nor keys: only
+	// what is queued.
+	w.prefix('v')
+	w.see("Web cockpit")
+	w.typeText("w")
+	w.see("[w]")
+	snapshot(`"control":false`)
+	if code := ask("send", `{"text":"hello"}`); code != http.StatusForbidden {
+		t.Errorf("send while watching: %d", code)
+	}
+	if code := ask("interrupt", ``); code != http.StatusForbidden {
+		t.Errorf("interrupt while watching: %d", code)
+	}
+
+	// A queued message can be taken back from the page.
+	w.typeText("q")
+	w.gone("Web cockpit")
+	// Nothing is sent to an agent that needs input, so the message waits.
+	w.line("ask")
+	snapshot(`"status":"needs input"`)
+	post("queue", `{"text":"later please"}`)
+	snapshot(`"queue":["later please"]`)
+	post("unqueue", `{"text":"later please","index":0}`)
+	snapshot(`"queue":[]`)
+	w.see("taken back from claude-1")
 
 	// Stopping the cockpit takes the link with it.
 	w.prefix('v')

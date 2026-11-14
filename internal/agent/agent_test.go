@@ -37,9 +37,14 @@ func TestClaudeMapEvent(t *testing.T) {
 		{`{"hook_event_name":"UserPromptSubmit","prompt_id":"p1"}`, Update{Status: Working, HasStatus: true, TurnStarted: true, Prompt: "p1"}, true},
 		{`{"hook_event_name":"Stop","prompt_id":"p1"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Prompt: "p1"}, true},
 		{`{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/p/a.go"}}`, Update{Status: Working, HasStatus: true}, true},
+		// The tool about to run is what a question for permission is about.
+		{`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"go test ./...","description":"Run the tests"}}`, Update{Status: Working, HasStatus: true, Tool: Tool{Name: "Bash", Detail: "go test ./..."}}, true},
+		{`{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/p/a.go","content":"package a"}}`, Update{Status: Working, HasStatus: true, Tool: Tool{Name: "Write", Detail: "/p/a.go"}}, true},
+		{`{"hook_event_name":"PreToolUse","tool_name":"TodoWrite","tool_input":{"todos":[]}}`, Update{Status: Working, HasStatus: true, Tool: Tool{Name: "TodoWrite"}}, true},
 		{`{"hook_event_name":"PostToolUse","tool_input":{"file_path":"/p/a.go"}}`, Update{Status: Working, HasStatus: true, File: "/p/a.go"}, true},
 		{`{"hook_event_name":"PostToolUse","tool_input":{"command":"ls"}}`, Update{Status: Working, HasStatus: true}, true},
 		{`{"hook_event_name":"Notification","notification_type":"permission_prompt"}`, Update{Status: NeedsInput, HasStatus: true}, true},
+		{`{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs your permission to use Bash"}`, Update{Status: NeedsInput, HasStatus: true, Question: "Claude needs your permission to use Bash"}, true},
 		{`{"hook_event_name":"Notification","notification_type":"elicitation_dialog"}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		{`{"hook_event_name":"Notification","notification_type":"agent_needs_input"}`, Update{Status: NeedsInput, HasStatus: true}, true},
 		{`{"hook_event_name":"Notification","notification_type":"idle_prompt"}`, Update{Status: Idle, HasStatus: true}, true},
@@ -126,5 +131,26 @@ func TestClaudeCommand(t *testing.T) {
 	}
 	if !slices.Contains(cmd.Env, "CICORIA_SESSION=abc") {
 		t.Error("the session lost its own ID")
+	}
+}
+
+// TestToolOf describes a tool by what it does: the command it runs or the
+// file it writes, a string input as it is, and a long one cut.
+func TestToolOf(t *testing.T) {
+	long := strings.Repeat("x", maxToolDetail+10)
+	tests := []struct {
+		name, input string
+		want        Tool
+	}{
+		{"Bash", `{"command":"  ls -la  ","description":"List"}`, Tool{Name: "Bash", Detail: "ls -la"}},
+		{"Edit", `{"file_path":"/p/a.go","old_string":"a"}`, Tool{Name: "Edit", Detail: "/p/a.go"}},
+		{"apply_patch", `"*** Begin Patch"`, Tool{Name: "apply_patch", Detail: "*** Begin Patch"}},
+		{"Bash", `{"command":"` + long + `"}`, Tool{Name: "Bash", Detail: long[:maxToolDetail] + "…"}},
+		{"", `{"command":"ls"}`, Tool{}},
+	}
+	for _, tt := range tests {
+		if got := toolOf(tt.name, json.RawMessage(tt.input)); got != tt.want {
+			t.Errorf("toolOf(%q, %s) = %+v, want %+v", tt.name, tt.input[:min(len(tt.input), 40)], got, tt.want)
+		}
 	}
 }
