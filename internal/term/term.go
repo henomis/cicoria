@@ -88,6 +88,19 @@ func Start(cmd *exec.Cmd, width, height int) (*Terminal, error) {
 		EnableMode:  func(mode ansi.Mode) { t.setMode(mode, true) },
 		DisableMode: func(mode ansi.Mode) { t.setMode(mode, false) },
 	})
+	// The emulator does not check that margins fit on the screen, and the
+	// next scroll in margins that do not crashes it. A command that has not
+	// seen a resize yet asks for those of its old size: they are left out,
+	// and the command sets them again when it draws for the new size.
+	// The handlers run before the emulator's own, with mu held.
+	t.emu.RegisterCsiHandler('r', func(p ansi.Params) bool {
+		bottom, _, _ := p.Param(1, 0)
+		return bottom > t.emu.Height()
+	})
+	t.emu.RegisterCsiHandler('s', func(p ansi.Params) bool {
+		right, _, _ := p.Param(1, 0)
+		return right > t.emu.Width()
+	})
 
 	go t.readOutput()
 	go t.writeInput()

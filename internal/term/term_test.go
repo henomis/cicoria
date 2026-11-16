@@ -304,3 +304,18 @@ func TestCloseKillsCommandThatStays(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// TestMarginsOfAnOldSize has the command set the margins of a larger
+// screen, as one does that draws before it sees a resize, and scroll: the
+// emulator must not crash on them.
+func TestMarginsOfAnOldSize(t *testing.T) {
+	tm, err := Start(exec.Command("sh", "-c", `read x; printf '\033[1;50r\033[36S\033[?69h\033[1;200s\033[36Sstill here'; cat`), 40, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tm.Close() }()
+
+	tm.Resize(40, 10)
+	tm.SendKey(uv.Key{Code: uv.KeyEnter})
+	waitFor(t, tm, "still here")
+}
