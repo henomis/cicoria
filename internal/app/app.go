@@ -902,10 +902,13 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 	m.publish()
 	// Nobody sees the panels of a terminal that is not in front: the work
 	// tree is looked at again when it comes back. The board looks at the
-	// work of every session, while it is open.
-	if m.ticks%refreshTicks == 0 && !m.blurred {
-		ready = append(ready, m.refresh())
-		if m.mode == modeBoard {
+	// work of every session while it is open, and so does the web cockpit,
+	// whose page has the columns of the board, while it runs.
+	if m.ticks%refreshTicks == 0 {
+		if !m.blurred {
+			ready = append(ready, m.refresh())
+		}
+		if m.mode == modeBoard && !m.blurred || m.web != nil {
 			ready = append(ready, m.pollBoard())
 		}
 	}

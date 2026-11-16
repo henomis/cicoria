@@ -2584,7 +2584,7 @@ func TestWebCockpit(t *testing.T) {
 	// A question drawn as a menu is answered with one of its choices, and
 	// only if it is still the one on the screen.
 	w.line("menu")
-	snapshot(`"status":"needs input"`, `"question":"May I run Bash?"`, `"tool":{"name":"Bash","detail":"rm build"}`,
+	snapshot(`"status":"needs input"`, `"lane":"needs"`, `"question":"May I run Bash?"`, `"tool":{"name":"Bash","detail":"rm build"}`,
 		`"prompt":"Do you want to proceed?"`, `"choices":["Yes","No, and tell me what to do"]`)
 	if code := ask("choose", `{"text":"Maybe","index":1}`); code != http.StatusConflict {
 		t.Errorf("a choice not on the screen: %d", code)

@@ -70,7 +70,8 @@ func (m *Model) askWeb() tea.Cmd {
 		if s := m.current(); s != nil {
 			s.Web = true
 		}
-		cmd = waitWeb(srv)
+		// The columns of the board need a look at the work of each session.
+		cmd = tea.Batch(waitWeb(srv), m.pollBoard())
 	}
 	m.mode, m.webCursor = modeWeb, m.active
 	m.publish()
@@ -123,6 +124,12 @@ func (m *Model) webKey(key string) tea.Cmd {
 
 // publish hands the web cockpit what it shows: the shared sessions, with
 // the screen of those a page looks at.
+// lanes names the columns of the board for the page.
+var lanes = [session.Lanes]string{
+	session.LaneNeedsYou: "needs", session.LaneWorking: "working",
+	session.LaneReview: "review", session.LaneSettled: "settled",
+}
+
 func (m *Model) publish() {
 	if m.web == nil {
 		return
@@ -142,6 +149,12 @@ func (m *Model) publish() {
 		}
 		if s.Worktree != "" {
 			ws.Worktree = filepath.Base(s.Worktree)
+		}
+		w := m.board.info[s.ID]
+		ws.Lane = lanes[s.Lane(m.changed(s))]
+		ws.Branch, ws.Unseen, ws.Notes = w.branch, s.Unseen, len(s.Notes)
+		if !isShell(s.Adapter) {
+			ws.Changed, ws.Commits = w.files, w.commits
 		}
 		if s.Tool.Name != "" {
 			tool := s.Tool

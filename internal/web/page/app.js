@@ -114,7 +114,26 @@ function group(s) {
 }
 
 function mark(s) {
-  return s.status === "working" && s.stalled ? "stalled" : group(s);
+  if (s.status === "working" && s.stalled) return "stalled";
+  return lane(s) === "review" ? "review" : group(s);
+}
+
+// lane is the column of the board a session is in, as cicoria says.
+function lane(s) {
+  if (s.lane) return s.lane;
+  const g = group(s);
+  return g === "idle" || g === "exited" ? "settled" : g;
+}
+
+// review says what there is to look at in a session to review.
+function review(s) {
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  return [
+    s.unseen && "Finished while you were away",
+    s.changed && n(s.changed, "file changed", "files changed"),
+    s.commits && n(s.commits, "commit", "commits"),
+    s.notes && n(s.notes, "note not sent", "notes not sent"),
+  ].filter(Boolean).join(", ");
 }
 
 function state(s) {
@@ -142,7 +161,8 @@ function doing(s) {
   return s.tool.detail ? `Using ${s.tool.name}: ${s.tool.detail}` : `Using ${s.tool.name}`;
 }
 
-const GROUPS = [["needs", "Needs you"], ["working", "Working"], ["idle", "Finished"], ["exited", "Exited"]];
+// The columns of the board, which the list follows too.
+const GROUPS = [["needs", "Needs you"], ["working", "Working"], ["review", "To review"], ["settled", "Settled"]];
 
 // queued says what waits to be sent, and why it does not go.
 function queued(s) {
@@ -258,20 +278,21 @@ function receipt(s, text, failed = false) {
   update();
 }
 
-// ---- Routes: the list, a session, its changes.
+// ---- Routes: the list, the board, a session, its changes.
 
 function route() {
+  if (location.hash === "#/board") return { board: true };
   const m = location.hash.match(/^#\/s\/([^/]+)(\/changes)?$/);
   return m ? { id: decodeURIComponent(m[1]), changes: !!m[2] } : null;
 }
 
 function render() {
   const r = route();
-  document.body.dataset.route = r ? "session" : "home";
-  view = !r ? emptyView() : r.changes ? changesView(r.id) : sessionView(r.id);
+  document.body.dataset.route = !r ? "home" : r.board ? "board" : "session";
+  view = !r ? emptyView() : r.board ? boardView() : r.changes ? changesView(r.id) : sessionView(r.id);
   main.replaceChildren(view.root);
   // The screen of the session open comes with the snapshots.
-  connect(r && !r.changes ? r.id : null);
+  connect(r?.id && !r.changes ? r.id : null);
   update();
   if (r) {
     window.scrollTo(0, 0);
@@ -284,26 +305,39 @@ function update() {
   if (!loaded) return;
   // A wide screen has the list beside the session: rather than an empty
   // pane, it opens the session that matters most.
-  if (!route() && wide.matches) {
+  const r = route();
+  if (!r && wide.matches) {
     const s = first(snap.sessions);
     if (s) {
       location.replace(`#/s/${encodeURIComponent(s.id)}`);
       return;
     }
   }
+  boardToggle.setAttribute("aria-pressed", String(!!r?.board));
   title();
   list.update();
   view?.update();
 }
 
 const wide = window.matchMedia("(min-width: 900px)");
+
+// Board opens the board; pressed again, it goes back to where it was.
+const boardToggle = $("#board-toggle");
+let beforeBoard = "#";
+boardToggle.onclick = () => {
+  if (route()?.board) location.hash = beforeBoard;
+  else {
+    beforeBoard = location.hash || "#";
+    location.hash = "#/board";
+  }
+};
 wide.addEventListener("change", update);
 
 // first is the session to look at first: the one that has waited for you
 // longest, or else the one whose state changed last.
 function first(list) {
   const by = (a, b) => Date.parse(a.since) - Date.parse(b.since);
-  const needs = list.filter((s) => group(s) === "needs").sort(by);
+  const needs = list.filter((s) => lane(s) === "needs").sort(by);
   return needs[0] || [...list].sort(by).at(-1);
 }
 
@@ -326,7 +360,7 @@ const list = (() => {
       empty.hidden = snap.sessions.length > 0;
       const open = route()?.id;
       for (const g of groups) {
-        let items = snap.sessions.filter((s) => group(s) === g.k);
+        let items = snap.sessions.filter((s) => lane(s) === g.k);
         // Who has waited longest comes first.
         if (g.k === "needs") items = [...items].sort((a, b) => Date.parse(a.since) - Date.parse(b.since));
         g.section.hidden = !items.length;
@@ -347,21 +381,74 @@ function row() {
   const li = el("li", {}, link);
   li.paint = (s, open) => {
     link.href = `#/s/${encodeURIComponent(s.id)}`;
-    link.className = group(s);
+    link.className = lane(s);
     if (s.id === open) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
     badge.className = `badge ${mark(s)}`;
     set(name, s.name);
     set(line, state(s));
-    const bits = [s.agent, s.worktree ? `${s.project}, worktree ${s.worktree}` : s.project, queued(s)];
-    if (s.touched) bits.push(`${s.touched} file${s.touched === 1 ? "" : "s"} touched`);
-    if (!s.control) bits.push("watch only");
+    const bits = [s.agent, s.worktree ? `${s.project}, worktree ${s.worktree}` : s.project,
+      s.branch !== s.worktree && s.branch && `on ${s.branch}`, queued(s), !s.control && "watch only"];
     set(where, bits.filter(Boolean).join(", "));
-    const text = group(s) === "needs" ? asks(s) : doing(s);
+    const l = lane(s);
+    const text = l === "needs" ? asks(s) : l === "working" ? doing(s) : l === "review" ? review(s) : "";
     what.hidden = !text;
     set(what, short(text, 120));
   };
   return li;
+}
+
+// ---- The board: the columns side by side, a card for each session. On a
+// phone, one column fills the screen, and a row of four segments above it,
+// each with the count of its column, picks which.
+
+function boardView() {
+  let current = null;
+  const track = el("div", { class: "board-track" });
+  const segs = el("div", { class: "segs", role: "group", "aria-label": "Columns" });
+  const cols = GROUPS.map(([k, label]) => {
+    const ul = el("ul", { class: "sessions" });
+    const count = el("span", { class: "count" });
+    const none = el("p", { class: "none", text: "None" });
+    const head = el("h2", { id: `col-${k}`, tabindex: "-1" }, label, " ", count);
+    const section = el("section", { class: `column c-${k}`, "aria-labelledby": `col-${k}` }, head, none, ul);
+    const n = el("span", { class: "n" });
+    const seg = el("button", { type: "button", class: `seg s-${k}`, "aria-pressed": "false" }, n, el("span", { class: "l", text: label }));
+    seg.onclick = () => show(k);
+    track.append(section);
+    segs.append(seg);
+    return { k, label, ul, count, none, section, seg, n };
+  });
+  const name = el("h1", { class: "sr-only", tabindex: "-1", text: "Board" });
+  // show puts a column in sight, on a phone the only one.
+  function show(k) {
+    current = k;
+    for (const c of cols) {
+      c.section.classList.toggle("current", c.k === k);
+      c.seg.setAttribute("aria-pressed", String(c.k === k));
+    }
+  }
+  return {
+    root: el("div", { class: "board" }, name, segs, track),
+    focus: name,
+    update() {
+      for (const c of cols) {
+        let items = snap.sessions.filter((s) => lane(s) === c.k);
+        if (c.k === "needs") items = [...items].sort((a, b) => Date.parse(a.since) - Date.parse(b.since));
+        const n = items.length;
+        set(c.count, String(n));
+        set(c.n, String(n));
+        c.seg.setAttribute("aria-label", `${c.label}, ${n} card${n === 1 ? "" : "s"}`);
+        c.seg.classList.toggle("hot", c.k === "needs" && n > 0);
+        c.seg.classList.toggle("empty", n === 0);
+        c.none.hidden = n > 0;
+        sync(c.ul, items, (s) => s.id, row, (li, s) => li.paint(s, null));
+      }
+      // It opens on the first column with something in it.
+      if (!current && snap.sessions.length) current = (cols.find((x) => !x.none.hidden) || cols[0]).k;
+      show(current || "needs");
+    },
+  };
 }
 
 function emptyView() {
@@ -611,7 +698,7 @@ function sessionView(id) {
       const g = group(s);
       body.className = `session s-${g}`;
       set(name, s.name);
-      set(where, [`${s.agent} in ${s.path || s.project}`, s.worktree && `worktree ${s.worktree}`, !s.control && "watch only"].filter(Boolean).join(", "));
+      set(where, [`${s.agent} in ${s.path || s.project}`, s.worktree && `worktree ${s.worktree}`, s.branch !== s.worktree && s.branch && `on ${s.branch}`, !s.control && "watch only"].filter(Boolean).join(", "));
       badge.className = `badge ${mark(s)}`;
       set(stateText, state(s));
       interrupt.hidden = !(s.control && s.running && (g === "working" || g === "needs"));

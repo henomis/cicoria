@@ -147,6 +147,7 @@ a { color: var(--petal-ink); }
 .badge.needs { background: var(--pollen-ink); border-radius: 2px; transform: rotate(45deg) scale(.9); }
 .badge.exited { background: var(--rust); border-radius: 2px; }
 .badge.idle { background: transparent; border: 2px solid var(--soft); }
+.badge.review { background: var(--petal); }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .badge.working { animation: none; } }
 
@@ -343,6 +344,28 @@ main { padding: 0 var(--gutter); container-type: inline-size; }
 .dl.hunk { color: var(--t-blue); }
 .dl.meta { color: var(--t-dim); }
 
+/* Board opens the board; pressed, it is lit. */
+.board-toggle {
+  flex: none; min-height: 36px; padding: 0 12px; margin-right: 4px; border-radius: 8px; border: 1px solid var(--line);
+  background: none; font-size: 14px; font-weight: 600; color: var(--petal-ink);
+}
+.board-toggle[aria-pressed="true"] { background: var(--petal); border-color: var(--petal); color: var(--on-petal); }
+
+/* The board: the columns side by side, each session a card. */
+body[data-route="board"] .layout { display: block; }
+body[data-route="board"] #home { display: none; }
+.board { padding: 24px 0 32px; }
+.board-track { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.segs { display: none; }
+.column { min-width: 0; }
+.column h2 { display: flex; align-items: baseline; gap: 8px; font-size: 15px; font-weight: 600; color: var(--soft); padding: 0 4px 10px; }
+.column .none { padding: 14px 4px; color: var(--soft); font-size: 14px; border-top: 1px dashed var(--line); }
+.board .sessions { border-top: 0; display: flex; flex-direction: column; gap: 10px; }
+.board .sessions li { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--raised); }
+.board .sessions a { padding: 12px 14px; gap: 12px; }
+.board .sessions a:hover { box-shadow: inset 0 0 0 1px var(--petal); border-radius: 12px; }
+.board .sessions li:has(a.needs) { border-color: var(--pollen); }
+
 /* A phone shows one thing at a time: the list, or the session open. */
 @media (max-width: 899px) {
   body[data-route="home"] main { display: none; }
@@ -350,6 +373,34 @@ main { padding: 0 var(--gutter); container-type: inline-size; }
   body[data-route="session"] .bar { display: none; }
   body[data-route="session"] .offline { top: 0; }
   body[data-route="session"] .session { min-height: 100dvh; }
+  body[data-route="board"] main { display: block; }
+  /* The board on a phone: one column at a time, picked from four
+     segments that count them. */
+  .board { padding: 0 0 32px; }
+  .segs {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+    position: sticky; top: var(--bar); z-index: 2;
+    margin: 0 calc(-1 * var(--gutter)); padding: 10px var(--gutter);
+    background: var(--page); border-bottom: 1px solid var(--line);
+  }
+  .seg {
+    min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: 58px; padding: 6px 2px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--raised); color: var(--ink);
+  }
+  .seg .n { font: 600 20px/1.1 var(--name); }
+  .seg .l { font-size: 12px; font-weight: 600; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .seg.empty .n { color: var(--soft); font-weight: 400; }
+  .seg.hot { background: var(--pollen); border-color: var(--pollen); color: var(--on-pollen); }
+  .seg.hot .l { color: var(--on-pollen); }
+  .seg[aria-pressed="true"] { background: var(--petal); border-color: var(--petal); color: var(--on-petal); }
+  .seg[aria-pressed="true"] .l, .seg[aria-pressed="true"].empty .n { color: var(--on-petal); }
+  .seg.hot[aria-pressed="true"] { background: var(--pollen); border-color: var(--on-pollen); box-shadow: inset 0 0 0 1px var(--on-pollen); color: var(--on-pollen); }
+  .seg.hot[aria-pressed="true"] .l { color: var(--on-pollen); }
+  .board-track { display: block; padding-top: 14px; }
+  .board-track > .column:not(.current) { display: none; }
+  /* The name at the top says which column this is. */
+  .board-track .column h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .back { display: inline-flex; }
   .pick { display: none; }
   .screen { max-height: 55vh; font-size: 11.5px; }

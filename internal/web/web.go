@@ -58,6 +58,19 @@ type Session struct {
 	// when one was.
 	Path     string `json:"path"`
 	Worktree string `json:"worktree,omitempty"`
+	// Branch is the branch it works on, or its commit when on none, once
+	// it has been read.
+	Branch string `json:"branch,omitempty"`
+	// Lane is the column of the board the session is in: needs, working,
+	// review or settled.
+	Lane string `json:"lane"`
+	// Unseen says its turn ended while the user was elsewhere; Changed and
+	// Commits count the files changed and the commits made since it started,
+	// and Notes the notes on its code not sent yet: what there is to review.
+	Unseen  bool `json:"unseen"`
+	Changed int  `json:"changed"`
+	Commits int  `json:"commits"`
+	Notes   int  `json:"notes"`
 	// Status is the session's status as the workspace shows it, and Since
 	// when it got into it.
 	Status  string    `json:"status"`
