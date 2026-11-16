@@ -2766,6 +2766,9 @@ func TestBoardNarrow(t *testing.T) {
 	w := newWorkspace(t)
 	w.launch(80, 24)
 	w.see("agent ready")
+	// The board is opened once the agent is idle: had it stopped while the
+	// board was open, it would be waiting to be reviewed.
+	w.title("claude-1 · idle · cicoria")
 	w.prefix('0')
 	w.see("── Backlog (0)", "── ○ Settled (1)", "○ claude-1")
 	if strings.Contains(w.tm.String(), "Working (") {
