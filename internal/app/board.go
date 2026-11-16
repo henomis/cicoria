@@ -55,6 +55,9 @@ const (
 type board struct {
 	col, row int
 	tops     [columns]int
+	// on is the session under the cursor: when its card goes to another
+	// column, the cursor goes with it.
+	on *session.Session
 	// peek says the screen of the session under the cursor is shown over
 	// the board.
 	peek bool
@@ -98,6 +101,7 @@ func (m *Model) openBoard() tea.Cmd {
 	if len(m.boardColumns()[1]) > 0 {
 		m.board.col, m.board.row = 1, 0
 	}
+	m.noteCursor()
 	return m.pollBoard()
 }
 
@@ -144,11 +148,24 @@ func (m *Model) boardCursorOn(s *session.Session) {
 	for c, col := range m.boardColumns() {
 		for r, e := range col {
 			if e.s == s {
-				m.board.col, m.board.row = c, r
+				m.board.col, m.board.row, m.board.on = c, r, s
 				return
 			}
 		}
 	}
+}
+
+// followCursor puts the cursor back on its session, wherever its card is
+// now.
+func (m *Model) followCursor() {
+	if m.board.on != nil {
+		m.boardCursorOn(m.board.on)
+	}
+}
+
+// noteCursor remembers the session under the cursor, if a session is.
+func (m *Model) noteCursor() {
+	m.board.on = m.boardItem().s
 }
 
 // stepColumn moves the cursor to the column before or after. On a narrow
@@ -218,6 +235,8 @@ func (m *Model) pollBoard() tea.Cmd {
 // boardKey handles the keys of the board.
 func (m *Model) boardKey(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
+	m.followCursor()
+	defer m.noteCursor()
 	if m.board.peek {
 		m.board.peek = false
 		return nil
@@ -345,6 +364,8 @@ func (m *Model) boardMouse(msg tea.MouseMsg) tea.Cmd {
 	if m.board.peek || m.confirm != nil || m.prompt != nil {
 		return nil
 	}
+	m.followCursor()
+	defer m.noteCursor()
 	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
 		switch wheel.Mouse().Button {
 		case tea.MouseWheelUp:
@@ -508,6 +529,7 @@ func (m *Model) boardHint() string {
 
 // renderBoard draws the board over the whole screen but the status bar.
 func (m *Model) renderBoard() []string {
+	m.followCursor()
 	height := max(m.height-1, 2)
 	cols := m.boardColumns()
 	waiting := len(cols[1]) + len(cols[3])
