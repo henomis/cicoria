@@ -80,3 +80,24 @@ func TestWaitingIsHeaviest(t *testing.T) {
 		t.Errorf("waiting is %q and working %q", stateGlyphs[StateWaiting], stateGlyphs[StateWorking])
 	}
 }
+
+// The bar under the cursor draws the same cells as any other: only its
+// label says it is selected. Lit cells would turn a half block upside down.
+func TestSelectedBarKeepsItsCells(t *testing.T) {
+	tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: 60, LabelWidth: 10}
+	bar := Bar{Label: "api", Periods: []Period{{From: minute(0), State: StateWorking}}}
+	plain := tl.Render([]Bar{bar})[0]
+	bar.Selected, bar.Span = true, Period{From: minute(2), To: minute(9)}
+	lit := tl.Render([]Bar{bar})[0]
+	if a, b := []rune(ansi.Strip(plain)), []rune(ansi.Strip(lit)); string(a[10:]) != string(b[10:]) {
+		t.Errorf("the cells changed:\n%q\n%q", string(a[10:]), string(b[10:]))
+	}
+	if strings.Contains(lit[strings.Index(lit, "▄"):], "\x1b[7") {
+		t.Error("the cells of the selected bar are reversed")
+	}
+	// Its time is marked on the axis instead.
+	axis := []rune(ansi.Strip(tl.AxisSpan(minute(2), minute(9))))
+	if axis[12] != '▼' || axis[13] != '━' || axis[19] != '━' || axis[20] == '━' {
+		t.Errorf("axis = %q", string(axis))
+	}
+}

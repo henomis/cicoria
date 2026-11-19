@@ -514,14 +514,14 @@ func (m *Model) renderTimeline() []string {
 		if len(shown) == len(lanes)-1 && len(shown) < fits {
 			shown = lanes
 		}
-		var at time.Time
+		var from, to time.Time
 		if sel != nil {
-			at = sel.span.From
-			if at.IsZero() {
-				at = sel.at
+			from, to = sel.span.From, sel.span.To
+			if from.IsZero() {
+				from, to = sel.at, sel.at
 			}
 		}
-		rows = append(rows, t.Axis(at))
+		rows = append(rows, t.AxisSpan(from, to))
 		bars := make([]ui.Bar, len(shown))
 		for k, l := range shown {
 			label := l.name

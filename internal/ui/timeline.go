@@ -57,8 +57,8 @@ type Bar struct {
 	Label   string
 	Periods []Period
 	Dim     bool
-	// Selected draws the bar as the one under the cursor, with Span, the
-	// time of what is under the cursor, lit on it.
+	// Selected draws the label of the bar as the one under the cursor; Span
+	// is the time of what is under the cursor, which the axis marks.
 	Selected bool
 	Span     Period
 }
@@ -118,7 +118,13 @@ func (t Timeline) States(periods []Period) []State {
 
 // Axis returns the row of times above the bars, with a mark over the
 // moment at, unless it is zero, and "now" at its end.
-func (t Timeline) Axis(at time.Time) string {
+func (t Timeline) Axis(at time.Time) string { return t.AxisSpan(at, at) }
+
+// AxisSpan returns the row of times above the bars, with the time from
+// from to to marked on it, ▼ where it starts, unless from is zero; a zero
+// to is now. The bars are not marked: the cells of one would change as
+// the cursor comes and goes, and a half block lit turns upside down.
+func (t Timeline) AxisSpan(from, to time.Time) string {
 	n := t.Cells()
 	row := []rune(Fit("", t.Width))
 	tick := axisTick(t.Step)
@@ -150,12 +156,28 @@ func (t Timeline) Axis(at time.Time) string {
 	if n >= 4 && free(t.Width-4, t.Width) {
 		copy(row[t.Width-3:], []rune("now"))
 	}
-	out := Dim.Render(string(row))
-	if c := t.CellAt(at); !at.IsZero() && c >= 0 && c < n {
-		x := t.LabelWidth + c
-		out = Dim.Render(string(row[:x])) + Accent.Render("▼") + Dim.Render(string(row[x+1:]))
+	start := t.CellAt(from)
+	if from.IsZero() || start >= n {
+		return Dim.Render(string(row))
 	}
-	return out
+	if to.IsZero() {
+		to = t.Now
+	}
+	last := min(t.CellAt(to), n-1)
+	if start < 0 {
+		// It starts before the time shown: only its end is in sight.
+		start = -1
+	}
+	mark := []rune{}
+	if start >= 0 {
+		mark = append(mark, '▼')
+	}
+	for c := max(start+1, 0); c <= last; c++ {
+		mark = append(mark, '━')
+	}
+	x := t.LabelWidth + max(start, 0)
+	end := min(x+len(mark), len(row))
+	return Dim.Render(string(row[:x])) + Accent.Render(string(mark[:end-x])) + Dim.Render(string(row[end:]))
 }
 
 // axisTick returns how far apart the times of the axis are for cells of
@@ -178,27 +200,11 @@ func (t Timeline) Render(bars []Bar) []string {
 	now := t.CellAt(t.Now)
 	rows := make([]string, 0, len(bars))
 	for _, bar := range bars {
-		lit := func(int) bool { return false }
-		if bar.Selected && !bar.Span.From.IsZero() {
-			to := bar.Span.To
-			if to.IsZero() {
-				to = t.Now
-			}
-			first, last := t.CellAt(bar.Span.From), t.CellAt(to)
-			lit = func(x int) bool { return x >= first && x <= last }
-		}
 		c := newCanvas(n, 1)
 		for x, s := range t.States(bar.Periods) {
 			st := stateStyles[s]
 			if bar.Dim && st != nil {
 				st = &Dim
-			}
-			if lit(x) {
-				on := Reverse
-				if st != nil {
-					on = st.Reverse(true)
-				}
-				st = &on
 			}
 			c.put(x, 0, stateGlyphs[s], st)
 		}
