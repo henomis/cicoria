@@ -59,11 +59,29 @@ type timeline struct {
 	top int
 	// turn is the turn shown over the timeline, if any.
 	turn *turnView
+	// frame is how the bars are drawn: kept while it fits, so that they
+	// do not shift as time passes.
+	frame barFrame
 	// commits are those of each session since it started, by ID, and
 	// polling says they are being read.
 	commits map[string][]git.Commit
 	polling bool
 }
+
+// barFrame is how the bars were last laid out, and for what: the width,
+// the time chosen and when you were away. A time back from now moves with
+// it, so the start alone does not say it is the same.
+type barFrame struct {
+	from  time.Time
+	step  time.Duration
+	width int
+	rng   int
+	away  time.Time
+}
+
+// headroom is how much more time than asked the bars are laid out for, as
+// room for now to move into before they are laid out again.
+const headroom = 10
 
 // timelineMsg carries the commits of every session.
 type timelineMsg struct{ commits map[string][]git.Commit }
@@ -117,6 +135,7 @@ func (m *Model) openTimelineOn(s *session.Session) tea.Cmd {
 		m.timeline.back = modeBoard
 	}
 	m.timeline.rng, m.timeline.sel, m.timeline.top, m.timeline.turn = sinceAway, entryKey{}, 0, nil
+	m.timeline.frame = barFrame{}
 	if s != nil {
 		_, _, entries := m.timelineData(time.Now())
 		if i := slices.IndexFunc(entries, func(e entry) bool { return e.id == s.ID }); i >= 0 {
@@ -337,7 +356,7 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 		width = max(width, ansi.StringWidth(name(id)))
 	}
 	t := ui.Timeline{From: from, Now: now, Width: m.width, LabelWidth: min(width, 16) + 4}
-	t.Step = max(now.Sub(from)/time.Duration(max(t.Cells(), 1)), time.Second)
+	t.From, t.Step = m.layOut(from, now, t.Cells())
 
 	var lanes []lane
 	var entries []entry
@@ -370,6 +389,24 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	}
 	slices.SortStableFunc(entries, func(a, b entry) int { return b.at.Compare(a.at) })
 	return t, lanes, entries
+}
+
+// layOut returns where the bars start and how long a cell lasts, for the
+// time from from to now in cells. The last ones are kept while they still
+// fit: laid out again at each redraw, as now moves, the cells would be cut
+// at other times, and the bars would shift.
+func (m *Model) layOut(from, now time.Time, cells int) (time.Time, time.Duration) {
+	f := m.timeline.frame
+	end := f.from.Add(time.Duration(cells) * f.step)
+	if f.step > 0 && f.width == m.width && f.rng == m.timeline.rng && f.away.Equal(m.awayFrom) && now.Before(end) {
+		return f.from, f.step
+	}
+	from = from.Truncate(time.Second)
+	shown := now.Sub(from)
+	step := (shown + shown/headroom) / time.Duration(max(cells, 1))
+	step = max(step.Round(time.Second)+time.Second, time.Second)
+	m.timeline.frame = barFrame{from: from, step: step, width: m.width, rng: m.timeline.rng, away: m.awayFrom}
+	return from, step
 }
 
 // periods returns what a session did over time, from its events: the

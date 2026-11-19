@@ -227,3 +227,30 @@ func TestTimelineKeys(t *testing.T) {
 		t.Error("q did not close the timeline")
 	}
 }
+
+// The bars keep their cells as time passes, until now reaches their end.
+func TestTimelineFrameStays(t *testing.T) {
+	m := timelineModel(t, 100, 24)
+	m.openTimeline()
+	now := time.Now()
+	t0, _, _ := m.timelineData(now)
+	t1, _, _ := m.timelineData(now.Add(time.Minute))
+	if !t1.From.Equal(t0.From) || t1.Step != t0.Step {
+		t.Errorf("a minute later the bars start at %v by %v, not %v by %v", t1.From, t1.Step, t0.From, t0.Step)
+	}
+	if c := t1.CellAt(t1.Now); c >= t1.Cells() {
+		t.Errorf("now is in cell %d of %d", c, t1.Cells())
+	}
+	// Past their end, they are laid out again, with now in sight.
+	later := now.Add(time.Hour)
+	t2, _, _ := m.timelineData(later)
+	if c := t2.CellAt(later); c < 0 || c >= t2.Cells() {
+		t.Errorf("an hour later now is in cell %d of %d", c, t2.Cells())
+	}
+	// Another time is laid out at once.
+	m.timeline.rng = 3
+	t3, _, _ := m.timelineData(now)
+	if t3.Step == t0.Step {
+		t.Error("four hours are drawn with the cells of one")
+	}
+}
