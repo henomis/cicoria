@@ -136,7 +136,7 @@ func (m *Model) runCommand(keepsView bool, run func(m *Model) tea.Cmd) tea.Cmd {
 
 // closeView goes back from the full-screen view to the workspace.
 func (m *Model) closeView() {
-	m.mode = modeWorkspace
+	m.mode, m.view.back = modeWorkspace, modeWorkspace
 	m.seen()
 }
 

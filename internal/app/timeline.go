@@ -31,8 +31,7 @@ import (
 )
 
 const (
-	// timelineNarrow is the width under which the timeline is the log of
-	// what you did alone, without the bars.
+	// timelineNarrow is the width under which the timeline has no bars.
 	timelineNarrow = 60
 	// minRange is the shortest time the timeline shows.
 	minRange = 30 * time.Minute
@@ -53,14 +52,13 @@ type timeline struct {
 	back mode
 	// rng is the time shown, one of timelineRanges or sinceAway.
 	rng int
-	// sel is the entry of the log under the cursor, and top the first one
+	// sel is the line under the cursor, and top the first line of the log
 	// on screen.
 	sel entryKey
 	top int
 	// turn is the turn shown over the timeline, if any.
 	turn *turnView
-	// frame is how the bars are drawn: kept while it fits, so that they
-	// do not shift as time passes.
+	// frame is how long a cell of the bars lasts, kept while it fits.
 	frame barFrame
 	// commits are those of each session since it started, by ID, and
 	// polling says they are being read.
@@ -94,24 +92,6 @@ type lane struct {
 // waiting reports whether the session of a lane waits for you now.
 func (l lane) waiting() bool { return l.s != nil && l.s.Status == agent.NeedsInput }
 
-// entry is one line of the log of what you did.
-type entry struct {
-	at       time.Time
-	id, name string
-	text     string
-	// bad marks what went wrong, as a turn that failed.
-	bad bool
-}
-
-// entryKey says which entry of the log is under the cursor, wherever new
-// ones push it.
-type entryKey struct {
-	at time.Time
-	id string
-}
-
-func (e entry) key() entryKey { return entryKey{e.at, e.id} }
-
 // openTimeline shows the timeline, or goes back from it.
 func (m *Model) openTimeline() tea.Cmd {
 	if m.mode == modeTimeline {
@@ -121,8 +101,9 @@ func (m *Model) openTimeline() tea.Cmd {
 	return m.openTimelineOn(nil)
 }
 
-// openTimelineOn shows the timeline, with the cursor on the last thing done
-// in a session, when one is given.
+// openTimelineOn shows the timeline. The cursor is on the last thing done
+// in a session, when one is given, or else on the session that has waited
+// longest for you, if one waits.
 func (m *Model) openTimelineOn(s *session.Session) tea.Cmd {
 	m.timeline.back = modeWorkspace
 	if m.mode == modeBoard {
@@ -130,10 +111,11 @@ func (m *Model) openTimelineOn(s *session.Session) tea.Cmd {
 	}
 	m.timeline.rng, m.timeline.sel, m.timeline.top, m.timeline.turn = sinceAway, entryKey{}, 0, nil
 	m.timeline.frame = barFrame{}
-	if s != nil {
-		_, _, entries := m.timelineData(time.Now())
-		if i := slices.IndexFunc(entries, func(e entry) bool { return e.id == s.ID }); i >= 0 {
-			m.timeline.sel = entries[i].key()
+	_, _, lines := m.timelineData(time.Now())
+	for _, e := range lines {
+		if s != nil && e.id == s.ID && !e.now || s == nil && e.now && strings.HasPrefix(e.text, "▲") {
+			m.timeline.sel = e.key()
+			break
 		}
 	}
 	m.mode = modeTimeline
@@ -195,160 +177,6 @@ func laneState(status string) ui.State {
 	return ui.StateNone
 }
 
-// sentFrom names where a message came from, as the timeline says it.
-func sentFrom(from string) string {
-	switch from {
-	case fromNotes:
-		return "review notes"
-	case fromCard:
-		return "the card's prompt"
-	case fromAsk:
-		return "a message from another session"
-	case fromAnswer:
-		return "the answer of another session"
-	}
-	return "a message"
-}
-
-// quoted returns the kept text of an event between quotes, if any.
-func quoted(e session.Event) string {
-	if e.X == "" {
-		return ""
-	}
-	return " “" + e.X + "”"
-}
-
-// say returns what the log says of event k of a lane, if it is something
-// you did, or something that went wrong.
-func (l lane) say(k int, name func(id string) string, now time.Time) (string, bool) {
-	e := l.events[k]
-	web := ""
-	if e.Src == session.FromWeb {
-		web = " from the web"
-	}
-	switch e.K {
-	case session.KindAnswer:
-		text := "answered"
-		if e.V != "" {
-			text += " “" + e.V + "”"
-		}
-		text += web
-		// How long the agent waited for it.
-		for j := k - 1; j >= 0; j-- {
-			if p := l.events[j]; p.K == session.KindStatus {
-				if p.V == "needs input" && e.T.Sub(p.T) >= time.Minute {
-					text += " · it waited " + span(e.T.Sub(p.T))
-				}
-				break
-			}
-		}
-		return text, true
-	case session.KindPromptTyped:
-		if e.X == "" {
-			return "typed a prompt" + l.outcome(k, now), true
-		}
-		return "typed" + quoted(e) + l.outcome(k, now), true
-	case session.KindQueue, session.KindSend:
-		// What the queue sends by itself was said when it was queued.
-		if e.K == session.KindSend && e.Src == "" {
-			return "", false
-		}
-		verb := "queued"
-		if e.K == session.KindSend {
-			verb = "sent"
-		}
-		// What was sent at once started a turn; what was queued waits.
-		then := ""
-		if e.K == session.KindSend {
-			then = l.outcome(k, now)
-		}
-		switch e.V {
-		case fromNotes:
-			return verb + " review notes" + web + then, true
-		case fromAsk:
-			return "you asked it" + quoted(e) + " from another session", true
-		case fromAnswer:
-			return "got the answer of another session", true
-		case fromCard:
-			return "", false
-		}
-		what := quoted(e)
-		if what == "" {
-			what = " a message"
-		}
-		if e.To != "" {
-			what += ", for " + name(e.To) + " to answer"
-		}
-		return verb + what + web + then, true
-	case session.KindInterrupted:
-		return "stopped the turn" + web, true
-	case session.KindUnqueue:
-		return "took back" + quoted(e) + web, true
-	case session.KindWorktreeAdd:
-		return "made the worktree " + tilde(e.V), true
-	case session.KindCardStart:
-		return "started the card “" + e.V + "”", true
-	case session.KindTurnFailed:
-		text := "✕ the turn failed"
-		for j := k - 1; j >= 0; j-- {
-			if p := l.events[j]; p.K == session.KindTurnStart {
-				text += " after " + span(e.T.Sub(p.T))
-				break
-			}
-		}
-		return text, true
-	case session.KindSessionClose:
-		return "closed it", true
-	}
-	return "", false
-}
-
-// outcome says what came of the message of event k: how the turn it
-// started went, as " → done in 12m, 3 files". It is empty when no turn is
-// known to have started for it.
-func (l lane) outcome(k int, now time.Time) string {
-	e := l.events[k]
-	start := -1
-	for j := k + 1; j < len(l.events) && l.events[j].T.Sub(e.T) <= fromQueueWithin; j++ {
-		f := l.events[j]
-		if f.K == session.KindTurnStart {
-			start = j
-			break
-		}
-		// Another message came first: the turn would be its own.
-		if f.K == session.KindSend || f.K == session.KindPromptTyped {
-			return ""
-		}
-	}
-	if start < 0 {
-		return ""
-	}
-	began := l.events[start].T
-	for _, f := range l.events[start+1:] {
-		took := span(f.T.Sub(began))
-		switch f.K {
-		case session.KindTurnEnd:
-			text := " → done in " + took
-			if n := len(f.Files); n == 1 {
-				text += ", 1 file"
-			} else if n > 1 {
-				text += fmt.Sprintf(", %d files", n)
-			}
-			return text
-		case session.KindTurnFailed:
-			return " → failed after " + took
-		case session.KindInterrupted:
-			return " → you stopped it after " + took
-		case session.KindTurnStart, session.KindSessionClose:
-			return " → ran " + took
-		}
-	}
-	if l.s != nil && (l.s.Status == agent.Working || l.s.Status == agent.NeedsInput) {
-		return " → working for " + span(now.Sub(began))
-	}
-	return ""
-}
-
 // sessionNames returns the name of each session the history knows, live or
 // closed.
 func (m *Model) sessionNames(events []session.Event) map[string]string {
@@ -366,8 +194,8 @@ func (m *Model) sessionNames(events []session.Event) map[string]string {
 }
 
 // timelineData returns how the bars are drawn, the lanes of the sessions
-// with something to show in that time, and the log of what you did then,
-// the newest first.
+// with something to show in that time, and the lines under the bars: the
+// sessions that need you or work now, then what you did, the newest first.
 func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	from := m.timelineFrom(now)
 	events := m.history.Events()
@@ -407,7 +235,7 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	t.From, t.Step = m.layOut(from, now, t.Cells())
 
 	var lanes []lane
-	var entries []entry
+	var log []entry
 	for _, id := range ids {
 		s, _ := m.byID(id)
 		l := lane{id: id, s: s, name: name(id), events: byID[id]}
@@ -417,26 +245,25 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 			if e.T.Before(from) {
 				continue
 			}
-			if text, ok := l.say(k, name, now); ok {
-				entries = append(entries, entry{at: e.T, id: id, name: l.name, text: text, bad: e.K == session.KindTurnFailed})
+			if line, ok := l.say(k, name, now); ok {
+				log = append(log, line)
 				said++
 			}
 		}
 		for _, c := range m.timeline.commits[id] {
 			if !c.When.Before(from) {
-				entries = append(entries, entry{at: c.When, id: id, name: l.name, text: "● commit " + c.Short + " " + c.Subject})
+				log = append(log, entry{at: c.When, id: id, name: l.name, text: "◆ commit " + c.Short + " " + c.Subject})
 				said++
 			}
 		}
 		// A session that did nothing in that time is left out of the bars.
 		busy := s != nil && (s.Status == agent.Working || s.Status == agent.NeedsInput)
-		active := slices.ContainsFunc(t.States(l.periods), func(st ui.State) bool { return st > ui.StateIdle })
-		if said > 0 || busy || active {
+		if said > 0 || busy || busyIn(t, l) {
 			lanes = append(lanes, l)
 		}
 	}
-	slices.SortStableFunc(entries, func(a, b entry) int { return b.at.Compare(a.at) })
-	return t, lanes, entries
+	slices.SortStableFunc(log, func(a, b entry) int { return b.at.Compare(a.at) })
+	return t, lanes, append(nowLines(lanes, now), log...)
 }
 
 // layOut returns where the bars start and how long a cell lasts, for the
@@ -496,13 +323,28 @@ func periods(events []session.Event, runEnds []time.Time) []ui.Period {
 	return out
 }
 
-// cursor returns where the entry under the cursor is in the log, putting
-// the cursor on the newest one when it is on none.
-func (m *Model) cursor(entries []entry) int {
-	i := slices.IndexFunc(entries, func(e entry) bool { return e.key() == m.timeline.sel })
-	if i < 0 && len(entries) > 0 {
-		i = 0
-		m.timeline.sel = entries[0].key()
+// cursor returns where the line under the cursor is. A line that is gone,
+// as out of the time shown, gives way to the one nearest to it in time; a
+// session that no longer waits or works, to the newest thing you did.
+func (m *Model) cursor(lines []entry) int {
+	if len(lines) == 0 {
+		return -1
+	}
+	sel := m.timeline.sel
+	i := slices.IndexFunc(lines, func(e entry) bool { return e.key() == sel })
+	if i < 0 {
+		i = slices.IndexFunc(lines, func(e entry) bool { return !e.now })
+		if i < 0 {
+			i = 0
+		}
+		if !sel.at.IsZero() {
+			for k, e := range lines {
+				if !e.now && e.at.Sub(sel.at).Abs() < lines[i].at.Sub(sel.at).Abs() {
+					i = k
+				}
+			}
+		}
+		m.timeline.sel = lines[i].key()
 	}
 	return i
 }
@@ -510,9 +352,6 @@ func (m *Model) cursor(entries []entry) int {
 // timelineKey handles the keys of the timeline.
 func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
-	if m.timeline.turn != nil {
-		return m.turnKey(key)
-	}
 	if m.prefix {
 		m.prefix = false
 		// The key that opened the timeline closes it.
@@ -526,13 +365,16 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 		m.prefix = true
 		return nil
 	}
+	if m.timeline.turn != nil {
+		return m.turnKey(key)
+	}
 
 	now := time.Now()
-	_, lanes, entries := m.timelineData(now)
-	i := m.cursor(entries)
+	_, lanes, lines := m.timelineData(now)
+	i := m.cursor(lines)
 	move := func(to int) {
-		if len(entries) > 0 {
-			m.timeline.sel = entries[max(min(to, len(entries)-1), 0)].key()
+		if len(lines) > 0 {
+			m.timeline.sel = lines[max(min(to, len(lines)-1), 0)].key()
 		}
 	}
 
@@ -546,7 +388,7 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 	case "g", "home":
 		move(0)
 	case "G", "end":
-		move(len(entries) - 1)
+		move(len(lines) - 1)
 	case "+", "=":
 		m.zoomTimeline(-1, now)
 	case "-":
@@ -554,16 +396,32 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 	case "s":
 		m.timeline.rng = sinceAway
 	case "a":
-		m.timeline.back = modeWorkspace
-		m.closeTimeline()
-		return m.nextAttention()
+		// The next session that waits for you, round the list.
+		var waits []int
+		for k, e := range lines {
+			if e.now && strings.HasPrefix(e.text, "▲") {
+				waits = append(waits, k)
+			}
+		}
+		if len(waits) == 0 {
+			m.say("no session needs you")
+			return nil
+		}
+		next := waits[0]
+		for _, k := range waits {
+			if k > i {
+				next = k
+				break
+			}
+		}
+		move(next)
 	case "enter":
 		if i < 0 {
 			return nil
 		}
-		s, j := m.byID(entries[i].id)
+		s, j := m.byID(lines[i].id)
 		if s == nil {
-			m.say(entries[i].name + " is closed")
+			m.say(lines[i].name + " is closed")
 			return nil
 		}
 		m.timeline.back = modeWorkspace
@@ -573,17 +431,17 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 		if i < 0 {
 			return nil
 		}
-		k := slices.IndexFunc(lanes, func(l lane) bool { return l.id == entries[i].id })
+		k := slices.IndexFunc(lanes, func(l lane) bool { return l.id == lines[i].id })
 		if k < 0 {
 			return nil
 		}
-		m.timeline.turn = m.turnAt(lanes[k], entries[i].at, now)
+		m.timeline.turn = m.turnAt(lanes[k], lines[i].at, now)
 		if m.timeline.turn == nil {
 			m.say("no turn of " + lanes[k].name + " to show there")
 		}
 	case "m":
 		if i >= 0 {
-			if s, _ := m.byID(entries[i].id); s != nil {
+			if s, _ := m.byID(lines[i].id); s != nil {
 				return m.askQueueFor(s)
 			}
 		}
@@ -624,13 +482,13 @@ func (m *Model) timelineTitle(now time.Time) string {
 }
 
 // renderTimeline draws the timeline over the whole screen but the status
-// bar: the bars of the sessions, the log of what you did, newest first,
-// and what is left for you.
+// bar: the bars of the sessions; what needs you or works now; the log of
+// what you did, the newest first; and what is left for you.
 func (m *Model) renderTimeline() []string {
 	height := max(m.height-1, 2)
 	now := time.Now()
-	t, lanes, entries := m.timelineData(now)
-	i := m.cursor(entries)
+	t, lanes, lines := m.timelineData(now)
+	i := m.cursor(lines)
 
 	header := " timeline  " + m.timelineTitle(now)
 	var waits []string
@@ -652,7 +510,7 @@ func (m *Model) renderTimeline() []string {
 				label = ui.Fit(l.name, t.LabelWidth-4) + " " + statusGlyph(l.s)
 			}
 			bars[k] = ui.Bar{Label: label, Periods: l.periods, Dim: l.s == nil}
-			if i >= 0 && l.id == entries[i].id {
+			if i >= 0 && l.id == lines[i].id {
 				labels[k] = &ui.Bold
 			}
 		}
@@ -662,40 +520,81 @@ func (m *Model) renderTimeline() []string {
 		rows = append(rows, t.Render(bars, labels)...)
 		var at time.Time
 		if i >= 0 {
-			at = entries[i].at
+			at = lines[i].at
 		}
 		rows = append(rows, t.Pointer(at))
 	}
 	rule := ui.Dim.Render(strings.Repeat("─", max(m.width, 0)))
 	rows = append(rows, rule)
 
-	room := max(height-len(rows)-2, 1)
-	var log []string
-	if len(entries) == 0 {
-		log = append(log, ui.Dim.Render(ui.Fit("  you did nothing here in "+m.timelineTitle(now)+": - shows a longer time", m.width)))
-	}
 	nameW := 0
-	for _, e := range entries {
+	for _, e := range lines {
 		nameW = max(nameW, min(ansi.StringWidth(e.name), 16))
 	}
-	m.timeline.top = ui.Window(max(i, 0), m.timeline.top, room, len(entries))
-	for k := m.timeline.top; k < min(len(entries), m.timeline.top+room); k++ {
-		e := entries[k]
+	draw := func(k int) string {
+		e := lines[k]
 		when := e.at.Format("15:04")
-		if now.Sub(e.at) > 20*time.Hour {
+		switch {
+		case e.now:
+			when = "now  "
+		case now.Sub(e.at) > 20*time.Hour:
 			when = e.at.Format("Mon 15:04")
 		}
-		text := e.text
-		if e.bad && k != i {
-			text = ui.Bad.Render(text)
+		text, outcome := e.text, e.outcome
+		if k != i {
+			switch {
+			case e.now && strings.HasPrefix(text, "▲"):
+				text = ui.Warn.Render(text)
+			case e.bad && outcome == "":
+				text = ui.Bad.Render(text)
+			case e.bad:
+				outcome = ui.Bad.Render(outcome)
+			}
 		}
 		lead := " "
 		if k == i {
 			lead = "▸"
 		}
-		log = append(log, ui.Selected(lead+when+" "+ui.Fit(e.name, nameW)+"  "+text, m.width, k == i, true))
+		return ui.Selected(lead+when+" "+ui.Fit(e.name, nameW)+"  "+text+outcome, m.width, k == i, true)
 	}
-	rows = append(rows, ui.Block(log, m.width, room)...)
+
+	// What needs you or works now stays in sight.
+	first := slices.IndexFunc(lines, func(e entry) bool { return !e.now })
+	if first < 0 {
+		first = len(lines)
+	}
+	for k := range first {
+		rows = append(rows, draw(k))
+	}
+	if first > 0 {
+		rows = append(rows, rule)
+	}
+
+	// What the agent said at the end of the turn of the line under the
+	// cursor is under it.
+	said := ""
+	if i >= first && i < len(lines) && lines[i].said != "" {
+		said = ui.Dim.Render(ui.Fit(strings.Repeat(" ", 8+nameW)+"it said: "+lines[i].said, m.width))
+	}
+	block := max(height-len(rows)-2, 1)
+	room := block
+	if said != "" {
+		room = max(room-1, 1)
+	}
+	log := lines[first:]
+	var out []string
+	if len(log) == 0 {
+		out = append(out, ui.Dim.Render(ui.Fit("  Nothing from you in "+m.timelineTitle(now)+". - shows a longer time.", m.width)))
+	}
+	cur := max(i-first, 0)
+	m.timeline.top = ui.Window(cur, m.timeline.top, room, len(log))
+	for k := m.timeline.top; k < min(len(log), m.timeline.top+room); k++ {
+		out = append(out, draw(first+k))
+		if first+k == i && said != "" {
+			out = append(out, said)
+		}
+	}
+	rows = append(rows, ui.Block(out, m.width, block)...)
 	rows = append(rows, rule, ui.Fit(m.timelineSummary(t, lanes, now), m.width))
 	rows = rows[:min(len(rows), height)]
 
@@ -728,16 +627,10 @@ func (m *Model) timelineSummary(t ui.Timeline, lanes []lane, now time.Time) stri
 	if waited >= time.Minute {
 		sums = append(sums, "agents waited for you "+span(waited))
 	}
-	var need, notes, queued int
+	var notes, queued int
 	for _, s := range m.sessions {
-		if s.Status == agent.NeedsInput {
-			need++
-		}
 		notes += len(s.Notes)
 		queued += len(s.Queue)
-	}
-	if need > 0 {
-		sums = append(sums, fmt.Sprintf("%d wait now", need))
 	}
 	if notes > 0 {
 		sums = append(sums, fmt.Sprintf("%d note(s) not sent", notes))
@@ -747,7 +640,7 @@ func (m *Model) timelineSummary(t ui.Timeline, lanes []lane, now time.Time) stri
 	}
 	legend := ui.Dim.Render(" · █ working ▲ waits for you ─ idle ✓ done ✕ failed")
 	if len(sums) == 0 {
-		return ui.Dim.Render(" nothing is left for you") + legend
+		return ui.Dim.Render(" nothing else is left for you") + legend
 	}
 	return " " + strings.Join(sums, " · ") + legend
 }
@@ -758,9 +651,9 @@ func statusGlyph(s *session.Session) string { return ansi.Strip(badge(s)) }
 // timelineHint is what the status bar says the keys of the timeline do.
 func (m *Model) timelineHint() string {
 	if m.timeline.turn != nil {
-		return "j/k move · enter open · esc back"
+		return "j/k move · d/enter diff · v file · q back"
 	}
-	return "j/k move · d turn · enter go · m queue · +/- time · s since you left · q back"
+	return "j/k move · a next waiting · d turn · enter go · m queue · +/- time · q back"
 }
 
 // span says how long a time is, to the minute, as "1h20m".

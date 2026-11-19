@@ -57,6 +57,9 @@ type fullView struct {
 	// commit is set when the view shows the whole diff of a commit, which
 	// is of no one file.
 	commit *git.Commit
+	// back is where q goes: the timeline, when it was opened from there, or
+	// else the workspace.
+	back mode
 }
 
 // viewHeight is the number of text rows of the full-screen view.
@@ -573,6 +576,10 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		fallthrough
 	case "q":
+		if m.view.back == modeTimeline {
+			m.view.back, m.mode = modeWorkspace, modeTimeline
+			return nil
+		}
 		m.closeView()
 	case "j", "down":
 		p.Move(1, h)

@@ -16,6 +16,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -134,33 +135,81 @@ func (m *Model) turnPurpose(before []session.Event, start session.Event) string 
 }
 
 // turnKey handles the keys of the turn shown over the timeline.
+// The keys that open what is under the cursor of a turn are those of the
+// changes panel: d and enter its diff, v the file itself. q in what opens
+// comes back here.
 func (m *Model) turnKey(key string) tea.Cmd {
 	tv := m.timeline.turn
 	items := len(tv.files) + len(tv.commits)
 	switch key {
+	case "esc", "q":
+		m.timeline.turn = nil
 	case "j", "down":
 		tv.cursor = min(tv.cursor+1, max(items-1, 0))
 	case "k", "up":
 		tv.cursor = max(tv.cursor-1, 0)
-	case "enter":
+	case "g", "home":
+		tv.cursor = 0
+	case "G", "end":
+		tv.cursor = max(items-1, 0)
+	case "enter", "d", "v":
 		s, i := m.byID(tv.id)
-		if s == nil || items == 0 {
+		switch {
+		case s == nil:
+			m.say(tv.name + " is closed")
 			return nil
+		case items == 0:
+			// Nothing to open: the session itself is what there is.
+			m.timeline.back = modeWorkspace
+			m.closeTimeline()
+			return m.switchTo(i)
 		}
-		m.timeline.back = modeWorkspace
-		m.closeTimeline()
+		// Notes written in what opens are for this session.
 		cmd := m.switchTo(i)
 		if tv.cursor < len(tv.files) {
-			m.tree().Reveal(tv.files[tv.cursor])
-			m.showFile(tv.files[tv.cursor])
+			m.openTurnFile(s, tv.files[tv.cursor], key != "v")
 		} else {
 			m.openCommit(tv.commits[tv.cursor-len(tv.files)])
 		}
+		m.view.back = modeTimeline
 		return cmd
-	default:
-		m.timeline.turn = nil
 	}
 	return nil
+}
+
+// openTurnFile shows a file a turn changed: its diff since the session
+// started, or the file itself.
+func (m *Model) openTurnFile(s *session.Session, path string, asDiff bool) {
+	if !asDiff {
+		m.showFile(path)
+		return
+	}
+	m.view.dir, m.view.path, m.view.diff, m.view.commit = s.Dir, path, true, nil
+	m.view.plain, m.view.refs = nil, nil
+	m.view.rendered, m.view.spans = false, nil
+	m.view.pager.Title, m.view.pager.Wrap = path, m.view.wrap
+	m.mode = modeView
+
+	c := git.Change{Path: path}
+	if changes, err := git.Status(s.Dir, s.Base); err == nil {
+		for _, ch := range changes {
+			if ch.Path == path {
+				c = ch
+			}
+		}
+	}
+	diff, err := git.Diff(s.Dir, c, s.Base)
+	switch {
+	case err != nil:
+		m.view.pager.SetContent([]string{ui.Bad.Render(err.Error())}, nil)
+	case diff == "":
+		m.view.pager.SetContent([]string{ui.Dim.Render("no changes since " + s.Name + " started: they were undone, or the commit it started from moved")}, nil)
+	default:
+		m.view.pager.SetContent(ui.DiffLines(diff))
+		m.view.plain = strings.Split(strings.TrimSuffix(diff, "\n"), "\n")
+		m.view.refs = ui.DiffRefs(diff)
+	}
+	m.markNotes()
 }
 
 // renderTurn draws the turn shown over the timeline in a box of width,

@@ -226,13 +226,15 @@ Each card is drawn in a frame of its own, lit when the cursor is on it. A card o
 
 At the top, a bar for each session over time, stretched over the time shown: `█` working, `▲` waiting for you, `─` idle, `✓` a turn that ended, `✕` one that failed, and nothing while cicoria was closed. Sessions that did nothing in that time are left out.
 
-Under the bars, the log of what you did, the newest first, in words: the answers you gave, with the choice and how long the agent waited for it; the messages you queued and sent, with their start, and the review notes; what you asked one session from another; the prompts you typed in an agent's pane; the turns you stopped; the cards you started and the worktrees made for them. Turns that failed and commits are in it too. A message or a prompt that started a turn says what came of it: `→ done in 12m, 3 files`, `→ failed after 4m`, `→ working for 20m`. An arrow under the bars points at the time of the line under the cursor.
+Under the bars, what needs you now: each session that waits for you, the one that has waited longest first, with what it asks, then each one at work, with the message it works on. The timeline opens with the cursor there when a session waits.
+
+Then the log of what you did, the newest first, in words: the answers you gave, with the choice and how long the agent waited for it; the messages you queued and sent, and the review notes; what you asked one session from another; the prompts you typed in an agent's pane; the turns you stopped; the cards you started, with their worktree. Each line that gave an agent a message says what came of it: `→ done in 12m, 3 files`, `→ ✕ failed after 4m`, `→ worked 5m, waits for you since 14:33`, `→ sent 12:40, done in 50m`, `→ still in the queue`. Commits are in it too, and turns that failed with no message of yours to say it. Under the line with the cursor, what the agent said at the end of its turn. An arrow under the bars points at the time of the line.
 
 It opens on the time since you were last away: since the last pause of ten minutes without a key, or since cicoria was closed, and at least half an hour. `+` and `-` show a shorter or a longer time, from half an hour to a week, and `s` the time since you were away again.
 
-`j`/`k` move in the log, and `g`/`G` go to its newest and oldest line. `d` shows the turn of the line: what it was for, how long it took, the files the agent changed through its tools, the commits made in it, and what the agent said at its end; `enter` on a file or a commit opens it. `enter` goes to the session of the line, `m` queues a message for it and `a` goes to the next session that needs you. The last line says how long agents waited for you in that time, and what is left: sessions that wait, notes not sent, messages queued. `q` or `esc` goes back. A terminal narrower than 60 columns shows the log alone.
+`j`/`k` move, and `g`/`G` go to the first and the last line; `a` goes to the next session that waits for you. `enter` goes to the session of the line, and `m` queues a message for it. `d` shows the turn of the line: what it was for, how long it took, the files the agent changed through its tools, the commits made in it, and what the agent said at its end. There, `d` or `enter` opens the diff of a file since the session started, or a commit, `v` the file itself, and `q` comes back to the turn. The last line says how long agents waited for you in that time, and what else is left: notes not sent, messages queued. `q` or `esc` goes back. A terminal narrower than 60 columns has no bars.
 
-The history is kept next to the saved sessions, in `events.jsonl`, readable only by you, for 30 days. Of the messages cicoria sends and queues, the notes, and the prompts you type in the pane of Claude Code, Copilot CLI or Codex CLI, which tell them, it keeps the first 120 characters; keys never. `[timeline]` in the settings changes that. For an agent other than Claude Code, Copilot CLI and Codex CLI, turns are guessed from its output, and a burst shorter than two seconds is not kept.
+The history is kept next to the saved sessions, in `events.jsonl`, readable only by you, for 30 days. Of the messages cicoria sends and queues, the notes, the prompts you type in the pane of Claude Code, Copilot CLI or Codex CLI, which tell them, and what the agent said at the end of each turn, it keeps the first 120 characters; keys never. `[timeline]` in the settings changes that. For an agent other than Claude Code, Copilot CLI and Codex CLI, turns are guessed from its output, and a burst shorter than two seconds is not kept.
 
 ## Web cockpit
 
@@ -269,8 +271,9 @@ port_base = 20000        # the first port given to sessions, in CICORIA_PORT; 0 
 ports_per_session = 10   # how many ports each session has to itself
 worktree_dir = ""        # where worktrees go, as ~/worktrees/<repository>/<session>; "" puts them next to the repository
 
-# What the timeline's history keeps of the messages and prompts you send: "none",
-# "preview" (the first 120 characters) or "full"; and for how long.
+# What the timeline's history keeps of the messages and prompts you send,
+# and of what agents answer: "none", "preview" (the first 120 characters)
+# or "full"; and for how long.
 [timeline]
 text = "preview"
 keep_days = 30

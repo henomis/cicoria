@@ -256,3 +256,172 @@ func TestTimelineBarsSlide(t *testing.T) {
 		t.Error("four hours are drawn with the cells of one")
 	}
 }
+
+// linesOf returns the lines under the bars of a workspace whose history is
+// the given events, from an hour ago.
+func linesOf(t *testing.T, m *Model, events func(at func(int) time.Time) []session.Event) []entry {
+	t.Helper()
+	now := time.Now()
+	at := func(min int) time.Time { return now.Add(time.Duration(min-60) * time.Minute) }
+	for _, e := range events(at) {
+		m.history.Record(e)
+	}
+	m.awayFrom, m.timeline.rng = at(0), sinceAway
+	m.width, m.height = 120, 30
+	_, _, lines := m.timelineData(now)
+	return lines
+}
+
+func texts(lines []entry) string {
+	var b []string
+	for _, e := range lines {
+		b = append(b, e.text+e.outcome)
+	}
+	return strings.Join(b, "\n")
+}
+
+func TestLinesSayWhatCameOfThem(t *testing.T) {
+	m, s := historyModel(t)
+	s.Status, s.Since = agent.NeedsInput, time.Now().Add(-2*time.Minute)
+	s.Queue = []session.Message{{Text: "later"}}
+	lines := linesOf(t, m, func(at func(int) time.Time) []session.Event {
+		id := s.ID
+		return []session.Event{
+			// Queued, sent five minutes later, done.
+			{T: at(1), S: id, K: session.KindQueue, X: "add pagination", N: 14},
+			{T: at(6), S: id, K: session.KindSend, X: "add pagination", N: 14},
+			{T: at(6), S: id, K: session.KindTurnStart},
+			{T: at(20), S: id, K: session.KindTurnEnd, Files: []string{"a", "b"}, X: "it is in"},
+			// Sent at once, failed: one line says both.
+			{T: at(30), S: id, K: session.KindSend, V: fromNotes, Src: session.FromTUI},
+			{T: at(30), S: id, K: session.KindTurnStart},
+			{T: at(34), S: id, K: session.KindTurnFailed},
+			// A card started in a worktree is one line.
+			{T: at(40), S: id, K: session.KindCardStart, V: "login form"},
+			{T: at(40), S: id, K: session.KindWorktreeAdd, V: "/w/login"},
+			{T: at(40), S: id, K: session.KindQueue, V: fromCard, X: "login form", N: 10},
+			{T: at(40), S: id, K: session.KindSend, V: fromCard, X: "login form", N: 10},
+			{T: at(40), S: id, K: session.KindTurnStart},
+			{T: at(45), S: id, K: session.KindTurnEnd},
+			// Still in the queue.
+			{T: at(50), S: id, K: session.KindQueue, X: "later", N: 5},
+			// Typed, and now it waits.
+			{T: at(55), S: id, K: session.KindPromptTyped, X: "fix it"},
+			{T: at(55), S: id, K: session.KindTurnStart},
+		}
+	})
+	got := texts(lines)
+	for _, want := range []string{
+		"queued “add pagination” → sent ",
+		", done in 14m, 2 files",
+		"sent review notes → ✕ failed after 4m",
+		"started the card “login form” in /w/login → done in 5m",
+		"queued “later” → still in the queue",
+		"typed “fix it” → worked ",
+		"waits for you since ",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the lines do not say %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"a turn failed", "made the worktree", "working,"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("the lines say %q:\n%s", unwanted, got)
+		}
+	}
+	if said := lines[len(lines)-1].said; said != "it is in" {
+		t.Errorf("the first line says the agent said %q", said)
+	}
+}
+
+func TestNowLines(t *testing.T) {
+	m, s := historyModel(t)
+	web := session.New("s2", "web", m.dir, agent.NewClaude(nil))
+	m.sessions = append(m.sessions, web)
+	s.Status, s.Since = agent.NeedsInput, time.Now().Add(-5*time.Minute)
+	s.Question, s.Tool = "Claude needs your permission to use Bash", agent.Tool{Name: "Bash", Detail: "npm test"}
+	web.Status, web.Since = agent.Working, time.Now().Add(-9*time.Minute)
+	lines := linesOf(t, m, func(at func(int) time.Time) []session.Event {
+		return []session.Event{
+			{T: at(50), S: web.ID, K: session.KindPromptTyped, X: "use the Button"},
+			{T: at(50), S: web.ID, K: session.KindTurnStart},
+		}
+	})
+	if len(lines) < 2 || !lines[0].now || !lines[1].now {
+		t.Fatalf("lines = %s", texts(lines))
+	}
+	if want := "▲ waits for you 5m: “Claude needs your permission to use Bash: npm test”"; lines[0].text != want {
+		t.Errorf("waiting line = %q, want %q", lines[0].text, want)
+	}
+	if !strings.Contains(lines[1].text, "working 9m on “use the Button”") {
+		t.Errorf("working line = %q", lines[1].text)
+	}
+	// It opens on what waits for you.
+	m.openTimelineOn(nil)
+	if i := m.cursor(lines); i != 0 {
+		t.Errorf("the cursor opens on line %d", i)
+	}
+	m.timeline.sel = lines[len(lines)-1].key()
+	m.timelineKey(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if i := m.cursor(lines); i != 0 {
+		t.Errorf("a went to line %d, not the session that waits", i)
+	}
+}
+
+func TestCursorKeepsItsLine(t *testing.T) {
+	m, s := historyModel(t)
+	lines := linesOf(t, m, func(at func(int) time.Time) []session.Event {
+		return []session.Event{
+			{T: at(10), S: s.ID, K: session.KindQueue, X: "one", N: 3},
+			{T: at(10), S: s.ID, K: session.KindQueue, X: "two", N: 3},
+			{T: at(40), S: s.ID, K: session.KindQueue, X: "three", N: 5},
+		}
+	})
+	if lines[1].key() == lines[2].key() {
+		t.Error("two lines of one moment have the same key")
+	}
+	m.timeline.sel = lines[2].key()
+	if i := m.cursor(lines); i != 2 {
+		t.Errorf("the cursor is on %d, want 2", i)
+	}
+	// A line gone from the time shown gives way to the nearest one.
+	gone := lines[2].key()
+	gone.at = gone.at.Add(-time.Hour)
+	m.timeline.sel = gone
+	if i := m.cursor(lines); !lines[i].at.Equal(lines[2].at) {
+		t.Errorf("after its line went the cursor is on %d, not on one of the oldest", i)
+	}
+}
+
+func TestTurnKeys(t *testing.T) {
+	m := timelineModel(t, 100, 24)
+	m.openTimeline()
+	key := func(k string) {
+		r := []rune(k)
+		m.timelineKey(tea.KeyPressMsg{Code: r[0], Text: k})
+	}
+	key("j")
+	key("j")
+	key("d")
+	if m.timeline.turn == nil {
+		t.Fatal("d showed no turn")
+	}
+	// A key it does not use leaves it open.
+	key("m")
+	if m.timeline.turn == nil {
+		t.Error("m closed the turn")
+	}
+	// The prefix is the prefix.
+	m.timelineKey(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	key("e")
+	if m.mode == modeTimeline {
+		t.Error("ctrl+a e did not close the timeline over a turn")
+	}
+
+	// q in what a turn opened comes back to the timeline.
+	m.mode, m.view.back = modeView, modeTimeline
+	m.viewKey(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if m.mode != modeTimeline {
+		t.Errorf("q went to mode %d, not back to the timeline", m.mode)
+	}
+}
