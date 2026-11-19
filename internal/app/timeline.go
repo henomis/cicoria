@@ -105,7 +105,7 @@ func (m *Model) openTimeline() tea.Cmd {
 // longest for you, if one waits.
 func (m *Model) openTimelineOn(s *session.Session) tea.Cmd {
 	m.timeline.back = modeWorkspace
-	if m.mode == modeBoard {
+	if m.mode == modeBoard || m.commandFrom == modeBoard {
 		m.timeline.back = modeBoard
 	}
 	m.timeline.rng, m.timeline.sel, m.timeline.top, m.timeline.turn = sinceAway, entryKey{}, 0, nil
@@ -618,9 +618,11 @@ func (m *Model) renderTimeline() []string {
 	}
 	rows = rows[:min(len(rows), height)]
 
+	// A screen too short for the turn shows it once it grows.
 	if m.timeline.turn != nil {
-		box := m.renderTurn(min(m.width-4, 76), height-2)
-		rows = ui.Overlay(rows, box, (m.width-ansi.StringWidth(box[0]))/2, max((height-len(box))/2, 0))
+		if box := m.renderTurn(min(m.width-4, 76), height-2); len(box) > 0 {
+			rows = ui.Overlay(rows, box, (m.width-ansi.StringWidth(box[0]))/2, max((height-len(box))/2, 0))
+		}
 	}
 	return rows
 }

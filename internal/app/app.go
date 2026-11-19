@@ -174,6 +174,9 @@ type Model struct {
 	board board
 	// timeline is what the timeline shows.
 	timeline timeline
+	// commandFrom is what was on screen when the command that runs was
+	// asked for, before it went back to the workspace.
+	commandFrom mode
 
 	// web is the web cockpit, while it runs; webQR is the code of its link,
 	// and webCursor the session under the cursor of its box.

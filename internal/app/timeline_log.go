@@ -322,9 +322,14 @@ func (l lane) say(k int, name func(id string) string, now time.Time) (entry, boo
 		if w := l.near(k, session.KindWorktreeAdd, nil); w >= 0 {
 			text += " in " + tilde(l.events[w].V)
 		}
+		// Its prompt goes out through the queue once the agent is ready:
+		// the first one sent after it is what came of it.
 		var r result
-		if q := l.near(k, session.KindQueue, func(f session.Event) bool { return f.V == fromCard }); q >= 0 {
-			r = l.outcome(q, now)
+		for j := k + 1; j < len(l.events); j++ {
+			if f := l.events[j]; f.K == session.KindSend && f.V == fromCard {
+				r = l.outcome(j, now)
+				break
+			}
 		}
 		return with(text, r)
 	case session.KindTurnFailed:

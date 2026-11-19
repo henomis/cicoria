@@ -116,6 +116,8 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 // full-screen view it is for the session on screen, and the view stays when
 // the command keeps it; otherwise the workspace comes back first.
 func (m *Model) runCommand(keepsView bool, run func(m *Model) tea.Cmd) tea.Cmd {
+	m.commandFrom = m.mode
+	defer func() { m.commandFrom = modeWorkspace }()
 	// From the board and the timeline, every command is one of the
 	// workspace.
 	if m.mode == modeTimeline {

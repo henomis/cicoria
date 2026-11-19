@@ -425,3 +425,47 @@ func TestTurnKeys(t *testing.T) {
 		t.Errorf("q went to mode %d, not back to the timeline", m.mode)
 	}
 }
+
+// A card's line says what came of it from what is recorded when a card
+// starts: its prompt goes out through the queue without a line of its own.
+func TestCardLineAsRecorded(t *testing.T) {
+	m, s := historyModel(t)
+	lines := linesOf(t, m, func(at func(int) time.Time) []session.Event {
+		return []session.Event{
+			{T: at(10), S: s.ID, K: session.KindCardStart, V: "login form", N: 10, X: "login form"},
+			{T: at(11), S: s.ID, K: session.KindSend, V: fromCard, N: 10, X: "login form"},
+			{T: at(11), S: s.ID, K: session.KindTurnStart},
+			{T: at(20), S: s.ID, K: session.KindTurnEnd},
+		}
+	})
+	if got := texts(lines); !strings.Contains(got, "started the card “login form” → done in 9m") {
+		t.Errorf("lines:\n%s", got)
+	}
+}
+
+// ctrl+a e over the board, or the palette there, goes back to the board.
+func TestTimelineFromBoardGoesBack(t *testing.T) {
+	m := timelineModel(t, 100, 24)
+	m.mode = modeBoard
+	m.runCommand(false, (*Model).openTimeline)
+	if m.mode != modeTimeline {
+		t.Fatal("the timeline did not open")
+	}
+	m.timelineKey(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if m.mode != modeBoard {
+		t.Errorf("q went to mode %d, not back to the board", m.mode)
+	}
+}
+
+// A turn over a screen too short for it does not break the drawing.
+func TestTurnOnTinyScreen(t *testing.T) {
+	m := timelineModel(t, 100, 24)
+	m.openTimeline()
+	m.timeline.turn = &turnView{name: "api", start: time.Now(), end: time.Now()}
+	for _, width := range []int{1, 10, 40} {
+		for height := 1; height <= 6; height++ {
+			m.width, m.height = width, height
+			_ = m.renderTimeline()
+		}
+	}
+}
