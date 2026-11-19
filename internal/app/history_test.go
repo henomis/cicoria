@@ -26,6 +26,7 @@ import (
 	"github.com/henomis/cicoria/internal/agent"
 	"github.com/henomis/cicoria/internal/config"
 	"github.com/henomis/cicoria/internal/session"
+	"github.com/henomis/cicoria/internal/ui"
 )
 
 // historyModel returns a workspace with one Claude Code session, whose
@@ -467,5 +468,46 @@ func TestTurnOnTinyScreen(t *testing.T) {
 			m.width, m.height = width, height
 			_ = m.renderTimeline()
 		}
+	}
+}
+
+// A run that ended without saying so, as when the terminal was closed,
+// does not stretch the last status of its sessions over the time cicoria
+// was not running.
+func TestRunThatDidNotEnd(t *testing.T) {
+	m, s := historyModel(t)
+	now := time.Now()
+	at := func(min int) time.Time { return now.Add(time.Duration(min-60) * time.Minute) }
+	for _, e := range []session.Event{
+		{T: at(0), K: session.KindRunStart},
+		{T: at(1), S: s.ID, K: session.KindStatus, V: "working"},
+		{T: at(5), S: s.ID, K: session.KindQueue, X: "last thing"},
+		// No run_end: cicoria was killed. It came back 50 minutes later.
+		{T: at(55), K: session.KindRunStart},
+		{T: at(55), S: s.ID, K: session.KindStatus, V: "idle"},
+	} {
+		m.history.Record(e)
+	}
+	m.awayFrom, m.timeline.rng, m.width, m.height = at(0), sinceAway, 120, 30
+	_, lanes, _ := m.timelineData(now)
+	for _, p := range lanes[0].periods {
+		if p.State == ui.StateWorking && (p.To.IsZero() || p.To.After(at(5))) {
+			t.Errorf("working from %v to %v, past the last sign of life at %v", p.From, p.To, at(5))
+		}
+	}
+}
+
+// A cicoria that opens on a workspace another one has open records
+// nothing until the user says to open it there too.
+func TestSecondCicoriaRecordsNothingYet(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m := &Model{cfg: config.Default(), dir: t.TempDir(), twice: true}
+	m.openHistory(false)
+	if got := m.history.Events(); len(got) != 0 {
+		t.Errorf("recorded before it was agreed: %+v", got)
+	}
+	m.beginRun()
+	if got := m.history.Events(); len(got) != 1 || got[0].K != session.KindRunStart {
+		t.Errorf("once agreed: %+v", got)
 	}
 }

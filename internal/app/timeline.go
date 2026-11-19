@@ -207,10 +207,15 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	}
 	byID := map[string][]session.Event{}
 	var runEnds []time.Time
-	for _, e := range events {
+	for k, e := range events {
 		if e.S == "" {
-			if e.K == session.KindRunEnd {
+			switch {
+			case e.K == session.KindRunEnd:
 				runEnds = append(runEnds, e.T)
+			case e.K == session.KindRunStart && k > 0 && events[k-1].K != session.KindRunEnd:
+				// The run before ended without saying so, as when the
+				// terminal was closed: after the last thing it recorded.
+				runEnds = append(runEnds, events[k-1].T)
 			}
 			continue
 		}

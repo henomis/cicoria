@@ -169,7 +169,12 @@ func (l *Ledger) Record(e Event) {
 	if e.K == KindStatus {
 		l.last[e.S] = e.V
 	}
-	l.events = append(l.events, e)
+	// A status held until it lasted goes back to its place in time.
+	i := len(l.events)
+	for i > 0 && l.events[i-1].T.After(e.T) {
+		i--
+	}
+	l.events = slices.Insert(l.events, i, e)
 	l.unwritten = append(l.unwritten, e)
 }
 
@@ -281,33 +286,36 @@ func LoadEvents(path string, since time.Time, maxBytes int64) ([]Event, error) {
 	}
 
 	var events []Event
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	first := true
-	for sc.Scan() {
+	r := bufio.NewReader(f)
+	for first := true; ; first = false {
+		// A line is read whole, however long the text it keeps.
+		line, err := r.ReadBytes('\n')
 		// Read from the middle of the file, the first line is a part of one.
-		if first && cut {
-			first = false
-			continue
+		if !first || !cut {
+			var e Event
+			if json.Unmarshal(line, &e) == nil && e.K != "" && !e.T.Before(since) {
+				events = append(events, e)
+			}
 		}
-		first = false
-		var e Event
-		if json.Unmarshal(sc.Bytes(), &e) != nil || e.K == "" {
-			continue
+		if errors.Is(err, io.EOF) {
+			break
 		}
-		if !e.T.Before(since) {
-			events = append(events, e)
+		if err != nil {
+			return nil, err
 		}
 	}
 	slices.SortStableFunc(events, func(a, b Event) int { return a.T.Compare(b.T) })
-	return events, sc.Err()
+	return events, nil
 }
 
 // CompactLedger rewrites the ledger at path with only its events from since
 // on, and of those only as many of the newest as fit in maxBytes.
 func CompactLedger(path string, since time.Time, maxBytes int64) error {
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	events, err := LoadEvents(path, since, 0)
-	if err != nil || events == nil {
+	if err != nil {
 		return err
 	}
 	var lines [][]byte

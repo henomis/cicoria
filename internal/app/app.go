@@ -195,6 +195,9 @@ type Model struct {
 	answered  map[string]time.Time
 	lastKey   time.Time
 	awayFrom  time.Time
+	// running says the run is recorded in the history: at once, or once
+	// the user agreed to open a workspace another cicoria has open.
+	running bool
 
 	// One-line interactions in the status bar.
 	prompt    *prompt
@@ -369,7 +372,9 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 		s.Base, _ = git.Head(dir)
 		s.Uncommitted = cfg.Changes != config.ChangesSession
 		m.sessions = append(m.sessions, s)
-		m.record(s, session.Event{K: session.KindSessionOpen, V: s.Name})
+		if !m.twice {
+			m.record(s, session.Event{K: session.KindSessionOpen, V: s.Name})
+		}
 	}
 	for _, s := range m.sessions {
 		if s.Port == 0 {
@@ -660,6 +665,7 @@ func (m *Model) refresh() tea.Cmd {
 
 // startAll launches the agents of the sessions the workspace opens with.
 func (m *Model) startAll() tea.Cmd {
+	m.beginRun()
 	m.play(ui.Bloom, "cicoria", nil)
 	var cmds []tea.Cmd
 	for _, s := range m.sessions {

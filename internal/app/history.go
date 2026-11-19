@@ -63,7 +63,19 @@ func (m *Model) openHistory(alone bool) {
 	if events := l.Events(); len(events) > 0 {
 		m.awayFrom = events[len(events)-1].T
 	}
-	m.history.Record(session.Event{T: now, K: session.KindRunStart})
+	// A workspace another cicoria has open is the other one's to record,
+	// until the user says to open it here too.
+	if !m.twice {
+		m.beginRun()
+	}
+}
+
+// beginRun records that cicoria runs on the workspace from now on.
+func (m *Model) beginRun() {
+	if !m.running {
+		m.running = true
+		m.history.Record(session.Event{K: session.KindRunStart})
+	}
 }
 
 // track has a session tell the history when its status changes.

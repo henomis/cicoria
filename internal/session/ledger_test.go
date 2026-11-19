@@ -185,3 +185,52 @@ func TestClip(t *testing.T) {
 		t.Error("full text was cut")
 	}
 }
+
+// A guessed status recorded once it lasted keeps its place in time among
+// the events that came after it.
+func TestEventsStayInOrder(t *testing.T) {
+	l, _ := OpenLedger("", time.Time{}, 0)
+	l.Status("a", "working", true, t0)
+	l.Record(Event{T: t0.Add(time.Second), S: "b", K: KindSend})
+	_ = l.Flush(t0.Add(3 * time.Second))
+	got := l.Events()
+	for i := 1; i < len(got); i++ {
+		if got[i].T.Before(got[i-1].T) {
+			t.Fatalf("events out of order: %q", kinds(got))
+		}
+	}
+	if k := kinds(got); k != "status:working send" {
+		t.Errorf("events = %q", k)
+	}
+}
+
+// A line too long for a scanner does not hide the events after it.
+func TestLoadEventsLongLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	long := `{"t":"2026-11-19T10:00:00Z","s":"a","k":"send","x":"` + strings.Repeat("x", 5<<20) + `"}`
+	data := long + "\n" + `{"t":"2026-11-19T10:00:01Z","s":"a","k":"queue"}` + "\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadEvents(path, time.Time{}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k := kinds(got); k != "send queue" {
+		t.Errorf("events = %q", k)
+	}
+}
+
+// Compacting a ledger whose events are all too old empties it.
+func TestCompactAllOld(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	l, _ := OpenLedger(path, time.Time{}, 0)
+	l.Record(Event{T: t0, S: "a", K: KindSend})
+	_ = l.Close()
+	if err := CompactLedger(path, t0.Add(time.Hour), 0); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() != 0 {
+		t.Errorf("after compacting: %v, %v", info, err)
+	}
+}
