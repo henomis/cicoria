@@ -106,7 +106,7 @@ func (m *Model) recordTurn(s *session.Session, u agent.Update, now time.Time) {
 		if at, ok := m.delivered[s.ID]; ok && now.Sub(at) < fromQueueWithin {
 			from = "cicoria"
 		} else {
-			m.record(s, session.Event{T: now, K: session.KindPromptTyped, Src: session.FromTUI})
+			m.recordText(s, session.Event{T: now, K: session.KindPromptTyped, Src: session.FromTUI}, u.Text)
 		}
 		delete(m.delivered, s.ID)
 		m.turnFrom[s.ID] = now

@@ -35,6 +35,7 @@ func TestClaudeMapEvent(t *testing.T) {
 		{`{"hook_event_name":"UserPromptSubmit"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
 		// The start and the end of a turn name the message it is for.
 		{`{"hook_event_name":"UserPromptSubmit","prompt_id":"p1"}`, Update{Status: Working, HasStatus: true, TurnStarted: true, Prompt: "p1"}, true},
+		{`{"hook_event_name":"UserPromptSubmit","prompt":"fix it"}`, Update{Status: Working, HasStatus: true, TurnStarted: true, Text: "fix it"}, true},
 		{`{"hook_event_name":"Stop","prompt_id":"p1"}`, Update{Status: Idle, HasStatus: true, TurnEnded: true, Prompt: "p1"}, true},
 		{`{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/p/a.go"}}`, Update{Status: Working, HasStatus: true}, true},
 		// The tool about to run is what a question for permission is about.

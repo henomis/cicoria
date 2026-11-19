@@ -84,6 +84,8 @@ type Update struct {
 	// Prompt is the agent's own name for the message a turn is for, when it
 	// tells: the start and the end of one turn have the same.
 	Prompt string
+	// Text is the message a turn that starts is for, when the agent tells.
+	Text string
 	// Interrupted says the user stopped the turn before it had an answer.
 	Interrupted bool
 	// TurnEnded says the agent finished answering and waits for the next

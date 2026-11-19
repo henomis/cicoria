@@ -35,7 +35,7 @@ func TestCopilotMapEvent(t *testing.T) {
 	}{
 		// The first hook to run comes with the first message.
 		{"sessionStart", `{"source":"new"}`, working, true},
-		{"userPromptSubmitted", `{"prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
+		{"userPromptSubmitted", `{"prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true, Text: "hi"}, true},
 		{"preToolUse", `{"toolName":"bash","toolArgs":{"command":"ls"}}`, Update{Status: Working, HasStatus: true, Tool: Tool{Name: "bash", Detail: "ls"}}, true},
 		// A question to the user is asked in its own words.
 		{"preToolUse", `{"toolName":"ask_user","toolArgs":{"question":"which?"}}`, Update{Status: NeedsInput, HasStatus: true, Question: "which?"}, true},

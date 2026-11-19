@@ -110,6 +110,7 @@ type codexHook struct {
 	Cwd         string `json:"cwd"`
 	ToolName    string `json:"tool_name"`
 	LastMessage string `json:"last_assistant_message"`
+	Prompt      string `json:"prompt"`
 	// ToolInput is an object for most tools, but not for all of them.
 	ToolInput json.RawMessage `json:"tool_input"`
 }
@@ -134,7 +135,7 @@ func (c *Codex) mapHook(h codexHook) (Update, bool) {
 		// already.
 		return Update{Status: Working, HasStatus: true}, true
 	case "UserPromptSubmit":
-		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
+		return Update{Status: Working, HasStatus: true, TurnStarted: true, Text: h.Prompt}, true
 	case "PreToolUse":
 		return Update{Status: Working, HasStatus: true, Tool: toolOf(h.ToolName, h.ToolInput)}, true
 	case "PermissionRequest":

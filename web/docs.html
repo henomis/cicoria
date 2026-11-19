@@ -391,7 +391,7 @@ and add a test for it.</pre>
  docs ○  ────────────███✓─────────────────────────────────────────────
                                                                     ↑
 ──────────────────────────────────────────────────────────────────────
-▸14:06 api   typed a prompt
+▸14:06 api   typed “fix the 500 on empty orders” → working for 5m
  13:11 web   ✕ the turn failed after 14m
  12:48 api   sent review notes
  12:34 api   ● commit a1c3f2e paginate GET /orders
@@ -400,7 +400,7 @@ and add a test for it.</pre>
  11:47 api   queued “add pagination to GET /orders”
 ──────────────────────────────────────────────────────────────────────
  agents waited for you 11m · 1 wait now</pre>
-      <p>At the top, a bar for each session over the time shown: █ working, ▲ waiting for you, ─ idle, ✓ a turn that ended, ✕ one that failed, and nothing while cicoria was closed. Sessions that did nothing in that time are left out. Under the bars, the log of what you did, the newest first, in words: answers, with the choice and how long the agent waited for it; messages queued and sent, and review notes; what you asked one session from another; turns you stopped and prompts you typed; cards started and their worktrees. Failed turns and commits are in it too. An arrow under the bars points at the time of the line under the cursor.</p>
+      <p>At the top, a bar for each session over the time shown: █ working, ▲ waiting for you, ─ idle, ✓ a turn that ended, ✕ one that failed, and nothing while cicoria was closed. Sessions that did nothing in that time are left out. Under the bars, the log of what you did, the newest first, in words: answers, with the choice and how long the agent waited for it; messages queued and sent, and review notes; what you asked one session from another; prompts you typed in an agent's pane, and turns you stopped; cards started and their worktrees. Failed turns and commits are in it too. A message or a prompt that started a turn says what came of it: <code>→ done in 12m, 3 files</code>, <code>→ failed after 4m</code>, <code>→ working for 20m</code>. An arrow under the bars points at the time of the line under the cursor.</p>
       <p>It opens on the time since you were last away: since the last pause of ten minutes without a key, or since cicoria was closed, and at least half an hour.</p>
       <div class="table"><table>
         <thead><tr><th>Key, on the timeline</th><th>What it does</th></tr></thead>
@@ -412,7 +412,7 @@ and add a test for it.</pre>
           <tr><td>q esc</td><td>Back, as <kbd>ctrl+a</kbd> <kbd>e</kbd> is</td></tr>
         </tbody>
       </table></div>
-      <p>The history is kept next to the saved sessions, in <code>events.jsonl</code>, readable only by you, for 30 days. Of the messages cicoria sends, queues and notes, it keeps the first 120 characters; of a prompt you type in an agent's pane, only that you typed one; keys never. <code>[timeline]</code> in the settings changes that. For an agent other than Claude Code, Copilot CLI and Codex CLI, turns are guessed from its output, and a burst shorter than two seconds is not kept.</p>
+      <p>The history is kept next to the saved sessions, in <code>events.jsonl</code>, readable only by you, for 30 days. Of the messages cicoria sends and queues, the notes, and the prompts you type in the pane of Claude Code, Copilot CLI or Codex CLI, which tell them, it keeps the first 120 characters; keys never. <code>[timeline]</code> in the settings changes that. For an agent other than Claude Code, Copilot CLI and Codex CLI, turns are guessed from its output, and a burst shorter than two seconds is not kept.</p>
     </section>
 
     <section id="web">
@@ -502,7 +502,7 @@ and add a test for it.</pre>
           <tr><td>web_address</td><td><code>"0.0.0.0:0"</code></td><td>Where the <a href="#web">web cockpit</a> listens, host and port: every address by default, and port 0 picks a free one. <code>"127.0.0.1:0"</code> keeps it to this machine</td></tr>
           <tr><td>port_base</td><td><code>20000</code></td><td>The first of the ports given to sessions, each its own range, told in <code>CICORIA_PORT</code>. <code>0</code> gives sessions no ports</td></tr>
           <tr><td>ports_per_session</td><td><code>10</code></td><td>How many ports each session has to itself, from <code>CICORIA_PORT</code> up</td></tr>
-          <tr><td>timeline.text</td><td><code>"preview"</code></td><td>What the <a href="#timeline">timeline</a>'s history keeps of the messages you send: <code>"none"</code>, <code>"preview"</code>, the first 120 characters, or <code>"full"</code></td></tr>
+          <tr><td>timeline.text</td><td><code>"preview"</code></td><td>What the <a href="#timeline">timeline</a>'s history keeps of the messages and prompts you send: <code>"none"</code>, <code>"preview"</code>, the first 120 characters, or <code>"full"</code></td></tr>
           <tr><td>timeline.keep_days</td><td><code>30</code></td><td>How many days of history are kept</td></tr>
           <tr><td>worktree_dir</td><td><code>""</code></td><td>Where <a href="#worktrees">worktrees</a> go, as <code>&lt;worktree_dir&gt;/&lt;repository&gt;/&lt;session&gt;</code>: an absolute path, or one that starts with <code>~</code>. <code>""</code> puts them next to the repository</td></tr>
         </tbody>

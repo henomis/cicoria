@@ -34,7 +34,7 @@ func TestCodexMapEvent(t *testing.T) {
 	}{
 		// The first hook to run comes with the first message.
 		{`{"hook_event_name":"SessionStart","source":"startup"}`, working, true},
-		{`{"hook_event_name":"UserPromptSubmit","prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true}, true},
+		{`{"hook_event_name":"UserPromptSubmit","prompt":"hi"}`, Update{Status: Working, HasStatus: true, TurnStarted: true, Text: "hi"}, true},
 		{`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`, Update{Status: Working, HasStatus: true, Tool: Tool{Name: "Bash", Detail: "ls"}}, true},
 		// A request for permission says what it is for.
 		{`{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"rm a"}}`, Update{Status: NeedsInput, HasStatus: true, Tool: Tool{Name: "Bash", Detail: "rm a"}}, true},

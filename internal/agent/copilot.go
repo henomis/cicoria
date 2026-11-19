@@ -147,6 +147,7 @@ type copilotHook struct {
 	NotificationType string `json:"notification_type"`
 	Message          string `json:"message"`
 	Title            string `json:"title"`
+	Prompt           string `json:"prompt"`
 	ToolName         string `json:"toolName"`
 	// ToolArgs is an object for most tools, but not for all of them.
 	ToolArgs    json.RawMessage `json:"toolArgs"`
@@ -173,7 +174,7 @@ func (c *Copilot) mapHook(name string, h copilotHook) (Update, bool) {
 		// already.
 		return Update{Status: Working, HasStatus: true}, true
 	case "userPromptSubmitted":
-		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
+		return Update{Status: Working, HasStatus: true, TurnStarted: true, Text: h.Prompt}, true
 	case "preToolUse":
 		// A question to the user is a tool like the others.
 		if h.ToolName == "ask_user" {

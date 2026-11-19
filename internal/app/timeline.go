@@ -220,7 +220,7 @@ func quoted(e session.Event) string {
 
 // say returns what the log says of event k of a lane, if it is something
 // you did, or something that went wrong.
-func (l lane) say(k int, name func(id string) string) (string, bool) {
+func (l lane) say(k int, name func(id string) string, now time.Time) (string, bool) {
 	e := l.events[k]
 	web := ""
 	if e.Src == session.FromWeb {
@@ -244,7 +244,10 @@ func (l lane) say(k int, name func(id string) string) (string, bool) {
 		}
 		return text, true
 	case session.KindPromptTyped:
-		return "typed a prompt", true
+		if e.X == "" {
+			return "typed a prompt" + l.outcome(k, now), true
+		}
+		return "typed" + quoted(e) + l.outcome(k, now), true
 	case session.KindQueue, session.KindSend:
 		// What the queue sends by itself was said when it was queued.
 		if e.K == session.KindSend && e.Src == "" {
@@ -254,9 +257,14 @@ func (l lane) say(k int, name func(id string) string) (string, bool) {
 		if e.K == session.KindSend {
 			verb = "sent"
 		}
+		// What was sent at once started a turn; what was queued waits.
+		then := ""
+		if e.K == session.KindSend {
+			then = l.outcome(k, now)
+		}
 		switch e.V {
 		case fromNotes:
-			return verb + " review notes" + web, true
+			return verb + " review notes" + web + then, true
 		case fromAsk:
 			return "you asked it" + quoted(e) + " from another session", true
 		case fromAnswer:
@@ -271,7 +279,7 @@ func (l lane) say(k int, name func(id string) string) (string, bool) {
 		if e.To != "" {
 			what += ", for " + name(e.To) + " to answer"
 		}
-		return verb + what + web, true
+		return verb + what + web + then, true
 	case session.KindInterrupted:
 		return "stopped the turn" + web, true
 	case session.KindUnqueue:
@@ -293,6 +301,52 @@ func (l lane) say(k int, name func(id string) string) (string, bool) {
 		return "closed it", true
 	}
 	return "", false
+}
+
+// outcome says what came of the message of event k: how the turn it
+// started went, as " → done in 12m, 3 files". It is empty when no turn is
+// known to have started for it.
+func (l lane) outcome(k int, now time.Time) string {
+	e := l.events[k]
+	start := -1
+	for j := k + 1; j < len(l.events) && l.events[j].T.Sub(e.T) <= fromQueueWithin; j++ {
+		f := l.events[j]
+		if f.K == session.KindTurnStart {
+			start = j
+			break
+		}
+		// Another message came first: the turn would be its own.
+		if f.K == session.KindSend || f.K == session.KindPromptTyped {
+			return ""
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+	began := l.events[start].T
+	for _, f := range l.events[start+1:] {
+		took := span(f.T.Sub(began))
+		switch f.K {
+		case session.KindTurnEnd:
+			text := " → done in " + took
+			if n := len(f.Files); n == 1 {
+				text += ", 1 file"
+			} else if n > 1 {
+				text += fmt.Sprintf(", %d files", n)
+			}
+			return text
+		case session.KindTurnFailed:
+			return " → failed after " + took
+		case session.KindInterrupted:
+			return " → you stopped it after " + took
+		case session.KindTurnStart, session.KindSessionClose:
+			return " → ran " + took
+		}
+	}
+	if l.s != nil && (l.s.Status == agent.Working || l.s.Status == agent.NeedsInput) {
+		return " → working for " + span(now.Sub(began))
+	}
+	return ""
 }
 
 // sessionNames returns the name of each session the history knows, live or
@@ -363,7 +417,7 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 			if e.T.Before(from) {
 				continue
 			}
-			if text, ok := l.say(k, name); ok {
+			if text, ok := l.say(k, name, now); ok {
 				entries = append(entries, entry{at: e.T, id: id, name: l.name, text: text, bad: e.K == session.KindTurnFailed})
 				said++
 			}
@@ -711,6 +765,9 @@ func (m *Model) timelineHint() string {
 
 // span says how long a time is, to the minute, as "1h20m".
 func span(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
 	d = d.Round(time.Minute)
 	switch {
 	case d < time.Hour:

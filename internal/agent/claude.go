@@ -124,6 +124,7 @@ type claudeHook struct {
 	Event            string `json:"hook_event_name"`
 	SessionID        string `json:"session_id"`
 	PromptID         string `json:"prompt_id"`
+	PromptText       string `json:"prompt"`
 	NotificationType string `json:"notification_type"`
 	Message          string `json:"message"`
 	LastMessage      string `json:"last_assistant_message"`
@@ -151,7 +152,7 @@ func (c *Claude) mapHook(h claudeHook) (Update, bool) {
 		//
 		return Update{Status: Idle, HasStatus: true}, true
 	case "UserPromptSubmit":
-		return Update{Status: Working, HasStatus: true, TurnStarted: true}, true
+		return Update{Status: Working, HasStatus: true, TurnStarted: true, Text: h.PromptText}, true
 	case "PreToolUse":
 		return Update{Status: Working, HasStatus: true, Tool: toolOf(h.ToolName, h.ToolInput)}, true
 	case "PostToolUse":

@@ -66,13 +66,13 @@ func TestRecordTurn(t *testing.T) {
 	now := time.Now()
 
 	// A turn nobody sent from cicoria is one the user typed.
-	m.recordTurn(s, agent.Update{TurnStarted: true}, now)
+	m.recordTurn(s, agent.Update{TurnStarted: true, Text: "fix  the\nbug"}, now)
 	s.Touched["a.go"] = now.Add(time.Second)
 	s.Touched["old.go"] = now.Add(-time.Minute)
 	m.recordTurn(s, agent.Update{TurnEnded: true, Answer: "done"}, now.Add(2*time.Second))
 
-	if got := eventsOf(m, session.KindPromptTyped); len(got) != 1 {
-		t.Errorf("%d typed prompts, want 1", len(got))
+	if got := eventsOf(m, session.KindPromptTyped); len(got) != 1 || got[0].X != "fix the bug" || got[0].N != 12 {
+		t.Errorf("typed prompts = %+v", got)
 	}
 	starts := eventsOf(m, session.KindTurnStart)
 	if len(starts) != 1 || starts[0].V != "typed" {
@@ -144,6 +144,7 @@ func timelineModel(t *testing.T, width, height int) *Model {
 		{T: at(10), S: s.ID, K: session.KindStatus, V: "needs input"},
 		{T: at(25), S: s.ID, K: session.KindAnswer, V: "Yes", Src: session.FromTUI},
 		{T: at(25), S: s.ID, K: session.KindStatus, V: "working"},
+		{T: at(26), S: s.ID, K: session.KindPromptTyped, X: "fix it"},
 		{T: at(26), S: s.ID, K: session.KindTurnStart, V: "typed"},
 		{T: at(40), S: s.ID, K: session.KindTurnEnd, Files: []string{"api.go"}, X: "done"},
 		{T: at(40), S: s.ID, K: session.KindStatus, V: "idle"},
@@ -172,7 +173,7 @@ func TestTimelineRenders(t *testing.T) {
 	m.openTimeline()
 	out := ansi.Strip(strings.Join(m.renderTimeline(), "\n"))
 	t.Log("\n" + out)
-	for _, want := range []string{"api", "docs", "▲", "✓", "answered “Yes” · it waited 15m", "queued “add pagination”", "closed it"} {
+	for _, want := range []string{"api", "docs", "▲", "✓", "answered “Yes” · it waited 15m", "queued “add pagination”", "closed it", "typed “fix it” → done in 14m, 1 file"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the timeline does not show %q", want)
 		}
@@ -190,12 +191,13 @@ func TestTimelineKeys(t *testing.T) {
 		m.timelineKey(tea.KeyPressMsg{Code: r[0], Text: k})
 	}
 	_, _, entries := m.timelineData(time.Now())
-	// The newest first: docs closed, then api answered.
-	if len(entries) != 3 || m.cursor(entries) != 0 {
+	// The newest first: docs closed, then api typed and answered.
+	if len(entries) != 4 || m.cursor(entries) != 0 {
 		t.Fatalf("entries = %+v", entries)
 	}
 	key("j")
-	if m.cursor(entries) != 1 || !strings.Contains(entries[1].text, "Yes") {
+	key("j")
+	if m.cursor(entries) != 2 || !strings.Contains(entries[2].text, "Yes") {
 		t.Fatalf("j moved to %d", m.cursor(entries))
 	}
 	// The answer led to the turn that followed it.
