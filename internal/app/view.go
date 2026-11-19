@@ -164,12 +164,16 @@ func (m *Model) View() tea.View {
 		rows = m.renderHelp()
 	case modeBoard:
 		rows = m.renderBoard()
+	case modeTimeline:
+		rows = m.renderTimeline()
 	default:
 		l := m.layout()
 		if m.mode == modePalette && m.paletteFrom == modeView {
 			rows = m.renderView()
 		} else if m.mode == modePalette && m.paletteFrom == modeBoard {
 			rows = m.renderBoard()
+		} else if m.mode == modePalette && m.paletteFrom == modeTimeline {
+			rows = m.renderTimeline()
 		} else {
 			rows = m.renderWorkspace(l)
 		}
@@ -622,6 +626,11 @@ func (m *Model) renderHelp() []string {
 		"    keep it: once its agent has ended, y removes it anyway when that loses",
 		"    changes or commits, and opens a shell there otherwise, to fix it.",
 		"",
+		ui.Bold.Render("  Timeline"),
+		"    "+p+" e shows a lane for each session: what its agent did over time, and",
+		"    marks for what you did. j/k lane, h/l mark, d the turn there, enter goes",
+		"    to the session, +/- zoom, H/L scroll, s the time since you were away.",
+		"",
 		ui.Bold.Render("  Workspaces"),
 		"    sessions are saved for the directory cicoria was opened on, wherever they",
 		"    work, and only come back when it is opened on that directory again.",
@@ -778,6 +787,11 @@ func (m *Model) renderStatus() string {
 		right = "j/k space b g G scroll · any other key closes"
 	case modeWeb:
 		right = "j/k move · space share ⇄ stop sharing · x stop · esc back"
+	case modeTimeline:
+		right = m.timelineHint()
+		if m.mode == modePalette {
+			right = "esc back"
+		}
 	case modeBoard:
 		right = m.boardHint()
 		if m.board.peek {

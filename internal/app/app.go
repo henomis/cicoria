@@ -79,6 +79,7 @@ const (
 	modeHelp
 	modeWeb
 	modeBoard
+	modeTimeline
 )
 
 // Model is the root Bubble Tea model.
@@ -171,6 +172,8 @@ type Model struct {
 	// in the order the user gave it. board is what the board shows.
 	cards []session.Card
 	board board
+	// timeline is what the timeline shows.
+	timeline timeline
 
 	// web is the web cockpit, while it runs; webQR is the code of its link,
 	// and webCursor the session under the cursor of its box.
@@ -779,6 +782,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.board.polling = false
 		m.board.info = msg.info
 
+	case timelineMsg:
+		m.timeline.polling = false
+		m.timeline.commits = msg.commits
+
 	case cardEditedMsg:
 		m.cardEdited(msg)
 
@@ -940,6 +947,9 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 		}
 		if m.mode == modeBoard && !m.blurred || m.web != nil {
 			ready = append(ready, m.pollBoard())
+		}
+		if m.mode == modeTimeline && !m.blurred && m.ticks%(refreshTicks*5) == 0 {
+			ready = append(ready, m.pollTimeline())
 		}
 	}
 	return tea.Batch(ready...)

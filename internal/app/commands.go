@@ -65,6 +65,7 @@ func init() {
 		{"w", "Open another workspace…", (*Model).askWorkspace, false},
 		{"o", "Worktrees: open a session in one, or remove it…", (*Model).askWorktrees, false},
 		{"0", "Board: the backlog, and every session by what it needs", (*Model).openBoard, false},
+		{"e", "Timeline: what happened, and what you did", (*Model).openTimeline, false},
 		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
@@ -115,7 +116,11 @@ func (m *Model) runPrefix(k tea.KeyPressMsg) tea.Cmd {
 // full-screen view it is for the session on screen, and the view stays when
 // the command keeps it; otherwise the workspace comes back first.
 func (m *Model) runCommand(keepsView bool, run func(m *Model) tea.Cmd) tea.Cmd {
-	// From the board, every command is one of the workspace.
+	// From the board and the timeline, every command is one of the
+	// workspace.
+	if m.mode == modeTimeline {
+		m.closeTimeline()
+	}
 	if m.mode == modeBoard {
 		m.closeBoard()
 	}

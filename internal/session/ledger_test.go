@@ -138,16 +138,16 @@ func TestCompactLedger(t *testing.T) {
 func TestGuessedStatusMerged(t *testing.T) {
 	l, _ := OpenLedger("", time.Time{}, 0)
 	l.Status("a", "idle", true, t0)
-	l.Flush(t0.Add(3 * time.Second))
+	_ = l.Flush(t0.Add(3 * time.Second))
 	// A flicker shorter than minSpan is dropped.
 	l.Status("a", "working", true, t0.Add(4*time.Second))
 	l.Status("a", "idle", true, t0.Add(5*time.Second))
 	l.Status("a", "working", true, t0.Add(10*time.Second))
-	l.Flush(t0.Add(11 * time.Second))
+	_ = l.Flush(t0.Add(11 * time.Second))
 	if k := kinds(l.Events()); k != "status:idle status:working" {
 		t.Errorf("before it lasted: %q", k)
 	}
-	l.Flush(t0.Add(13 * time.Second))
+	_ = l.Flush(t0.Add(13 * time.Second))
 	got := l.Events()
 	if k := kinds(got); k != "status:idle status:working" {
 		t.Errorf("events = %q", k)

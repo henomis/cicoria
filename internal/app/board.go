@@ -353,6 +353,8 @@ func (m *Model) boardSessionKey(key string, it boardEntry) tea.Cmd {
 		return m.askClose()
 	case ",":
 		return m.askRename()
+	case "e":
+		return m.openTimelineOn(it.s)
 	}
 	return nil
 }
@@ -522,7 +524,7 @@ func (m *Model) boardHint() string {
 	case it.card != nil:
 		return "enter start · e edit · x delete · J/K move · c new card · q back"
 	case it.s != nil:
-		return "enter go · space peek · m queue · d changes · r restart · x close · c new card · q back"
+		return "enter go · space peek · m queue · d changes · e timeline · r restart · x close · c new card · q back"
 	}
 	return "h/l column · c new card · q back"
 }
