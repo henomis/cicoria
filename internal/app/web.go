@@ -222,11 +222,11 @@ func (m *Model) handleWeb(a web.Action) tea.Cmd {
 	case web.ActSend:
 		m.say("from the web: a message for " + s.Name)
 		a.Reply(nil)
-		return m.deliver(s, a.Text)
+		return m.deliver(s, a.Text, "", session.FromWeb)
 	case web.ActQueue:
 		m.say("from the web: a message queued for " + s.Name)
 		a.Reply(nil)
-		return m.enqueue(s, session.Message{Text: a.Text})
+		return m.enqueueFrom(s, session.Message{Text: a.Text}, session.FromWeb)
 	case web.ActUnqueue:
 		// The page names the message it saw: if the queue moved on since,
 		// the same message is looked for elsewhere, and nothing else goes.
@@ -238,6 +238,7 @@ func (m *Model) handleWeb(a web.Action) tea.Cmd {
 			a.Reply(errors.New("this message is not queued any more: it may have been sent"))
 			return nil
 		}
+		m.recordText(s, session.Event{K: session.KindUnqueue, Src: session.FromWeb}, s.Queue[i].Text)
 		s.RemoveQueued(i)
 		m.save()
 		m.say("from the web: a queued message taken back from " + s.Name)
@@ -247,6 +248,7 @@ func (m *Model) handleWeb(a web.Action) tea.Cmd {
 	case web.ActInterrupt:
 		s.NoteInput(time.Now())
 		s.Term.SendKey(uv.Key{Code: uv.KeyEscape})
+		m.record(s, session.Event{K: session.KindInterrupted, Src: session.FromWeb})
 		m.say("from the web: " + s.Name + " interrupted")
 		a.Reply(nil)
 	}
@@ -282,6 +284,8 @@ func (m *Model) chooseFromWeb(s *session.Session, i int, label string) error {
 		}
 	}
 	s.Term.SendKey(uv.Key{Code: uv.KeyEnter})
+	m.answered[s.ID] = s.Since
+	m.record(s, session.Event{K: session.KindAnswer, V: label, Src: session.FromWeb})
 	m.say(fmt.Sprintf("from the web: %q chosen for %s", label, s.Name))
 	return nil
 }

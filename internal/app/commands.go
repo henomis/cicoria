@@ -342,9 +342,14 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool, car
 	s.Port = m.freePorts()
 	s.Base, _ = git.Head(dir)
 	s.Uncommitted = m.cfg.Changes != config.ChangesSession
+	m.record(s, session.Event{K: session.KindSessionOpen, V: name, Src: session.FromTUI})
+	if made != "" {
+		m.record(s, session.Event{K: session.KindWorktreeAdd, V: made, Src: session.FromTUI})
+	}
 	if card != nil {
 		// It goes out once the agent says it is ready for it.
-		s.Enqueue(session.Message{Text: card.Prompt})
+		m.recordText(s, session.Event{K: session.KindCardStart, V: card.Title, Src: session.FromTUI}, card.Prompt)
+		s.Enqueue(session.Message{Text: card.Prompt, From: fromCard})
 		m.dropCard(card.ID)
 	}
 	m.sessions = append(m.sessions, s)
@@ -860,6 +865,7 @@ func (m *Model) askRename() tea.Cmd {
 	p.done = func(name string) tea.Cmd {
 		if s, _ := m.byID(id); s != nil && name != "" {
 			s.Name = name
+			m.record(s, session.Event{K: session.KindRename, V: name, Src: session.FromTUI})
 			m.save()
 		}
 		return nil
@@ -925,6 +931,7 @@ func (m *Model) closeSession(i int) tea.Cmd {
 	// looked at.
 	setups := m.setupsOf(closed)
 	for _, gone := range append(setups, closed) {
+		m.record(gone, session.Event{K: session.KindSessionClose, V: gone.Name, Src: session.FromTUI})
 		j := slices.Index(m.sessions, gone)
 		m.sessions = slices.Delete(m.sessions, j, j+1)
 		if m.active > j || m.active >= len(m.sessions) {

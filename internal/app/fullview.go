@@ -435,10 +435,10 @@ func (m *Model) sendReview(queue bool) tea.Cmd {
 	// The review is over: back to the agent it went to.
 	m.focus = focusAgent
 	if queue {
-		return m.enqueue(s, session.Message{Text: text})
+		return m.enqueue(s, session.Message{Text: text, From: fromNotes})
 	}
 	m.save()
-	return m.deliver(s, text)
+	return m.deliver(s, text, fromNotes, session.FromTUI)
 }
 
 // reloadView reads again what the full-screen view shows, keeping its place.

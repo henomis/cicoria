@@ -112,6 +112,10 @@ type Session struct {
 		prompt  string
 	}
 
+	// OnStatus, when set, is told each time the session gets into another
+	// status, as the history of the workspace is kept.
+	OnStatus func(*Session)
+
 	lastInput  time.Time
 	lastOutput time.Time
 }
@@ -124,6 +128,9 @@ type Message struct {
 	ReplyTo string `json:"reply_to,omitempty"`
 	// Then is what the session that asked is told to do with the answer.
 	Then string `json:"then,omitempty"`
+	// From says where the message came from when it was not typed into the
+	// queue: review notes, a card, a question or its answer.
+	From string `json:"from,omitempty"`
 }
 
 // UnmarshalJSON reads a message. Queues saved before a message could be a
@@ -277,6 +284,9 @@ func (s *Session) setStatus(st agent.Status, active bool) {
 func (s *Session) become(st agent.Status) {
 	if st != s.Status {
 		s.Status, s.Since = st, time.Now()
+		if s.OnStatus != nil {
+			s.OnStatus(s)
+		}
 	}
 }
 

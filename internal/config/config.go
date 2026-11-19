@@ -75,6 +75,17 @@ type Config struct {
 	// Worktrees say what to do in a worktree made for a session, by the
 	// repository it is made from.
 	Worktrees []WorktreeConfig `toml:"worktree"`
+	// Timeline is how the history of the workspace is kept.
+	Timeline TimelineConfig `toml:"timeline"`
+}
+
+// TimelineConfig is how the history the timeline shows is kept.
+type TimelineConfig struct {
+	// Text is how much of what the user sends is kept: "none", "preview"
+	// or "full".
+	Text string `toml:"text"`
+	// KeepDays is how many days of history are kept.
+	KeepDays int `toml:"keep_days"`
 }
 
 // WorktreeConfig is what to do in the worktrees made from one repository.
@@ -106,7 +117,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10, Timeline: TimelineConfig{Text: "preview", KeepDays: 30}}
 }
 
 // Path returns where the config file is looked for: under $XDG_CONFIG_HOME
@@ -159,6 +170,12 @@ func Load(path string) (Config, error) {
 		return cfg, fmt.Errorf("%s: web_address is %q: it is a host and a port, like %q", path, cfg.WebAddress, "0.0.0.0:7777")
 	} else if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
 		return cfg, fmt.Errorf("%s: web_address is %q: the port is a number up to 65535", path, cfg.WebAddress)
+	}
+	if t := cfg.Timeline.Text; t != "none" && t != "preview" && t != "full" {
+		return cfg, fmt.Errorf("%s: timeline text is %q: it can be \"none\", \"preview\" or \"full\"", path, t)
+	}
+	if cfg.Timeline.KeepDays < 1 {
+		return cfg, fmt.Errorf("%s: timeline keep_days is %d: it is at least 1", path, cfg.Timeline.KeepDays)
 	}
 	for name, a := range cfg.Agents {
 		if len(a.Command) == 0 {

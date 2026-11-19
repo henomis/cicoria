@@ -36,6 +36,7 @@ const wheelSlide = 8
 
 func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
+	m.noteKey(time.Now())
 
 	// Any key ends an animation. When something waits for its end, the key
 	// only brings that forward.

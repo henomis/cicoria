@@ -148,11 +148,11 @@ func (m *Model) askMessage(a ask) tea.Cmd {
 		case text == "":
 			return nil
 		case !a.reply:
-			return send(session.Message{Text: text})
+			return send(session.Message{Text: text, From: fromAsk})
 		}
 		then := &prompt{input: ui.Input{Prompt: fmt.Sprintf("then tell %s (optional): ", from.Name)}}
 		then.done = func(follow string) tea.Cmd {
-			return send(session.Message{Text: text, ReplyTo: a.from, Then: follow})
+			return send(session.Message{Text: text, ReplyTo: a.from, Then: follow, From: fromAsk})
 		}
 		m.prompt = then
 		return nil
@@ -182,13 +182,24 @@ func (m *Model) answer(s *session.Session, u agent.Update) tea.Cmd {
 		return nil
 	}
 	m.say(s.Name + " answered " + to.Name)
-	return m.enqueue(to, session.Message{Text: session.Answer(s.Name, *q, u.Answer)})
+	return m.enqueue(to, session.Message{Text: session.Answer(s.Name, *q, u.Answer), From: fromAnswer})
 }
 
 // enqueue adds a message to a session's queue. An agent that is idle gets
 // it right away.
 func (m *Model) enqueue(s *session.Session, msg session.Message) tea.Cmd {
+	return m.enqueueFrom(s, msg, session.FromTUI)
+}
+
+// enqueueFrom adds a message to a session's queue, from the terminal or the
+// web, as enqueue does.
+func (m *Model) enqueueFrom(s *session.Session, msg session.Message, src string) tea.Cmd {
 	s.Enqueue(msg)
+	e := session.Event{K: session.KindQueue, V: msg.From, Src: src}
+	if msg.ReplyTo != "" {
+		e.To = msg.ReplyTo
+	}
+	m.recordText(s, e, msg.Text)
 	m.save()
 	return m.trySend(s)
 }
@@ -214,13 +225,15 @@ func (m *Model) sendNext(s *session.Session) tea.Cmd {
 	if msg.ReplyTo != "" {
 		s.Ask(msg)
 	}
-	return m.deliver(s, msg.Text)
+	return m.deliver(s, msg.Text, msg.From, "")
 }
 
 // deliver gives a message to a running agent: pasted now, with enter
 // following shortly.
-func (m *Model) deliver(s *session.Session, text string) tea.Cmd {
+func (m *Model) deliver(s *session.Session, text, from, src string) tea.Cmd {
 	now := time.Now()
+	m.delivered[s.ID] = now
+	m.recordText(s, session.Event{T: now, K: session.KindSend, V: from, Src: src}, text)
 	s.NoteInput(now)
 	s.Term.Paste(text)
 	// From here the agent counts as working, so that nothing else is sent
@@ -254,6 +267,9 @@ func (m *Model) queueKey(key string) tea.Cmd {
 		m.queueCursor = s.MoveQueued(i, -1)
 		m.save()
 	case "x":
+		if i < len(s.Queue) {
+			m.recordText(s, session.Event{K: session.KindUnqueue, Src: session.FromTUI}, s.Queue[i].Text)
+		}
 		s.RemoveQueued(i)
 		m.queueCursor = max(min(i, len(s.Queue)-1), 0)
 		m.save()
