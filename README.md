@@ -20,6 +20,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Shows two sessions at once**, one above the other.
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Keeps a backlog on a board**: cards you write for work not started yet, next to every session in a column for what it needs from you. A card becomes a session only when you start it.
+- **Draws a timeline of what happened, and what you did**: a lane per session, what its agent did over time and marks for each answer, message, note and commit of yours, so you know where you stand without reading the agents' consoles, and see how long they waited for you.
 - **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
 - **Follows you on your phone**: a web cockpit, turned on when you want it, puts first the sessions that need you and what they ask, shows what each agent said last and its changes, and takes your answers and queued messages, or only queued messages for a session you share to watch.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
@@ -70,6 +71,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `w` | Open another workspace in place of this one |
 | `o` | Worktrees: list them, open a session or a shell in one, or remove it |
 | `0` | Board: the backlog, and every session by what it needs |
+| `e` | Timeline: what happened, and what you did |
 | `v` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
@@ -210,13 +212,37 @@ Neither agent knows of the other: one gets a message, the other a message with a
 
 Each card is drawn in a frame of its own, lit when the cursor is on it. A card of a session names it, with its status and for how long; its agent, its branch and `wt` when it works in a worktree of its own; how many files it changed and commits it made since it started, its notes, its queue and `↗` when it is shared; and the start of what its agent last said. Where a session is follows from its state, so it moves when that does: a card cannot be moved to another column, and the board never starts or sends anything by itself.
 
-`h`/`l` or the arrows go from column to column, `j`/`k` from card to card, `g`/`G` to the first and the last, and `a` to the next session that needs you. On a session, `enter` goes to it, `space` shows the end of its screen over the board, `m` queues a message for it, `d` goes to it with its changes panel, `r` restarts it, `x` closes it and `,` renames it. `q` or `esc` goes back, and so does `ctrl+a 0`; the other commands of the prefix go back to the workspace and run there. A click puts the cursor on a card, and a click on the card under it acts as `enter`. A terminal narrower than 100 columns lists the columns one under the other.
+`h`/`l` or the arrows go from column to column, `j`/`k` from card to card, `g`/`G` to the first and the last, and `a` to the next session that needs you. On a session, `enter` goes to it, `space` shows the end of its screen over the board, `m` queues a message for it, `d` goes to it with its changes panel, `e` shows its [timeline](#timeline), `r` restarts it, `x` closes it and `,` renames it. `q` or `esc` goes back, and so does `ctrl+a 0`; the other commands of the prefix go back to the workspace and run there. A click puts the cursor on a card, and a click on the card under it acts as `enter`. A terminal narrower than 100 columns lists the columns one under the other.
 
 ### Backlog
 
 `c` writes a card in `$VISUAL` or `$EDITOR`: the first line is its title, and what follows is the first message its agent gets. A card of one line is its own message. `e` rewrites the card under the cursor, `x` deletes it, after asking, and `J`/`K` move it down and up. A card leaving the editor empty is kept as it was.
 
 `enter` on a card starts it, as `ctrl+a c` starts a session: it asks for the agent, then the directory, offering the one the card was written in, then, in a git repository, whether to give it a worktree of its own, even when no other session works there: a card is work of its own, so `enter` takes the worktree here, and `n` does not. Then it asks for a name, offering one made from the title. The board stays on screen, with the cursor on the new session, and the card leaves the backlog; its agent gets the card's text once it says it is ready. Giving up on the way keeps the card. An agent that does not report its status gets the text when you press `enter` in its queue.
+
+## Timeline
+
+`ctrl+a e` shows on the whole screen what happened in the workspace, and what you did, so you do not have to read the agents' consoles to find out. `e` on a session of the board opens it on that session.
+
+Each session is a lane over time. Its bar is what the agent did: `█` working, `▲` waiting for you, `─` idle, `✓` a turn that ended, `✕` one that failed, and nothing while cicoria was closed. Above the bar are marks for what you did:
+
+| Mark | What you did |
+|---|---|
+| `↵` | Answered a question or a permission, in the terminal or from the web, with the choice you picked |
+| `m` | Queued or sent a message, or typed a prompt into the agent's pane |
+| `t` | Sent review notes |
+| `k` | Asked another session, or got its answer |
+| `x` | Stopped a turn |
+| `o` | Made a worktree |
+| `◆` | Started a card of the backlog |
+| `●` | A commit, by you or by the agent |
+| `+` | Several of these in one cell |
+
+It opens on the time since you were last away, at least an hour: since the last pause of ten minutes without a key, or since cicoria was closed. Sessions waiting for you come first; sessions with nothing in that time are folded into one line, which `enter` opens. A closed session keeps a dim lane while its history is in sight.
+
+`j`/`k` go from lane to lane, and `h`/`l` from mark to mark on a lane: the line under the lanes says what each mark of the cell is, such as the answer you chose or the start of the message you queued. `d` shows the turn there: what it was for, how long it took, the files the agent changed through its tools, the commits made in it, and what the agent said at its end; `enter` on a file or a commit opens it. `enter` goes to the session, and `m` queues a message for it. `+`/`-` zoom in and out, from a minute to an hour a cell, `H`/`L` scroll back and forth, `G` comes back to now and `s` to the time since you were away. Under the lanes, how long agents waited for you, and what is left: sessions that wait, notes not sent, messages queued. `q` or `esc` goes back.
+
+The history is kept next to the saved sessions, in `events.jsonl`, readable only by you, for 30 days. Of the messages cicoria sends, queues and notes, it keeps the first 120 characters; of a prompt you type in an agent's pane, only that you typed one; keys never. `[timeline]` in the settings changes that. For an agent other than Claude Code, Copilot CLI and Codex CLI, turns are guessed from its output, and a burst shorter than two seconds is not kept.
 
 ## Web cockpit
 
@@ -253,6 +279,12 @@ port_base = 20000        # the first port given to sessions, in CICORIA_PORT; 0 
 ports_per_session = 10   # how many ports each session has to itself
 worktree_dir = ""        # where worktrees go, as ~/worktrees/<repository>/<session>; "" puts them next to the repository
 
+# What the timeline's history keeps of the messages you send: "none",
+# "preview" (the first 120 characters) or "full"; and for how long.
+[timeline]
+text = "preview"
+keep_days = 30
+
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.
 [agents.aider]
@@ -285,7 +317,7 @@ With `animations` on, a second of ASCII art plays in the agent pane when cicoria
 
 ## What is remembered
 
-Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues, with the backlog of the board. Agents stop when cicoria closes: each is told that its terminal is gone, as when a terminal window is closed, and killed only if it is still there two seconds later; Claude Code, Copilot CLI and Codex CLI sessions continue their conversation when reopened.
+Sessions are saved for the directory cicoria was opened on, under `$XDG_STATE_HOME/cicoria` (or `~/.local/state/cicoria`), and reopened the next time with their directories, notes and queues, with the backlog of the board and the history the [timeline](#timeline) draws. Agents stop when cicoria closes: each is told that its terminal is gone, as when a terminal window is closed, and killed only if it is still there two seconds later; Claude Code, Copilot CLI and Codex CLI sessions continue their conversation when reopened.
 
 A session belongs to the workspace it was created in, wherever it works: one created from `~/src/app` to work in `~/src/lib` comes back when cicoria is opened on `~/src/app`, not on `~/src/lib`. `ctrl+a w` lists the other saved workspaces, with the sessions of theirs that work in this directory and whether another cicoria has them open, and opens the one you pick in place of this one. A workspace that another cicoria has open is asked about before it is opened a second time, from there or with `cicoria` itself: its agents would run twice, on the same conversations. When cicoria is opened on a directory with nothing saved, the status bar says where the other sessions are.
 
