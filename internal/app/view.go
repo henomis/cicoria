@@ -765,7 +765,8 @@ func (m *Model) renderStatus() string {
 		left = append(left, m.message)
 	}
 	for i, s := range m.sessions {
-		if s.Status == agent.NeedsInput && (i != m.active || under != modeWorkspace) {
+		// The timeline says it under its bars.
+		if s.Status == agent.NeedsInput && (i != m.active || under != modeWorkspace) && under != modeTimeline {
 			left = append(left, ui.Warn.Render("▲ "+s.Name+" needs input"))
 		}
 	}

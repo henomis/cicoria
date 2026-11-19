@@ -34,11 +34,13 @@ const (
 	StateFailed
 )
 
-// stateGlyphs and stateStyles draw each state. The glyphs alone tell them
-// apart, without colour.
+// stateGlyphs and stateStyles draw each state, the more it needs you the
+// heavier: waiting is a full block, working half of one. The glyphs alone
+// tell them apart, without colour.
 var (
-	stateGlyphs = [...]rune{' ', '─', '█', '✓', '▲', '✕'}
-	stateStyles = [...]*lipgloss.Style{nil, &Dim, &Good, &Good, &Warn, &Bad}
+	stateGlyphs = [...]rune{' ', '─', '▄', '✓', '█', '✕'}
+	failed      = Bad.Reverse(true)
+	stateStyles = [...]*lipgloss.Style{nil, &Dim, &Good, nil, &Warn, &failed}
 )
 
 // Period is a state a session was in from From to To. A period whose To is
@@ -55,6 +57,10 @@ type Bar struct {
 	Label   string
 	Periods []Period
 	Dim     bool
+	// Selected draws the bar as the one under the cursor, with Span, the
+	// time of what is under the cursor, lit on it.
+	Selected bool
+	Span     Period
 }
 
 // Timeline is how the bars are drawn: the time the first cell starts at,
@@ -110,8 +116,9 @@ func (t Timeline) States(periods []Period) []State {
 	return cells
 }
 
-// Axis returns the row of times above the bars.
-func (t Timeline) Axis() string {
+// Axis returns the row of times above the bars, with a mark over the
+// moment at, unless it is zero, and "now" at its end.
+func (t Timeline) Axis(at time.Time) string {
 	n := t.Cells()
 	row := []rune(Fit("", t.Width))
 	tick := axisTick(t.Step)
@@ -123,15 +130,32 @@ func (t Timeline) Axis() string {
 	if t.Step*time.Duration(n) > 24*time.Hour {
 		format = "Mon 15h"
 	}
+	free := func(from, to int) bool {
+		for x := max(from, 0); x < min(to, len(row)); x++ {
+			if row[x] != ' ' {
+				return false
+			}
+		}
+		return true
+	}
+	// Room is kept for "now" at the end.
 	for at := first; t.CellAt(at) < n; at = at.Add(tick) {
 		c := t.CellAt(at)
 		label := []rune("┊" + at.Format(format))
-		if c+len(label) > n {
+		if c+len(label) > n-4 {
 			break
 		}
 		copy(row[t.LabelWidth+c:], label)
 	}
-	return Dim.Render(string(row))
+	if n >= 4 && free(t.Width-4, t.Width) {
+		copy(row[t.Width-3:], []rune("now"))
+	}
+	out := Dim.Render(string(row))
+	if c := t.CellAt(at); !at.IsZero() && c >= 0 && c < n {
+		x := t.LabelWidth + c
+		out = Dim.Render(string(row[:x])) + Accent.Render("▼") + Dim.Render(string(row[x+1:]))
+	}
+	return out
 }
 
 // axisTick returns how far apart the times of the axis are for cells of
@@ -148,19 +172,33 @@ func axisTick(step time.Duration) time.Duration {
 	return 24 * time.Hour
 }
 
-// Render draws the bars, one row each, with label styles given for the
-// label of each: the label of a bar is drawn as it is when its style is
-// nil.
-func (t Timeline) Render(bars []Bar, labels []*lipgloss.Style) []string {
+// Render draws the bars, one row each.
+func (t Timeline) Render(bars []Bar) []string {
 	n := t.Cells()
 	now := t.CellAt(t.Now)
 	rows := make([]string, 0, len(bars))
-	for i, bar := range bars {
+	for _, bar := range bars {
+		lit := func(int) bool { return false }
+		if bar.Selected && !bar.Span.From.IsZero() {
+			to := bar.Span.To
+			if to.IsZero() {
+				to = t.Now
+			}
+			first, last := t.CellAt(bar.Span.From), t.CellAt(to)
+			lit = func(x int) bool { return x >= first && x <= last }
+		}
 		c := newCanvas(n, 1)
 		for x, s := range t.States(bar.Periods) {
 			st := stateStyles[s]
 			if bar.Dim && st != nil {
 				st = &Dim
+			}
+			if lit(x) {
+				on := Reverse
+				if st != nil {
+					on = st.Reverse(true)
+				}
+				st = &on
 			}
 			c.put(x, 0, stateGlyphs[s], st)
 		}
@@ -169,23 +207,13 @@ func (t Timeline) Render(bars []Bar, labels []*lipgloss.Style) []string {
 			c.put(now+1, 0, '│', &Dim)
 		}
 		label := Fit(" "+bar.Label, t.LabelWidth)
-		if i < len(labels) && labels[i] != nil {
-			label = labels[i].Render(label)
+		switch {
+		case bar.Selected:
+			label = Reverse.Render(label)
+		case bar.Dim:
+			label = Dim.Render(label)
 		}
 		rows = append(rows, label+c.rows()[0])
 	}
 	return rows
-}
-
-// Pointer returns a row with an arrow under the cell a moment falls in, or
-// an empty row when it is outside of the timeline.
-func (t Timeline) Pointer(at time.Time) string {
-	row := Fit("", t.Width)
-	c := t.CellAt(at)
-	if at.IsZero() || c < 0 || c >= t.Cells() {
-		return row
-	}
-	runes := []rune(row)
-	runes[t.LabelWidth+c] = '↑'
-	return Accent.Render(string(runes))
 }

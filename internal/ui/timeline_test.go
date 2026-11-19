@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -46,13 +45,13 @@ func TestStatesKeepTheMostImportant(t *testing.T) {
 
 func TestRenderFitsWidth(t *testing.T) {
 	bars := []Bar{
-		{Label: "api", Periods: []Period{{From: minute(0), State: StateWorking}}},
+		{Label: "api", Periods: []Period{{From: minute(0), State: StateWorking}}, Selected: true, Span: Period{From: minute(2), To: minute(4)}},
 		{Label: "a-very-long-session-name", Dim: true},
 	}
 	for _, width := range []int{1, 20, 80, 160} {
 		tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: width, LabelWidth: min(10, width)}
-		rows := append(tl.Render(bars, []*lipgloss.Style{&Bold}), tl.Axis(), tl.Pointer(minute(3)))
-		if len(rows) != 4 {
+		rows := append(tl.Render(bars), tl.Axis(minute(3)))
+		if len(rows) != 3 {
 			t.Fatalf("width %d: %d rows", width, len(rows))
 		}
 		for i, r := range rows {
@@ -62,14 +61,22 @@ func TestRenderFitsWidth(t *testing.T) {
 		}
 	}
 	tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: 80, LabelWidth: 10}
-	bar := ansi.Strip(tl.Render(bars, nil)[0])
-	if !strings.Contains(bar, "███") || !strings.Contains(bar, "│") {
+	bar := ansi.Strip(tl.Render(bars)[0])
+	if !strings.Contains(bar, "▄▄▄") || !strings.Contains(bar, "│") {
 		t.Errorf("bar = %q", bar)
 	}
-	if axis := ansi.Strip(tl.Axis()); !strings.Contains(axis, "┊10:15") {
+	axis := ansi.Strip(tl.Axis(minute(3)))
+	if !strings.Contains(axis, "┊10:15") || !strings.HasSuffix(axis, "now") {
 		t.Errorf("axis = %q", axis)
 	}
-	if p := ansi.Strip(tl.Pointer(minute(3))); strings.Index(p, "↑") != 13 {
-		t.Errorf("pointer = %q", p)
+	if i := strings.Index(axis, "▼"); len([]rune(axis[:i])) != 13 {
+		t.Errorf("the mark is not over minute 3: %q", axis)
+	}
+}
+
+// Waiting weighs more than working, so that it stands out.
+func TestWaitingIsHeaviest(t *testing.T) {
+	if stateGlyphs[StateWaiting] != '█' || stateGlyphs[StateWorking] != '▄' {
+		t.Errorf("waiting is %q and working %q", stateGlyphs[StateWaiting], stateGlyphs[StateWorking])
 	}
 }

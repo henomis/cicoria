@@ -21,7 +21,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/henomis/cicoria/internal/agent"
@@ -113,7 +112,7 @@ func (m *Model) openTimelineOn(s *session.Session) tea.Cmd {
 	m.timeline.frame = barFrame{}
 	_, _, lines := m.timelineData(time.Now())
 	for _, e := range lines {
-		if s != nil && e.id == s.ID && !e.now || s == nil && e.now && strings.HasPrefix(e.text, "▲") {
+		if s != nil && e.id == s.ID && !e.now || s == nil && e.kind == '▲' {
 			m.timeline.sel = e.key()
 			break
 		}
@@ -231,7 +230,7 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	for _, id := range ids {
 		width = max(width, ansi.StringWidth(name(id)))
 	}
-	t := ui.Timeline{From: from, Now: now, Width: m.width, LabelWidth: min(width, 16) + 4}
+	t := ui.Timeline{From: from, Now: now, Width: m.width, LabelWidth: min(width, 16) + 5}
 	t.From, t.Step = m.layOut(from, now, t.Cells())
 
 	var lanes []lane
@@ -252,7 +251,7 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 		}
 		for _, c := range m.timeline.commits[id] {
 			if !c.When.Before(from) {
-				log = append(log, entry{at: c.When, id: id, name: l.name, text: "◆ commit " + c.Short + " " + c.Subject})
+				log = append(log, entry{at: c.When, id: id, name: l.name, kind: '◆', text: "commit " + c.Short + " " + c.Subject, span: ui.Period{From: c.When, To: c.When}})
 				said++
 			}
 		}
@@ -399,7 +398,7 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 		// The next session that waits for you, round the list.
 		var waits []int
 		for k, e := range lines {
-			if e.now && strings.HasPrefix(e.text, "▲") {
+			if e.kind == '▲' {
 				waits = append(waits, k)
 			}
 		}
@@ -482,47 +481,61 @@ func (m *Model) timelineTitle(now time.Time) string {
 }
 
 // renderTimeline draws the timeline over the whole screen but the status
-// bar: the bars of the sessions; what needs you or works now; the log of
-// what you did, the newest first; and what is left for you.
+// bar: what time it shows and what it comes to; the bars of the sessions;
+// what needs you or works now; and the log of what you did, the newest
+// first. A rule with the legend closes it.
 func (m *Model) renderTimeline() []string {
 	height := max(m.height-1, 2)
 	now := time.Now()
 	t, lanes, lines := m.timelineData(now)
 	i := m.cursor(lines)
-
-	header := " timeline  " + m.timelineTitle(now)
-	var waits []string
-	for _, l := range lanes {
-		if l.waiting() {
-			waits = append(waits, l.name+" ▲ waits "+lasting(l.s))
-		}
+	var sel *entry
+	if i >= 0 {
+		sel = &lines[i]
 	}
-	right := strings.Join(waits, " · ") + " "
-	pad := max(m.width-ansi.StringWidth(header)-ansi.StringWidth(right), 1)
-	rows := []string{ui.Reverse.Render(ui.Fit(header+strings.Repeat(" ", pad)+right, m.width))}
+
+	rows := []string{ui.Reverse.Render(ui.Fit(m.timelineHeader(t, lanes, now), m.width))}
 
 	if m.width >= timelineNarrow && len(lanes) > 0 {
-		bars := make([]ui.Bar, len(lanes))
-		labels := make([]*lipgloss.Style, len(lanes))
-		for k, l := range lanes {
+		// The bars take at most half of the screen; those that wait for
+		// you and the one of the line under the cursor stay.
+		fits := max((height-6)/2, 1)
+		var shown []lane
+		for _, l := range lanes {
+			if len(shown) < fits-1 || l.waiting() || sel != nil && l.id == sel.id {
+				shown = append(shown, l)
+			}
+		}
+		if len(shown) == len(lanes)-1 && len(shown) < fits {
+			shown = lanes
+		}
+		var at time.Time
+		if sel != nil {
+			at = sel.span.From
+			if at.IsZero() {
+				at = sel.at
+			}
+		}
+		rows = append(rows, t.Axis(at))
+		bars := make([]ui.Bar, len(shown))
+		for k, l := range shown {
 			label := l.name
 			if l.s != nil {
-				label = ui.Fit(l.name, t.LabelWidth-4) + " " + statusGlyph(l.s)
+				mark := " "
+				if !l.s.Adapter.ReportsStatus() {
+					mark = "~"
+				}
+				label = ui.Fit(l.name, t.LabelWidth-5) + " " + statusGlyph(l.s) + mark
 			}
 			bars[k] = ui.Bar{Label: label, Periods: l.periods, Dim: l.s == nil}
-			if i >= 0 && l.id == lines[i].id {
-				labels[k] = &ui.Bold
+			if sel != nil && l.id == sel.id {
+				bars[k].Selected, bars[k].Span = true, sel.span
 			}
 		}
-		// The bars take at most half of the screen.
-		bars = bars[:min(len(bars), max((height-6)/2, 1))]
-		rows = append(rows, t.Axis())
-		rows = append(rows, t.Render(bars, labels)...)
-		var at time.Time
-		if i >= 0 {
-			at = lines[i].at
+		rows = append(rows, t.Render(bars)...)
+		if more := len(lanes) - len(shown); more > 0 {
+			rows = append(rows, ui.Dim.Render(ui.Fit(fmt.Sprintf(" +%d more, quiet or not in sight", more), m.width)))
 		}
-		rows = append(rows, t.Pointer(at))
 	}
 	rule := ui.Dim.Render(strings.Repeat("─", max(m.width, 0)))
 	rows = append(rows, rule)
@@ -540,22 +553,26 @@ func (m *Model) renderTimeline() []string {
 		case now.Sub(e.at) > 20*time.Hour:
 			when = e.at.Format("Mon 15:04")
 		}
-		text, outcome := e.text, e.outcome
+		kind, text, outcome := string(e.kind), e.text, e.outcome
 		if k != i {
 			switch {
-			case e.now && strings.HasPrefix(text, "▲"):
-				text = ui.Warn.Render(text)
-			case e.bad && outcome == "":
-				text = ui.Bad.Render(text)
+			case e.kind == '▲':
+				kind, text = ui.Warn.Render(kind), ui.Warn.Render(text)
+			case e.kind == '✕':
+				kind, text = ui.Bad.Render(kind), ui.Bad.Render(text)
 			case e.bad:
 				outcome = ui.Bad.Render(outcome)
+			case e.kind == '◆' || e.kind == '●':
+				kind, text = ui.Dim.Render(kind), ui.Dim.Render(text)
+			default:
+				kind = ui.Accent.Render(kind)
 			}
 		}
 		lead := " "
 		if k == i {
 			lead = "▸"
 		}
-		return ui.Selected(lead+when+" "+ui.Fit(e.name, nameW)+"  "+text+outcome, m.width, k == i, true)
+		return ui.Selected(lead+when+" "+ui.Fit(e.name, nameW)+" "+kind+" "+text+outcome, m.width, k == i, true)
 	}
 
 	// What needs you or works now stays in sight.
@@ -573,11 +590,10 @@ func (m *Model) renderTimeline() []string {
 	// What the agent said at the end of the turn of the line under the
 	// cursor is under it.
 	said := ""
-	if i >= first && i < len(lines) && lines[i].said != "" {
-		said = ui.Dim.Render(ui.Fit(strings.Repeat(" ", 8+nameW)+"it said: "+lines[i].said, m.width))
+	if i >= first && sel != nil && sel.said != "" {
+		said = ui.Dim.Render(ui.Fit(strings.Repeat(" ", 10+nameW)+"it said: "+sel.said, m.width))
 	}
-	block := max(height-len(rows)-2, 1)
-	room := block
+	room := max(height-len(rows)-1, 1)
 	if said != "" {
 		room = max(room-1, 1)
 	}
@@ -594,8 +610,12 @@ func (m *Model) renderTimeline() []string {
 			out = append(out, said)
 		}
 	}
-	rows = append(rows, ui.Block(out, m.width, block)...)
-	rows = append(rows, rule, ui.Fit(m.timelineSummary(t, lanes, now), m.width))
+	rows = append(rows, out...)
+	rows = append(rows, m.timelineLegend())
+	// The rest of the screen is empty, under the legend.
+	for len(rows) < height {
+		rows = append(rows, "")
+	}
 	rows = rows[:min(len(rows), height)]
 
 	if m.timeline.turn != nil {
@@ -605,9 +625,15 @@ func (m *Model) renderTimeline() []string {
 	return rows
 }
 
-// timelineSummary says how long agents waited for you in the time shown,
-// and what is left for you to do.
-func (m *Model) timelineSummary(t ui.Timeline, lanes []lane, now time.Time) string {
+// timelineHeader says what time the timeline shows, how long agents waited
+// for you in it, and what else is left for you: notes not sent, messages
+// queued. Who waits now is said under the bars.
+func (m *Model) timelineHeader(t ui.Timeline, lanes []lane, now time.Time) string {
+	from := m.timelineFrom(now)
+	parts := []string{" timeline  " + from.Format("15:04") + " → now, " + span(now.Sub(from))}
+	if m.timeline.rng == sinceAway && !m.awayFrom.IsZero() && now.Sub(m.awayFrom) >= minRange {
+		parts[0] += ", since you were away"
+	}
 	var waited time.Duration
 	for _, l := range lanes {
 		for _, p := range l.periods {
@@ -623,9 +649,8 @@ func (m *Model) timelineSummary(t ui.Timeline, lanes []lane, now time.Time) stri
 			}
 		}
 	}
-	var sums []string
 	if waited >= time.Minute {
-		sums = append(sums, "agents waited for you "+span(waited))
+		parts = append(parts, "agents waited for you "+span(waited))
 	}
 	var notes, queued int
 	for _, s := range m.sessions {
@@ -633,16 +658,27 @@ func (m *Model) timelineSummary(t ui.Timeline, lanes []lane, now time.Time) stri
 		queued += len(s.Queue)
 	}
 	if notes > 0 {
-		sums = append(sums, fmt.Sprintf("%d note(s) not sent", notes))
+		parts = append(parts, fmt.Sprintf("%d note(s) not sent", notes))
 	}
 	if queued > 0 {
-		sums = append(sums, fmt.Sprintf("%d message(s) queued", queued))
+		parts = append(parts, fmt.Sprintf("%d message(s) queued", queued))
 	}
-	legend := ui.Dim.Render(" · █ working ▲ waits for you ─ idle ✓ done ✕ failed")
-	if len(sums) == 0 {
-		return ui.Dim.Render(" nothing else is left for you") + legend
+	return strings.Join(parts, " · ")
+}
+
+// timelineLegend is the rule under the timeline, with what the bars and
+// the marks of the lines mean, as much of it as fits.
+func (m *Model) timelineLegend() string {
+	legend := " ▄ working █ waits for you ─ idle ✓ done ✕ failed ~ guessed · › message ↵ answer ? ask □ card ◆ commit "
+	w := ansi.StringWidth(legend)
+	if w+4 > m.width {
+		legend = " ▄ working █ waits ─ idle ✓ done ✕ failed "
+		w = ansi.StringWidth(legend)
 	}
-	return " " + strings.Join(sums, " · ") + legend
+	if w+4 > m.width {
+		return ui.Dim.Render(strings.Repeat("─", max(m.width, 0)))
+	}
+	return ui.Dim.Render("──" + legend + strings.Repeat("─", m.width-w-2))
 }
 
 // statusGlyph is the status mark of a session without its colour.

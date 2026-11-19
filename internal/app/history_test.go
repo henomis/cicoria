@@ -173,7 +173,7 @@ func TestTimelineRenders(t *testing.T) {
 	m.openTimeline()
 	out := ansi.Strip(strings.Join(m.renderTimeline(), "\n"))
 	t.Log("\n" + out)
-	for _, want := range []string{"api", "docs", "▲", "✓", "answered “Yes” · it waited 15m", "queued “add pagination”", "closed it", "typed “fix it” → done in 14m, 1 file"} {
+	for _, want := range []string{"api", "docs", "█", "✓", "agents waited for you 15m", "now", "answered “Yes” · it waited 15m", "queued “add pagination”", "closed it", "typed “fix it” → done in 14m, 1 file"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the timeline does not show %q", want)
 		}
@@ -350,7 +350,7 @@ func TestNowLines(t *testing.T) {
 	if len(lines) < 2 || !lines[0].now || !lines[1].now {
 		t.Fatalf("lines = %s", texts(lines))
 	}
-	if want := "▲ waits for you 5m: “Claude needs your permission to use Bash: npm test”"; lines[0].text != want {
+	if want := "waits for you 5m: “Claude needs your permission to use Bash: npm test”"; lines[0].kind != '▲' || lines[0].text != want {
 		t.Errorf("waiting line = %q, want %q", lines[0].text, want)
 	}
 	if !strings.Contains(lines[1].text, "working 9m on “use the Button”") {

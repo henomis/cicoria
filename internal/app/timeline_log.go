@@ -30,7 +30,12 @@ import (
 type entry struct {
 	at       time.Time
 	id, name string
-	text     string
+	// kind is the mark of what it is, as ▲ for a session that waits, and
+	// text what it says.
+	kind rune
+	text string
+	// span is the time it is about, lit on its bar under the cursor.
+	span ui.Period
 	// outcome is what came of it, as " → done in 12m, 3 files", and said
 	// what the agent said at the end of that turn.
 	outcome, said string
@@ -54,10 +59,12 @@ func (e entry) key() entryKey {
 	return entryKey{e.at, e.id, e.text}
 }
 
-// result is what came of a turn.
+// result is what came of a turn, and the time from its start to its end,
+// which is zero while it goes on.
 type result struct {
 	text, said string
 	bad        bool
+	from, to   time.Time
 }
 
 // quoted returns the kept text of an event between quotes, if any.
@@ -138,32 +145,39 @@ func (l lane) turnResult(j int, now time.Time) result {
 	began := l.events[j].T
 	for _, f := range l.events[j+1:] {
 		took := span(f.T.Sub(began))
+		r := result{from: began, to: f.T}
 		switch f.K {
 		case session.KindTurnEnd:
-			text := " → done in " + took
+			r.text, r.said = " → done in "+took, f.X
 			if n := len(f.Files); n == 1 {
-				text += ", 1 file"
+				r.text += ", 1 file"
 			} else if n > 1 {
-				text += fmt.Sprintf(", %d files", n)
+				r.text += fmt.Sprintf(", %d files", n)
 			}
-			return result{text: text, said: f.X}
+			return r
 		case session.KindTurnFailed:
-			return result{text: " → ✕ failed after " + took, bad: true}
+			r.text, r.bad = " → ✕ failed after "+took, true
+			return r
 		case session.KindInterrupted:
-			return result{text: " → you stopped it after " + took}
+			r.text = " → you stopped it after " + took
+			return r
 		case session.KindTurnStart, session.KindSessionClose:
-			return result{text: " → ran " + took}
+			r.text = " → ran " + took
+			return r
 		}
 	}
+	r := result{from: began}
 	switch {
 	case l.s == nil:
 		return result{}
 	case l.s.Status == agent.NeedsInput:
-		return result{text: fmt.Sprintf(" → worked %s, waits for you since %s", span(l.s.Since.Sub(began)), l.s.Since.Format("15:04"))}
+		r.text = fmt.Sprintf(" → worked %s, waits for you since %s", span(l.s.Since.Sub(began)), l.s.Since.Format("15:04"))
 	case l.s.Status == agent.Working:
-		return result{text: " → working, " + span(now.Sub(began)) + " so far"}
+		r.text = " → working, " + span(now.Sub(began)) + " so far"
+	default:
+		return result{}
 	}
-	return result{}
+	return r
 }
 
 // outcome says what came of the message of event k: how the turn it
@@ -211,17 +225,21 @@ func (l lane) near(k int, kind session.Kind, ok func(session.Event) bool) int {
 // or something that went wrong that no line of yours says.
 func (l lane) say(k int, name func(id string) string, now time.Time) (entry, bool) {
 	e := l.events[k]
-	line := entry{at: e.T, id: l.id, name: l.name}
+	line := entry{at: e.T, id: l.id, name: l.name, kind: '›', span: ui.Period{From: e.T, To: e.T}}
 	web := ""
 	if e.Src == session.FromWeb {
 		web = " from the web"
 	}
 	with := func(text string, r result) (entry, bool) {
-		line.text, line.outcome, line.said, line.bad = text, r.text, r.said, r.bad
+		line.text, line.outcome, line.said, line.bad = text, r.text, r.said, line.bad || r.bad
+		if !r.from.IsZero() {
+			line.span = ui.Period{From: r.from, To: r.to}
+		}
 		return line, true
 	}
 	switch e.K {
 	case session.KindAnswer:
+		line.kind = '↵'
 		text := "answered"
 		if e.V != "" {
 			text += " “" + e.V + "”"
@@ -230,8 +248,11 @@ func (l lane) say(k int, name func(id string) string, now time.Time) (entry, boo
 		// How long the agent waited for it.
 		for j := k - 1; j >= 0; j-- {
 			if p := l.events[j]; p.K == session.KindStatus {
-				if p.V == "needs input" && e.T.Sub(p.T) >= time.Minute {
-					text += " · it waited " + span(e.T.Sub(p.T))
+				if p.V == "needs input" {
+					line.span.From = p.T
+					if e.T.Sub(p.T) >= time.Minute {
+						text += " · it waited " + span(e.T.Sub(p.T))
+					}
 				}
 				break
 			}
@@ -262,12 +283,14 @@ func (l lane) say(k int, name func(id string) string, now time.Time) (entry, boo
 		case fromNotes:
 			text = verb + " review notes" + web
 		case fromAsk:
+			line.kind = '?'
 			if e.To != "" {
 				text = "asked" + quoted(e) + " from " + name(e.To)
 			} else {
 				text = "got" + quoted(e) + " from another session"
 			}
 		case fromAnswer:
+			line.kind = '‹'
 			text = "got the answer it asked another session for"
 		default:
 			what := quoted(e)
@@ -281,16 +304,20 @@ func (l lane) say(k int, name func(id string) string, now time.Time) (entry, boo
 		}
 		return with(text, l.outcome(k, now))
 	case session.KindInterrupted:
+		line.kind = 'x'
 		return with("stopped the turn"+web, result{})
 	case session.KindUnqueue:
+		line.kind = '‹'
 		return with("took back"+quoted(e)+web, result{})
 	case session.KindWorktreeAdd:
 		// A card started in a worktree says it.
 		if l.near(k, session.KindCardStart, nil) >= 0 {
 			return entry{}, false
 		}
+		line.kind = 'o'
 		return with("made the worktree "+tilde(e.V), result{})
 	case session.KindCardStart:
+		line.kind = '□'
 		text := "started the card “" + e.V + "”"
 		if w := l.near(k, session.KindWorktreeAdd, nil); w >= 0 {
 			text += " in " + tilde(l.events[w].V)
@@ -307,13 +334,14 @@ func (l lane) say(k int, name func(id string) string, now time.Time) (entry, boo
 				if l.causeOf(j) >= 0 {
 					return entry{}, false
 				}
-				line.bad = true
-				return with("✕ a turn failed after "+span(e.T.Sub(l.events[j].T)), result{bad: true})
+				line.kind, line.bad = '✕', true
+				return with("a turn failed after "+span(e.T.Sub(l.events[j].T)), result{from: l.events[j].T, to: e.T})
 			}
 		}
-		line.bad = true
-		return with("✕ a turn failed", result{bad: true})
+		line.kind, line.bad = '✕', true
+		return with("a turn failed", result{})
 	case session.KindSessionClose:
+		line.kind = '○'
 		return with("closed it", result{})
 	}
 	return entry{}, false
@@ -355,16 +383,18 @@ func nowLines(lanes []lane, now time.Time) []entry {
 		if s == nil {
 			continue
 		}
-		line := entry{at: now, id: l.id, name: l.name, now: true}
+		line := entry{at: now, id: l.id, name: l.name, now: true, span: ui.Period{From: s.Since}}
 		switch s.Status {
 		case agent.NeedsInput:
-			line.text = "▲ waits for you " + span(now.Sub(s.Since))
+			line.kind = '▲'
+			line.text = "waits for you " + span(now.Sub(s.Since))
 			if q := question(s); q != "" {
 				line.text += ": “" + q + "”"
 			}
 			waiting = append(waiting, line)
 		case agent.Working:
-			line.text = "● working " + span(now.Sub(s.Since))
+			line.kind = '●'
+			line.text = "working " + span(now.Sub(s.Since))
 			// On what: the message of the turn under way.
 			for j := len(l.events) - 1; j >= 0; j-- {
 				if l.events[j].K == session.KindTurnStart {
