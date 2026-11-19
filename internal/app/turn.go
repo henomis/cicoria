@@ -72,7 +72,7 @@ func (m *Model) turnAt(l lane, at, now time.Time) *turnView {
 	}
 	// An agent that does not say when it works has turns of its output.
 	if len(turns) == 0 {
-		for _, p := range l.ui.Periods {
+		for _, p := range l.periods {
 			if p.State == ui.StateWorking {
 				tv := &turnView{id: l.id, name: l.name, start: p.From, end: p.To, open: p.To.IsZero(), guessed: true}
 				if tv.open {

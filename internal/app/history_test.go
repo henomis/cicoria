@@ -21,6 +21,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/henomis/cicoria/internal/agent"
 	"github.com/henomis/cicoria/internal/config"
@@ -169,9 +170,9 @@ func TestTimelineRenders(t *testing.T) {
 	}
 	m := timelineModel(t, 100, 24)
 	m.openTimeline()
-	out := strings.Join(m.renderTimeline(), "\n")
+	out := ansi.Strip(strings.Join(m.renderTimeline(), "\n"))
 	t.Log("\n" + out)
-	for _, want := range []string{"api", "docs", "▲", "✓"} {
+	for _, want := range []string{"api", "docs", "▲", "✓", "answered “Yes” · it waited 15m", "queued “add pagination”", "closed it"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the timeline does not show %q", want)
 		}
@@ -188,14 +189,16 @@ func TestTimelineKeys(t *testing.T) {
 		r := []rune(k)
 		m.timelineKey(tea.KeyPressMsg{Code: r[0], Text: k})
 	}
-	// h picks the last thing the user did on the lane.
-	key("h")
-	if m.timeline.at.IsZero() {
-		t.Fatal("h picked nothing")
+	_, _, entries := m.timelineData(time.Now())
+	// The newest first: docs closed, then api answered.
+	if len(entries) != 3 || m.cursor(entries) != 0 {
+		t.Fatalf("entries = %+v", entries)
 	}
-	if !strings.Contains(strings.Join(m.renderTimeline(), "\n"), "Yes") {
-		t.Error("the footer does not say what was answered")
+	key("j")
+	if m.cursor(entries) != 1 || !strings.Contains(entries[1].text, "Yes") {
+		t.Fatalf("j moved to %d", m.cursor(entries))
 	}
+	// The answer led to the turn that followed it.
 	key("d")
 	if tv := m.timeline.turn; tv == nil || len(tv.files) != 1 || tv.said != "done" {
 		t.Fatalf("turn = %+v", m.timeline.turn)
@@ -204,10 +207,20 @@ func TestTimelineKeys(t *testing.T) {
 	if m.timeline.turn != nil {
 		t.Error("q did not close the turn")
 	}
-	zoom := m.timeline.zoom
 	key("-")
-	if m.timeline.zoom != min(zoom+1, len(timelineZooms)-1) {
-		t.Error("- did not zoom out")
+	// An hour shown, so a longer time is two.
+	if m.timeline.rng != 2 {
+		t.Errorf("- shows range %d, want two hours", m.timeline.rng)
+	}
+	key("+")
+	key("+")
+	key("+")
+	if m.timeline.rng != 0 {
+		t.Errorf("+ shows range %d, want the shortest", m.timeline.rng)
+	}
+	key("s")
+	if m.timeline.rng != sinceAway {
+		t.Error("s did not go back to the time since you left")
 	}
 	key("q")
 	if m.mode != modeWorkspace {

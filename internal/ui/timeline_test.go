@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -43,26 +44,14 @@ func TestStatesKeepTheMostImportant(t *testing.T) {
 	}
 }
 
-func TestMarksShowPlusForMany(t *testing.T) {
-	tl := Timeline{From: tl0, Step: 5 * time.Minute, Now: minute(30), Width: 6}
-	got := tl.Marks([]Mark{
-		{At: minute(1), Glyph: 'm'}, {At: minute(2), Glyph: 'm'},
-		{At: minute(6), Glyph: 'm'}, {At: minute(7), Glyph: '↵'},
-		{At: minute(-1), Glyph: 'k'}, {At: minute(99), Glyph: 'k'},
-	})
-	if string(got[:2]) != "m+" || got[2] != 0 {
-		t.Errorf("marks = %q", string(got))
-	}
-}
-
 func TestRenderFitsWidth(t *testing.T) {
-	lanes := []Lane{
-		{Label: "api", Note: "▲ 38m", Periods: []Period{{From: minute(0), State: StateWorking}}, Marks: []Mark{{At: minute(3), Glyph: 'm'}}},
+	bars := []Bar{
+		{Label: "api", Periods: []Period{{From: minute(0), State: StateWorking}}},
 		{Label: "a-very-long-session-name", Dim: true},
 	}
 	for _, width := range []int{1, 20, 80, 160} {
-		tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: width, LabelWidth: min(10, width), Cell: 3}
-		rows := tl.Render(lanes)
+		tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: width, LabelWidth: min(10, width)}
+		rows := append(tl.Render(bars, []*lipgloss.Style{&Bold}), tl.Axis(), tl.Pointer(minute(3)))
 		if len(rows) != 4 {
 			t.Fatalf("width %d: %d rows", width, len(rows))
 		}
@@ -71,16 +60,16 @@ func TestRenderFitsWidth(t *testing.T) {
 				t.Errorf("width %d: row %d is %d wide", width, i, w)
 			}
 		}
-		if axis := tl.Axis(); ansi.StringWidth(axis) != width {
-			t.Errorf("width %d: axis is %d wide", width, ansi.StringWidth(axis))
-		}
 	}
 	tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: 80, LabelWidth: 10}
-	bar := ansi.Strip(tl.Render(lanes)[1])
+	bar := ansi.Strip(tl.Render(bars, nil)[0])
 	if !strings.Contains(bar, "███") || !strings.Contains(bar, "│") {
 		t.Errorf("bar = %q", bar)
 	}
 	if axis := ansi.Strip(tl.Axis()); !strings.Contains(axis, "┊10:15") {
 		t.Errorf("axis = %q", axis)
+	}
+	if p := ansi.Strip(tl.Pointer(minute(3))); strings.Index(p, "↑") != 13 {
+		t.Errorf("pointer = %q", p)
 	}
 }

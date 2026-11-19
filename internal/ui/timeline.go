@@ -18,14 +18,13 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 )
 
-// State is what a lane of the timeline shows in one cell, from the least
-// to the most important: a cell shows the most important state of its time.
+// State is what a bar of the timeline shows in one cell, from the least to
+// the most important: a cell shows the most important state of its time.
 type State int
 
-// The states of a lane.
+// The states of a bar.
 const (
 	StateNone State = iota
 	StateIdle
@@ -42,40 +41,24 @@ var (
 	stateStyles = [...]*lipgloss.Style{nil, &Dim, &Good, &Good, &Warn, &Bad}
 )
 
-// Period is a state a lane was in from From to To. A period whose To is zero
-// lasts until now; one whose To is From is a moment, as a turn ending.
+// Period is a state a session was in from From to To. A period whose To is
+// zero lasts until now; one whose To is From is a moment, as a turn ending.
 type Period struct {
 	From, To time.Time
 	State    State
 }
 
-// Mark is something that happened at a moment, drawn as one glyph above
-// the lane.
-type Mark struct {
-	At    time.Time
-	Glyph rune
+// Bar is one session on the timeline.
+type Bar struct {
+	// Label is drawn on its left, and Dim draws it all faded, as for a
+	// session that is closed.
+	Label   string
+	Periods []Period
+	Dim     bool
 }
 
-// MarkGlyphs are the glyphs of the marks, the most important first: of
-// several marks in one cell, the first of them here is shown.
-const MarkGlyphs = "↵mtkxo◆●"
-
-// manyMarks is shown in a cell with marks of more than one kind.
-const manyMarks = '+'
-
-// Lane is one session on the timeline.
-type Lane struct {
-	// Label is its name, and Note what is said under it, such as how long
-	// it has waited.
-	Label, Note string
-	Periods     []Period
-	Marks       []Mark
-	// Dim draws a lane of a session that is closed.
-	Dim bool
-}
-
-// Timeline is how the timeline is drawn: the time its first cell starts
-// at, how long each cell lasts, and now, after which nothing is drawn.
+// Timeline is how the bars are drawn: the time the first cell starts at,
+// how long each cell lasts, and now, after which nothing is drawn.
 type Timeline struct {
 	From time.Time
 	Step time.Duration
@@ -83,9 +66,6 @@ type Timeline struct {
 	// Width is the width of the whole drawing, and LabelWidth that of the
 	// labels on its left.
 	Width, LabelWidth int
-	// Lane is the lane under the cursor, and Cell the cell of it whose
-	// marks are selected, or -1.
-	Lane, Cell int
 }
 
 // Cells returns the number of cells of time the timeline has.
@@ -109,47 +89,28 @@ func (t Timeline) CellTime(cell int) time.Time {
 	return t.From.Add(time.Duration(cell) * t.Step)
 }
 
-// States returns the state of each cell of a lane.
-func (t Timeline) States(spans []Period) []State {
+// States returns the state of each cell of a bar.
+func (t Timeline) States(periods []Period) []State {
 	cells := make([]State, t.Cells())
 	last := min(t.CellAt(t.Now), len(cells)-1)
-	for _, sp := range spans {
-		to := sp.To
+	for _, p := range periods {
+		to := p.To
 		if to.IsZero() {
 			to = t.Now
 		}
-		first, end := max(t.CellAt(sp.From), 0), min(t.CellAt(to), last)
+		first, end := max(t.CellAt(p.From), 0), min(t.CellAt(to), last)
 		// A period that ended where a cell starts does not reach into it.
-		if !sp.To.IsZero() && to.After(sp.From) && end >= 0 && t.CellTime(end).Equal(to) {
+		if !p.To.IsZero() && to.After(p.From) && end >= 0 && t.CellTime(end).Equal(to) {
 			end--
 		}
 		for c := first; c <= end; c++ {
-			cells[c] = max(cells[c], sp.State)
+			cells[c] = max(cells[c], p.State)
 		}
 	}
 	return cells
 }
 
-// Marks returns the glyph of the marks in each cell of a lane, or 0 where
-// it has none.
-func (t Timeline) Marks(marks []Mark) []rune {
-	cells := make([]rune, t.Cells())
-	for _, mk := range marks {
-		c := t.CellAt(mk.At)
-		if c < 0 || c >= len(cells) {
-			continue
-		}
-		switch cells[c] {
-		case 0, mk.Glyph:
-			cells[c] = mk.Glyph
-		default:
-			cells[c] = manyMarks
-		}
-	}
-	return cells
-}
-
-// Axis returns the row of times above the lanes.
+// Axis returns the row of times above the bars.
 func (t Timeline) Axis() string {
 	n := t.Cells()
 	row := []rune(Fit("", t.Width))
@@ -159,7 +120,7 @@ func (t Timeline) Axis() string {
 		first = first.Add(tick)
 	}
 	format := "15:04"
-	if t.Step >= time.Hour {
+	if t.Step*time.Duration(n) > 24*time.Hour {
 		format = "Mon 15h"
 	}
 	for at := first; t.CellAt(at) < n; at = at.Add(tick) {
@@ -177,8 +138,8 @@ func (t Timeline) Axis() string {
 // step: a round time, about every dozen cells.
 func axisTick(step time.Duration) time.Duration {
 	for _, d := range []time.Duration{
-		10 * time.Minute, 15 * time.Minute, 30 * time.Minute, time.Hour,
-		2 * time.Hour, 3 * time.Hour, 6 * time.Hour, 12 * time.Hour, 24 * time.Hour,
+		time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 15 * time.Minute,
+		30 * time.Minute, time.Hour, 2 * time.Hour, 3 * time.Hour, 6 * time.Hour, 12 * time.Hour,
 	} {
 		if d >= 12*step {
 			return d
@@ -187,59 +148,44 @@ func axisTick(step time.Duration) time.Duration {
 	return 24 * time.Hour
 }
 
-// Render draws the lanes: two rows for each, its marks above its states.
-func (t Timeline) Render(lanes []Lane) []string {
+// Render draws the bars, one row each, with label styles given for the
+// label of each: the label of a bar is drawn as it is when its style is
+// nil.
+func (t Timeline) Render(bars []Bar, labels []*lipgloss.Style) []string {
 	n := t.Cells()
 	now := t.CellAt(t.Now)
-	var rows []string
-	for i, lane := range lanes {
-		cursor := i == t.Lane
-		label, note := " "+lane.Label, " "+lane.Note
-		if cursor {
-			label = "▸" + lane.Label
-		}
-		labelStyle, noteStyle := lipgloss.NewStyle(), Dim
-		switch {
-		case lane.Dim:
-			labelStyle = Dim
-		case cursor:
-			labelStyle = Bold
-		}
-
-		top, bottom := newCanvas(n, 1), newCanvas(n, 1)
-		for c, g := range t.Marks(lane.Marks) {
-			st := &Accent
-			if lane.Dim {
-				st = &Dim
-			}
-			if cursor && c == t.Cell {
-				st = &Reverse
-				if g == 0 {
-					g = ' '
-				}
-			}
-			if g != 0 {
-				top.put(c, 0, g, st)
-			}
-		}
-		for c, s := range t.States(lane.Periods) {
+	rows := make([]string, 0, len(bars))
+	for i, bar := range bars {
+		c := newCanvas(n, 1)
+		for x, s := range t.States(bar.Periods) {
 			st := stateStyles[s]
-			if lane.Dim && st != nil {
+			if bar.Dim && st != nil {
 				st = &Dim
 			}
-			bottom.put(c, 0, stateGlyphs[s], st)
+			c.put(x, 0, stateGlyphs[s], st)
 		}
-		// Now is where the lanes end.
+		// Now is where the bars end.
 		if now >= 0 && now+1 < n {
-			bottom.put(now+1, 0, '│', &Dim)
+			c.put(now+1, 0, '│', &Dim)
 		}
-		rows = append(rows,
-			labelStyle.Render(Fit(label, t.LabelWidth))+top.rows()[0],
-			noteStyle.Render(Fit(note, t.LabelWidth))+bottom.rows()[0],
-		)
-	}
-	for i := range rows {
-		rows[i] = ansi.Truncate(rows[i], t.Width, "")
+		label := Fit(" "+bar.Label, t.LabelWidth)
+		if i < len(labels) && labels[i] != nil {
+			label = labels[i].Render(label)
+		}
+		rows = append(rows, label+c.rows()[0])
 	}
 	return rows
+}
+
+// Pointer returns a row with an arrow under the cell a moment falls in, or
+// an empty row when it is outside of the timeline.
+func (t Timeline) Pointer(at time.Time) string {
+	row := Fit("", t.Width)
+	c := t.CellAt(at)
+	if at.IsZero() || c < 0 || c >= t.Cells() {
+		return row
+	}
+	runes := []rune(row)
+	runes[t.LabelWidth+c] = '↑'
+	return Accent.Render(string(runes))
 }

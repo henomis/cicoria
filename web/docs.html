@@ -383,32 +383,32 @@ and add a test for it.</pre>
 
     <section id="timeline">
       <h2>Timeline</h2>
-      <p><kbd>ctrl+a</kbd> <kbd>e</kbd> shows on the whole screen what happened in the workspace, and what you did, so you do not have to read the agents' consoles to find out. <kbd>e</kbd> on a session of the board opens it on that session.</p>
-      <p>Each session is a lane over time. Its bar is what the agent did: █ working, ▲ waiting for you, ─ idle, ✓ a turn that ended, ✕ one that failed, and nothing while cicoria was closed. Above the bar are marks for what you did:</p>
-      <div class="table"><table>
-        <thead><tr><th>Mark</th><th>What you did</th></tr></thead>
-        <tbody>
-          <tr><td>↵</td><td>Answered a question or a permission, in the terminal or from the web, with the choice you picked</td></tr>
-          <tr><td>m</td><td>Queued or sent a message, or typed a prompt into the agent's pane</td></tr>
-          <tr><td>t</td><td>Sent review notes</td></tr>
-          <tr><td>k</td><td>Asked another session, or got its answer</td></tr>
-          <tr><td>x</td><td>Stopped a turn</td></tr>
-          <tr><td>o</td><td>Made a worktree</td></tr>
-          <tr><td>◆</td><td>Started a card of the backlog</td></tr>
-          <tr><td>●</td><td>A commit, by you or by the agent</td></tr>
-          <tr><td>+</td><td>Several of these in one cell</td></tr>
-        </tbody>
-      </table></div>
-      <p>It opens on the time since you were last away, at least an hour: since the last pause of ten minutes without a key, or since cicoria was closed. Sessions waiting for you come first; sessions with nothing in that time are folded into one line, which <kbd>enter</kbd> opens. A closed session keeps a dim lane while its history is in sight.</p>
+      <p><kbd>ctrl+a</kbd> <kbd>e</kbd> shows on the whole screen what happened in the workspace, and what you did, so you do not have to read the agents' consoles to find out. <kbd>e</kbd> on a session of the board opens it with the cursor on what you last did there.</p>
+      <pre> timeline  since you left at 11:46                      api ▲ waits 5m
+              ┊12:00          ┊12:30          ┊13:00          ┊13:30
+ api  ▲ ██████████▲▲▲▲████████████✓─────██████████✓──────────────███▲▲
+ web  ●     ███████████████✓─────────────────█████████✕──────████████
+ docs ○  ────────────███✓─────────────────────────────────────────────
+                                                                    ↑
+──────────────────────────────────────────────────────────────────────
+▸14:06 api   typed a prompt
+ 13:11 web   ✕ the turn failed after 14m
+ 12:48 api   sent review notes
+ 12:34 api   ● commit a1c3f2e paginate GET /orders
+ 12:12 api   answered “Yes” · it waited 6m
+ 11:56 web   started the card “login form”
+ 11:47 api   queued “add pagination to GET /orders”
+──────────────────────────────────────────────────────────────────────
+ agents waited for you 11m · 1 wait now</pre>
+      <p>At the top, a bar for each session over the time shown: █ working, ▲ waiting for you, ─ idle, ✓ a turn that ended, ✕ one that failed, and nothing while cicoria was closed. Sessions that did nothing in that time are left out. Under the bars, the log of what you did, the newest first, in words: answers, with the choice and how long the agent waited for it; messages queued and sent, and review notes; what you asked one session from another; turns you stopped and prompts you typed; cards started and their worktrees. Failed turns and commits are in it too. An arrow under the bars points at the time of the line under the cursor.</p>
+      <p>It opens on the time since you were last away: since the last pause of ten minutes without a key, or since cicoria was closed, and at least half an hour.</p>
       <div class="table"><table>
         <thead><tr><th>Key, on the timeline</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td>j k</td><td>Go from lane to lane</td></tr>
-          <tr><td>h l</td><td>Go from mark to mark on the lane; the line under the lanes says what each mark of the cell is</td></tr>
-          <tr><td>d</td><td>Show the turn there: what it was for, how long it took, the files the agent changed through its tools, the commits made in it and what the agent said at its end. <kbd>enter</kbd> opens a file or a commit</td></tr>
-          <tr><td>enter m</td><td>Go to the session; queue a message for it</td></tr>
-          <tr><td>+ -</td><td>Zoom in and out, from a minute to an hour a cell</td></tr>
-          <tr><td>H L G s</td><td>Scroll back, forth, back to now, to the time since you were away</td></tr>
+          <tr><td>j k, g G</td><td>Move in the log; go to its newest, its oldest line</td></tr>
+          <tr><td>d</td><td>Show the turn of the line: what it was for, how long it took, the files the agent changed through its tools, the commits made in it and what the agent said at its end. <kbd>enter</kbd> opens a file or a commit</td></tr>
+          <tr><td>enter m a</td><td>Go to the session of the line; queue a message for it; go to the next session that needs you</td></tr>
+          <tr><td>+ - s</td><td>Show a shorter, a longer time, from half an hour to a week; the time since you were away</td></tr>
           <tr><td>q esc</td><td>Back, as <kbd>ctrl+a</kbd> <kbd>e</kbd> is</td></tr>
         </tbody>
       </table></div>

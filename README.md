@@ -20,7 +20,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Shows two sessions at once**, one above the other.
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Keeps a backlog on a board**: cards you write for work not started yet, next to every session in a column for what it needs from you. A card becomes a session only when you start it.
-- **Draws a timeline of what happened, and what you did**: a lane per session, what its agent did over time and marks for each answer, message, note and commit of yours, so you know where you stand without reading the agents' consoles, and see how long they waited for you.
+- **Draws a timeline of what happened, and what you did**: a bar per session for what its agent did over time, and under it a log in words of each answer, message, note and question of yours, so you know where you stand without reading the agents' consoles, and how long they waited for you.
 - **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
 - **Follows you on your phone**: a web cockpit, turned on when you want it, puts first the sessions that need you and what they ask, shows what each agent said last and its changes, and takes your answers and queued messages, or only queued messages for a session you share to watch.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
@@ -222,25 +222,15 @@ Each card is drawn in a frame of its own, lit when the cursor is on it. A card o
 
 ## Timeline
 
-`ctrl+a e` shows on the whole screen what happened in the workspace, and what you did, so you do not have to read the agents' consoles to find out. `e` on a session of the board opens it on that session.
+`ctrl+a e` shows on the whole screen what happened in the workspace, and what you did, so you do not have to read the agents' consoles to find out. `e` on a session of the board opens it with the cursor on what you last did there.
 
-Each session is a lane over time. Its bar is what the agent did: `█` working, `▲` waiting for you, `─` idle, `✓` a turn that ended, `✕` one that failed, and nothing while cicoria was closed. Above the bar are marks for what you did:
+At the top, a bar for each session over time, stretched over the time shown: `█` working, `▲` waiting for you, `─` idle, `✓` a turn that ended, `✕` one that failed, and nothing while cicoria was closed. Sessions that did nothing in that time are left out.
 
-| Mark | What you did |
-|---|---|
-| `↵` | Answered a question or a permission, in the terminal or from the web, with the choice you picked |
-| `m` | Queued or sent a message, or typed a prompt into the agent's pane |
-| `t` | Sent review notes |
-| `k` | Asked another session, or got its answer |
-| `x` | Stopped a turn |
-| `o` | Made a worktree |
-| `◆` | Started a card of the backlog |
-| `●` | A commit, by you or by the agent |
-| `+` | Several of these in one cell |
+Under the bars, the log of what you did, the newest first, in words: the answers you gave, with the choice and how long the agent waited for it; the messages you queued and sent, with their start, and the review notes; what you asked one session from another; the turns you stopped and the prompts you typed in an agent's pane; the cards you started and the worktrees made for them. Turns that failed and commits are in it too. An arrow under the bars points at the time of the line under the cursor.
 
-It opens on the time since you were last away, at least an hour: since the last pause of ten minutes without a key, or since cicoria was closed. Sessions waiting for you come first; sessions with nothing in that time are folded into one line, which `enter` opens. A closed session keeps a dim lane while its history is in sight.
+It opens on the time since you were last away: since the last pause of ten minutes without a key, or since cicoria was closed, and at least half an hour. `+` and `-` show a shorter or a longer time, from half an hour to a week, and `s` the time since you were away again.
 
-`j`/`k` go from lane to lane, and `h`/`l` from mark to mark on a lane: the line under the lanes says what each mark of the cell is, such as the answer you chose or the start of the message you queued. `d` shows the turn there: what it was for, how long it took, the files the agent changed through its tools, the commits made in it, and what the agent said at its end; `enter` on a file or a commit opens it. `enter` goes to the session, and `m` queues a message for it. `+`/`-` zoom in and out, from a minute to an hour a cell, `H`/`L` scroll back and forth, `G` comes back to now and `s` to the time since you were away. Under the lanes, how long agents waited for you, and what is left: sessions that wait, notes not sent, messages queued. `q` or `esc` goes back.
+`j`/`k` move in the log, and `g`/`G` go to its newest and oldest line. `d` shows the turn of the line: what it was for, how long it took, the files the agent changed through its tools, the commits made in it, and what the agent said at its end; `enter` on a file or a commit opens it. `enter` goes to the session of the line, `m` queues a message for it and `a` goes to the next session that needs you. The last line says how long agents waited for you in that time, and what is left: sessions that wait, notes not sent, messages queued. `q` or `esc` goes back. A terminal narrower than 60 columns shows the log alone.
 
 The history is kept next to the saved sessions, in `events.jsonl`, readable only by you, for 30 days. Of the messages cicoria sends, queues and notes, it keeps the first 120 characters; of a prompt you type in an agent's pane, only that you typed one; keys never. `[timeline]` in the settings changes that. For an agent other than Claude Code, Copilot CLI and Codex CLI, turns are guessed from its output, and a burst shorter than two seconds is not kept.
 

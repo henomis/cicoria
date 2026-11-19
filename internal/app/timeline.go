@@ -21,6 +21,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/henomis/cicoria/internal/agent"
@@ -30,34 +31,32 @@ import (
 )
 
 const (
-	// timelineNarrow is the width under which the timeline is a list of
-	// what happened, and timelineWide the one from which its labels are
-	// wider.
+	// timelineNarrow is the width under which the timeline is the log of
+	// what you did alone, without the bars.
 	timelineNarrow = 60
-	timelineWide   = 100
-	// timelineFooter is how many rows are under the lanes.
-	timelineFooter = 3
+	// minRange is the shortest time the timeline shows.
+	minRange = 30 * time.Minute
 )
 
-// timelineZooms are how long a cell of the timeline can last.
-var timelineZooms = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour}
+// timelineRanges are the times the timeline can show, back from now, past
+// the time since you were away.
+var timelineRanges = []time.Duration{
+	30 * time.Minute, time.Hour, 2 * time.Hour, 4 * time.Hour, 8 * time.Hour, 24 * time.Hour, 7 * 24 * time.Hour,
+}
 
-// foldedLane is the lane cursor on the line of the quiet sessions.
-const foldedLane = "\x00folded"
+// sinceAway is the range of the time since you were away.
+const sinceAway = -1
 
 // timeline is what the timeline shows.
 type timeline struct {
 	// back is what it was opened from.
 	back mode
-	zoom int
-	// end is the time at its right edge, or zero while it follows now.
-	end time.Time
-	// on is the session whose lane has the cursor, and at the moment
-	// whose marks are picked, or zero.
-	on string
-	at time.Time
-	// unfold shows the quiet sessions too.
-	unfold bool
+	// rng is the time shown, one of timelineRanges or sinceAway.
+	rng int
+	// sel is the entry of the log under the cursor, and top the first one
+	// on screen.
+	sel entryKey
+	top int
 	// turn is the turn shown over the timeline, if any.
 	turn *turnView
 	// commits are those of each session since it started, by ID, and
@@ -69,26 +68,37 @@ type timeline struct {
 // timelineMsg carries the commits of every session.
 type timelineMsg struct{ commits map[string][]git.Commit }
 
-// lane is one session on the timeline.
+// lane is what the timeline knows of one session.
 type lane struct {
 	id   string
 	s    *session.Session
 	name string
-	ui   ui.Lane
-	// events are those of the session, the oldest first, and marks those
-	// shown in the timeline's time, each with what it says.
-	events []session.Event
-	marks  []laneMark
-	last   time.Time
-	quiet  bool
+	// events are those of the session, the oldest first, and periods what
+	// it did over time.
+	events  []session.Event
+	periods []ui.Period
 }
 
-// laneMark is a mark on a lane and what it stands for.
-type laneMark struct {
-	at    time.Time
-	glyph rune
-	text  string
+// waiting reports whether the session of a lane waits for you now.
+func (l lane) waiting() bool { return l.s != nil && l.s.Status == agent.NeedsInput }
+
+// entry is one line of the log of what you did.
+type entry struct {
+	at       time.Time
+	id, name string
+	text     string
+	// bad marks what went wrong, as a turn that failed.
+	bad bool
 }
+
+// entryKey says which entry of the log is under the cursor, wherever new
+// ones push it.
+type entryKey struct {
+	at time.Time
+	id string
+}
+
+func (e entry) key() entryKey { return entryKey{e.at, e.id} }
 
 // openTimeline shows the timeline, or goes back from it.
 func (m *Model) openTimeline() tea.Cmd {
@@ -96,21 +106,23 @@ func (m *Model) openTimeline() tea.Cmd {
 		m.closeTimeline()
 		return nil
 	}
-	return m.openTimelineOn(m.current())
+	return m.openTimelineOn(nil)
 }
 
-// openTimelineOn shows the timeline with the cursor on a session's lane.
+// openTimelineOn shows the timeline, with the cursor on the last thing done
+// in a session, when one is given.
 func (m *Model) openTimelineOn(s *session.Session) tea.Cmd {
 	m.timeline.back = modeWorkspace
 	if m.mode == modeBoard {
 		m.timeline.back = modeBoard
 	}
-	m.timeline.end, m.timeline.at, m.timeline.turn, m.timeline.unfold = time.Time{}, time.Time{}, nil, false
-	m.timeline.on = ""
+	m.timeline.rng, m.timeline.sel, m.timeline.top, m.timeline.turn = sinceAway, entryKey{}, 0, nil
 	if s != nil {
-		m.timeline.on = s.ID
+		_, _, entries := m.timelineData(time.Now())
+		if i := slices.IndexFunc(entries, func(e entry) bool { return e.id == s.ID }); i >= 0 {
+			m.timeline.sel = entries[i].key()
+		}
 	}
-	m.timeline.zoom = m.fitZoom(time.Now())
 	m.mode = modeTimeline
 	return m.pollTimeline()
 }
@@ -121,37 +133,16 @@ func (m *Model) closeTimeline() {
 	m.seen()
 }
 
-// fitZoom returns the smallest zoom that shows the time since the user was
-// last away, and at least an hour.
-func (m *Model) fitZoom(now time.Time) int {
-	span := time.Hour
-	if !m.awayFrom.IsZero() {
-		span = max(span, now.Sub(m.awayFrom))
+// timelineFrom returns when the time the timeline shows starts.
+func (m *Model) timelineFrom(now time.Time) time.Time {
+	if r := m.timeline.rng; r >= 0 && r < len(timelineRanges) {
+		return now.Add(-timelineRanges[r])
 	}
-	cells := m.timelineFrame(0, now).Cells()
-	for i, step := range timelineZooms {
-		if time.Duration(cells)*step >= span {
-			return i
-		}
+	from := m.awayFrom
+	if from.IsZero() {
+		from = now.Add(-time.Hour)
 	}
-	return len(timelineZooms) - 1
-}
-
-// timelineFrame returns how the timeline is drawn at a zoom.
-func (m *Model) timelineFrame(zoom int, now time.Time) ui.Timeline {
-	label := 10
-	if m.width >= timelineWide {
-		label = 16
-	}
-	t := ui.Timeline{Step: timelineZooms[zoom], Now: now, Width: m.width, LabelWidth: label, Cell: -1}
-	end := m.timeline.end
-	if end.IsZero() || end.After(now) {
-		end = now
-	}
-	// Now is in the last cell, and cells start on round times.
-	last := end.Truncate(t.Step)
-	t.From = last.Add(-time.Duration(t.Cells()-1) * t.Step)
-	return t
+	return minTime(from, now.Add(-minRange))
 }
 
 // pollTimeline reads, in the background, the commits of every session.
@@ -178,7 +169,7 @@ func (m *Model) pollTimeline() tea.Cmd {
 	}
 }
 
-// laneState is how a status is drawn on a lane.
+// laneState is how a status is drawn on a bar.
 func laneState(status string) ui.State {
 	switch status {
 	case "working":
@@ -199,7 +190,7 @@ func sentFrom(from string) string {
 	case fromCard:
 		return "the card's prompt"
 	case fromAsk:
-		return "a message for another session"
+		return "a message from another session"
 	case fromAnswer:
 		return "the answer of another session"
 	}
@@ -214,55 +205,81 @@ func quoted(e session.Event) string {
 	return " “" + e.X + "”"
 }
 
-// markOf returns the mark an event puts on its lane, and what it says, if
-// it is something the user did.
-func (m *Model) markOf(e session.Event, name func(id string) string) (rune, string, bool) {
+// say returns what the log says of event k of a lane, if it is something
+// you did, or something that went wrong.
+func (l lane) say(k int, name func(id string) string) (string, bool) {
+	e := l.events[k]
 	web := ""
 	if e.Src == session.FromWeb {
 		web = " from the web"
 	}
 	switch e.K {
 	case session.KindAnswer:
-		if e.V == "" {
-			return '↵', "answered" + web, true
+		text := "answered"
+		if e.V != "" {
+			text += " “" + e.V + "”"
 		}
-		return '↵', "answered “" + e.V + "”" + web, true
+		text += web
+		// How long the agent waited for it.
+		for j := k - 1; j >= 0; j-- {
+			if p := l.events[j]; p.K == session.KindStatus {
+				if p.V == "needs input" && e.T.Sub(p.T) >= time.Minute {
+					text += " · it waited " + span(e.T.Sub(p.T))
+				}
+				break
+			}
+		}
+		return text, true
 	case session.KindPromptTyped:
-		return 'm', "typed a prompt", true
+		return "typed a prompt", true
 	case session.KindQueue, session.KindSend:
-		// What the queue sends by itself was marked when it was queued.
+		// What the queue sends by itself was said when it was queued.
 		if e.K == session.KindSend && e.Src == "" {
-			return 0, "", false
+			return "", false
 		}
-		verb := "queued "
+		verb := "queued"
 		if e.K == session.KindSend {
-			verb = "sent "
+			verb = "sent"
 		}
 		switch e.V {
 		case fromNotes:
-			return 't', verb + "review notes" + web, true
+			return verb + " review notes" + web, true
 		case fromAsk:
-			return 'k', verb + "a message from another session" + quoted(e), true
+			return "you asked it" + quoted(e) + " from another session", true
 		case fromAnswer:
-			return 'k', "got the answer of another session", true
+			return "got the answer of another session", true
 		case fromCard:
-			return 0, "", false
+			return "", false
 		}
-		to := ""
+		what := quoted(e)
+		if what == "" {
+			what = " a message"
+		}
 		if e.To != "" {
-			to = " asking " + name(e.To)
+			what += ", for " + name(e.To) + " to answer"
 		}
-		return 'm', verb + "a message" + to + web + quoted(e), true
+		return verb + what + web, true
 	case session.KindInterrupted:
-		return 'x', "stopped the turn" + web, true
+		return "stopped the turn" + web, true
 	case session.KindUnqueue:
-		return 'm', "took back a queued message" + web + quoted(e), true
+		return "took back" + quoted(e) + web, true
 	case session.KindWorktreeAdd:
-		return 'o', "made the worktree " + tilde(e.V), true
+		return "made the worktree " + tilde(e.V), true
 	case session.KindCardStart:
-		return '◆', "started the card “" + e.V + "”", true
+		return "started the card “" + e.V + "”", true
+	case session.KindTurnFailed:
+		text := "✕ the turn failed"
+		for j := k - 1; j >= 0; j-- {
+			if p := l.events[j]; p.K == session.KindTurnStart {
+				text += " after " + span(e.T.Sub(p.T))
+				break
+			}
+		}
+		return text, true
+	case session.KindSessionClose:
+		return "closed it", true
 	}
-	return 0, "", false
+	return "", false
 }
 
 // sessionNames returns the name of each session the history knows, live or
@@ -281,10 +298,11 @@ func (m *Model) sessionNames(events []session.Event) map[string]string {
 	return names
 }
 
-// timelineLanes returns the lanes of the sessions in the time t shows:
-// those that wait for the user first, then by what happened last. Quiet
-// ones are folded, unless they are unfolded, and their number returned.
-func (m *Model) timelineLanes(t ui.Timeline) (lanes []lane, folded int) {
+// timelineData returns how the bars are drawn, the lanes of the sessions
+// with something to show in that time, and the log of what you did then,
+// the newest first.
+func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
+	from := m.timelineFrom(now)
 	events := m.history.Events()
 	names := m.sessionNames(events)
 	name := func(id string) string {
@@ -304,91 +322,55 @@ func (m *Model) timelineLanes(t ui.Timeline) (lanes []lane, folded int) {
 		}
 		byID[e.S] = append(byID[e.S], e)
 	}
-
 	ids := []string{}
 	for _, s := range m.sessions {
 		ids = append(ids, s.ID)
 	}
 	for id, evs := range byID {
-		if !slices.Contains(ids, id) && !evs[len(evs)-1].T.Before(t.From) {
+		if !slices.Contains(ids, id) && !evs[len(evs)-1].T.Before(from) {
 			ids = append(ids, id)
 		}
 	}
 
-	end := t.CellTime(t.Cells())
+	width := 0
+	for _, id := range ids {
+		width = max(width, ansi.StringWidth(name(id)))
+	}
+	t := ui.Timeline{From: from, Now: now, Width: m.width, LabelWidth: min(width, 16) + 4}
+	t.Step = max(now.Sub(from)/time.Duration(max(t.Cells(), 1)), time.Second)
+
+	var lanes []lane
+	var entries []entry
 	for _, id := range ids {
 		s, _ := m.byID(id)
 		l := lane{id: id, s: s, name: name(id), events: byID[id]}
-		l.ui = ui.Lane{Label: l.name, Dim: s == nil}
-		l.ui.Periods = periods(l.events, runEnds)
-		for _, e := range l.events {
-			l.last = e.T
-			if e.T.Before(t.From) || !e.T.Before(end) {
+		l.periods = periods(l.events, runEnds)
+		said := 0
+		for k, e := range l.events {
+			if e.T.Before(from) {
 				continue
 			}
-			if g, text, ok := m.markOf(e, name); ok {
-				l.marks = append(l.marks, laneMark{e.T, g, text})
+			if text, ok := l.say(k, name); ok {
+				entries = append(entries, entry{at: e.T, id: id, name: l.name, text: text, bad: e.K == session.KindTurnFailed})
+				said++
 			}
 		}
 		for _, c := range m.timeline.commits[id] {
-			if !c.When.Before(t.From) && c.When.Before(end) {
-				l.marks = append(l.marks, laneMark{c.When, '●', "commit " + c.Short + " " + c.Subject})
+			if !c.When.Before(from) {
+				entries = append(entries, entry{at: c.When, id: id, name: l.name, text: "● commit " + c.Short + " " + c.Subject})
+				said++
 			}
 		}
-		slices.SortStableFunc(l.marks, func(a, b laneMark) int { return a.at.Compare(b.at) })
-		for _, mk := range l.marks {
-			l.ui.Marks = append(l.ui.Marks, ui.Mark{At: mk.at, Glyph: mk.glyph})
-		}
-		l.ui.Note = laneNote(l)
+		// A session that did nothing in that time is left out of the bars.
 		busy := s != nil && (s.Status == agent.Working || s.Status == agent.NeedsInput)
-		l.quiet = len(l.marks) == 0 && !busy && !slices.ContainsFunc(t.States(l.ui.Periods), func(st ui.State) bool { return st > ui.StateIdle })
-		lanes = append(lanes, l)
+		active := slices.ContainsFunc(t.States(l.periods), func(st ui.State) bool { return st > ui.StateIdle })
+		if said > 0 || busy || active {
+			lanes = append(lanes, l)
+		}
 	}
-
-	slices.SortStableFunc(lanes, func(a, b lane) int {
-		if wa, wb := a.waiting(), b.waiting(); wa != wb {
-			if wa {
-				return -1
-			}
-			return 1
-		}
-		if (a.s == nil) != (b.s == nil) {
-			if a.s == nil {
-				return 1
-			}
-			return -1
-		}
-		return b.last.Compare(a.last)
-	})
-	if !m.timeline.unfold {
-		shown := lanes[:0]
-		for _, l := range lanes {
-			// The lane with the cursor stays.
-			if l.quiet && l.id != m.timeline.on {
-				folded++
-				continue
-			}
-			shown = append(shown, l)
-		}
-		lanes = shown
-	}
-	return lanes, folded
+	slices.SortStableFunc(entries, func(a, b entry) int { return b.at.Compare(a.at) })
+	return t, lanes, entries
 }
-
-// waiting reports whether the session of a lane waits for the user now.
-func (l lane) waiting() bool { return l.s != nil && l.s.Status == agent.NeedsInput }
-
-// laneNote is what a lane says under its name: what its session does now.
-func laneNote(l lane) string {
-	if l.s == nil {
-		return "closed"
-	}
-	return strings.TrimSpace(fmt.Sprintf("%s %s", statusGlyph(l.s), lasting(l.s)))
-}
-
-// statusGlyph is the status mark of a session without its colour, which
-// the lane's note does not need.
-func statusGlyph(s *session.Session) string { return ansi.Strip(badge(s)) }
 
 // periods returns what a session did over time, from its events: the
 // statuses it was in, the turns that ended or failed, and nothing while
@@ -431,6 +413,17 @@ func periods(events []session.Event, runEnds []time.Time) []ui.Period {
 	return out
 }
 
+// cursor returns where the entry under the cursor is in the log, putting
+// the cursor on the newest one when it is on none.
+func (m *Model) cursor(entries []entry) int {
+	i := slices.IndexFunc(entries, func(e entry) bool { return e.key() == m.timeline.sel })
+	if i < 0 && len(entries) > 0 {
+		i = 0
+		m.timeline.sel = entries[0].key()
+	}
+	return i
+}
+
 // timelineKey handles the keys of the timeline.
 func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
@@ -452,215 +445,175 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 	}
 
 	now := time.Now()
-	t := m.timelineFrame(m.timeline.zoom, now)
-	lanes, folded := m.timelineLanes(t)
-	i := slices.IndexFunc(lanes, func(l lane) bool { return l.id == m.timeline.on })
-	ids := make([]string, 0, len(lanes)+1)
-	for _, l := range lanes {
-		ids = append(ids, l.id)
-	}
-	if folded > 0 || m.timeline.unfold {
-		ids = append(ids, foldedLane)
-	}
-	if m.timeline.on == foldedLane {
-		i = len(ids) - 1
+	_, lanes, entries := m.timelineData(now)
+	i := m.cursor(entries)
+	move := func(to int) {
+		if len(entries) > 0 {
+			m.timeline.sel = entries[max(min(to, len(entries)-1), 0)].key()
+		}
 	}
 
 	switch key {
 	case "esc", "q":
 		m.closeTimeline()
-	case "j", "down", "k", "up":
-		if len(ids) == 0 {
-			return nil
-		}
-		step := 1
-		if key == "k" || key == "up" {
-			step = -1
-		}
-		m.timeline.on = ids[max(min(i+step, len(ids)-1), 0)]
-		m.timeline.at = time.Time{}
-	case "h", "left", "l", "right":
-		if i < 0 || i >= len(lanes) {
-			return nil
-		}
-		m.stepMark(t, lanes[i], key == "l" || key == "right")
-	case "H", "L":
-		half := time.Duration(t.Cells()/2) * t.Step
-		end := m.timeline.end
-		if end.IsZero() {
-			end = now
-		}
-		if key == "H" {
-			end = end.Add(-half)
-		} else {
-			end = end.Add(half)
-		}
-		m.timeline.end = end
-		if !end.Before(now) {
-			m.timeline.end = time.Time{}
-		}
+	case "j", "down":
+		move(i + 1)
+	case "k", "up":
+		move(i - 1)
+	case "g", "home":
+		move(0)
+	case "G", "end":
+		move(len(entries) - 1)
 	case "+", "=":
 		m.zoomTimeline(-1, now)
 	case "-":
 		m.zoomTimeline(1, now)
 	case "s":
-		m.timeline.end, m.timeline.at = time.Time{}, time.Time{}
-		m.timeline.zoom = m.fitZoom(now)
-	case "G", "end":
-		m.timeline.end = time.Time{}
+		m.timeline.rng = sinceAway
 	case "a":
-		for _, l := range lanes {
-			if l.waiting() {
-				m.timeline.on, m.timeline.at = l.id, time.Time{}
-				return nil
-			}
-		}
-		m.say("no session needs you")
+		m.timeline.back = modeWorkspace
+		m.closeTimeline()
+		return m.nextAttention()
 	case "enter":
-		if m.timeline.on == foldedLane {
-			m.timeline.unfold = !m.timeline.unfold
+		if i < 0 {
 			return nil
 		}
-		if i < 0 || i >= len(lanes) {
+		s, j := m.byID(entries[i].id)
+		if s == nil {
+			m.say(entries[i].name + " is closed")
 			return nil
 		}
-		if lanes[i].s == nil {
-			m.say(lanes[i].name + " is closed")
-			return nil
-		}
-		_, j := m.byID(lanes[i].id)
 		m.timeline.back = modeWorkspace
 		m.closeTimeline()
 		return m.switchTo(j)
 	case "d", "space", " ":
-		if i < 0 || i >= len(lanes) {
+		if i < 0 {
 			return nil
 		}
-		at := m.timeline.at
-		if at.IsZero() {
-			at = now
+		k := slices.IndexFunc(lanes, func(l lane) bool { return l.id == entries[i].id })
+		if k < 0 {
+			return nil
 		}
-		m.timeline.turn = m.turnAt(lanes[i], at, now)
+		m.timeline.turn = m.turnAt(lanes[k], entries[i].at, now)
 		if m.timeline.turn == nil {
-			m.say("no turn of " + lanes[i].name + " to show here")
+			m.say("no turn of " + lanes[k].name + " to show there")
 		}
 	case "m":
-		if i >= 0 && i < len(lanes) && lanes[i].s != nil {
-			return m.askQueueFor(lanes[i].s)
+		if i >= 0 {
+			if s, _ := m.byID(entries[i].id); s != nil {
+				return m.askQueueFor(s)
+			}
 		}
 	}
 	return nil
 }
 
-// zoomTimeline shows cells of the next zoom, keeping the picked moment in
-// sight.
+// zoomTimeline shows a shorter or a longer time, back from now.
 func (m *Model) zoomTimeline(delta int, now time.Time) {
-	z := max(min(m.timeline.zoom+delta, len(timelineZooms)-1), 0)
-	if z == m.timeline.zoom {
-		return
-	}
-	m.timeline.zoom = z
-	if at := m.timeline.at; !at.IsZero() {
-		t := m.timelineFrame(z, now)
-		if c := t.CellAt(at); c < 0 || c >= t.Cells() {
-			m.timeline.end = at.Add(time.Duration(t.Cells()/2) * t.Step)
-			if !m.timeline.end.Before(now) {
-				m.timeline.end = time.Time{}
+	r := m.timeline.rng
+	if r == sinceAway {
+		// From the time since you were away, to the nearest range on that
+		// side of it.
+		shown := now.Sub(m.timelineFrom(now))
+		r = len(timelineRanges)
+		for k, d := range timelineRanges {
+			if d >= shown {
+				r = k
+				break
 			}
 		}
+		if delta > 0 && r < len(timelineRanges) && timelineRanges[r] > shown {
+			delta = 0
+		}
 	}
+	m.timeline.rng = max(min(r+delta, len(timelineRanges)-1), 0)
 }
 
-// stepMark picks the cell with marks before or after the one picked on a
-// lane, scrolling the timeline to it.
-func (m *Model) stepMark(t ui.Timeline, l lane, next bool) {
-	if len(l.marks) == 0 {
-		return
+// timelineTitle says what time the timeline shows.
+func (m *Model) timelineTitle(now time.Time) string {
+	if r := m.timeline.rng; r >= 0 && r < len(timelineRanges) {
+		return "the last " + span(timelineRanges[r])
 	}
-	cell := t.Cells()
-	if !m.timeline.at.IsZero() {
-		cell = t.CellAt(m.timeline.at)
-	} else if next {
-		cell = -1
+	if m.awayFrom.IsZero() || now.Sub(m.awayFrom) < minRange {
+		return "the last " + span(now.Sub(m.timelineFrom(now)))
 	}
-	var pick *laneMark
-	for k := range l.marks {
-		c := t.CellAt(l.marks[k].at)
-		if next && c > cell {
-			pick = &l.marks[k]
-			break
-		}
-		if !next && c < cell {
-			pick = &l.marks[k]
-		}
-	}
-	if pick != nil {
-		m.timeline.at = pick.at
-	}
+	return "since you left at " + m.awayFrom.Format("15:04")
 }
 
 // renderTimeline draws the timeline over the whole screen but the status
-// bar.
+// bar: the bars of the sessions, the log of what you did, newest first,
+// and what is left for you.
 func (m *Model) renderTimeline() []string {
 	height := max(m.height-1, 2)
 	now := time.Now()
-	t := m.timelineFrame(m.timeline.zoom, now)
-	lanes, folded := m.timelineLanes(t)
+	t, lanes, entries := m.timelineData(now)
+	i := m.cursor(entries)
 
-	header := " timeline  "
-	if !m.awayFrom.IsZero() {
-		header += "you left at " + m.awayFrom.Format("15:04") + " · "
-	}
-	header += cellName(timelineZooms[m.timeline.zoom]) + " a cell · "
-	if m.timeline.end.IsZero() {
-		header += "following now"
-	} else {
-		header += t.From.Format("Jan 2 15:04") + " – " + t.CellTime(t.Cells()).Format("15:04")
-	}
-	rows := []string{ui.Reverse.Render(ui.Fit(header, m.width))}
-
-	if m.width < timelineNarrow {
-		return append(rows, m.renderTimelineList(lanes, height-1)...)
-	}
-
-	i := slices.IndexFunc(lanes, func(l lane) bool { return l.id == m.timeline.on })
-	if i < 0 && m.timeline.on != foldedLane && len(lanes) > 0 {
-		i, m.timeline.on = 0, lanes[0].id
-	}
-	t.Lane = i
-	if i >= 0 && !m.timeline.at.IsZero() {
-		t.Cell = t.CellAt(m.timeline.at)
-	}
-
-	rows = append(rows, t.Axis())
-	room := height - len(rows) - timelineFooter - 1
-	fits := max(room/2, 1)
-	uiLanes := make([]ui.Lane, len(lanes))
-	for k, l := range lanes {
-		uiLanes[k] = l.ui
-	}
-	top := ui.Window(max(i, 0), 0, fits, len(lanes))
-	if len(lanes) == 0 {
-		rows = append(rows, ui.Dim.Render(ui.Fit("  nothing happened in this time: - zooms out, H goes back", m.width)))
-	}
-	drawn := t
-	drawn.Lane = i - top
-	rows = append(rows, drawn.Render(uiLanes[top:min(top+fits, len(uiLanes))])...)
-
-	switch {
-	case folded > 0:
-		line := fmt.Sprintf("  ··· %d quiet session(s): enter shows them", folded)
-		rows = append(rows, ui.Selected(line, m.width, m.timeline.on == foldedLane, true))
-	case m.timeline.unfold:
-		rows = append(rows, ui.Selected("  ··· enter folds the quiet sessions", m.width, m.timeline.on == foldedLane, true))
-	}
-	// A screen too short for the footer shows the lanes alone.
-	if body := height - timelineFooter; body > 2 {
-		for len(rows) < body {
-			rows = append(rows, "")
+	header := " timeline  " + m.timelineTitle(now)
+	var waits []string
+	for _, l := range lanes {
+		if l.waiting() {
+			waits = append(waits, l.name+" ▲ waits "+lasting(l.s))
 		}
-		rows = append(rows[:body], m.timelineFooter(t, lanes, i, now)...)
 	}
+	right := strings.Join(waits, " · ") + " "
+	pad := max(m.width-ansi.StringWidth(header)-ansi.StringWidth(right), 1)
+	rows := []string{ui.Reverse.Render(ui.Fit(header+strings.Repeat(" ", pad)+right, m.width))}
+
+	if m.width >= timelineNarrow && len(lanes) > 0 {
+		bars := make([]ui.Bar, len(lanes))
+		labels := make([]*lipgloss.Style, len(lanes))
+		for k, l := range lanes {
+			label := l.name
+			if l.s != nil {
+				label = ui.Fit(l.name, t.LabelWidth-4) + " " + statusGlyph(l.s)
+			}
+			bars[k] = ui.Bar{Label: label, Periods: l.periods, Dim: l.s == nil}
+			if i >= 0 && l.id == entries[i].id {
+				labels[k] = &ui.Bold
+			}
+		}
+		// The bars take at most half of the screen.
+		bars = bars[:min(len(bars), max((height-6)/2, 1))]
+		rows = append(rows, t.Axis())
+		rows = append(rows, t.Render(bars, labels)...)
+		var at time.Time
+		if i >= 0 {
+			at = entries[i].at
+		}
+		rows = append(rows, t.Pointer(at))
+	}
+	rule := ui.Dim.Render(strings.Repeat("─", max(m.width, 0)))
+	rows = append(rows, rule)
+
+	room := max(height-len(rows)-2, 1)
+	var log []string
+	if len(entries) == 0 {
+		log = append(log, ui.Dim.Render(ui.Fit("  you did nothing here in "+m.timelineTitle(now)+": - shows a longer time", m.width)))
+	}
+	nameW := 0
+	for _, e := range entries {
+		nameW = max(nameW, min(ansi.StringWidth(e.name), 16))
+	}
+	m.timeline.top = ui.Window(max(i, 0), m.timeline.top, room, len(entries))
+	for k := m.timeline.top; k < min(len(entries), m.timeline.top+room); k++ {
+		e := entries[k]
+		when := e.at.Format("15:04")
+		if now.Sub(e.at) > 20*time.Hour {
+			when = e.at.Format("Mon 15:04")
+		}
+		text := e.text
+		if e.bad && k != i {
+			text = ui.Bad.Render(text)
+		}
+		lead := " "
+		if k == i {
+			lead = "▸"
+		}
+		log = append(log, ui.Selected(lead+when+" "+ui.Fit(e.name, nameW)+"  "+text, m.width, k == i, true))
+	}
+	rows = append(rows, ui.Block(log, m.width, room)...)
+	rows = append(rows, rule, ui.Fit(m.timelineSummary(t, lanes, now), m.width))
 	rows = rows[:min(len(rows), height)]
 
 	if m.timeline.turn != nil {
@@ -670,25 +623,12 @@ func (m *Model) renderTimeline() []string {
 	return rows
 }
 
-// timelineFooter is what is said under the lanes: what happened in the
-// picked cell, how long agents waited for the user, and the legend.
-func (m *Model) timelineFooter(t ui.Timeline, lanes []lane, i int, now time.Time) []string {
-	picked := ui.Dim.Render("  h/l picks what you did on a lane · d shows the turn")
-	if i >= 0 && i < len(lanes) && !m.timeline.at.IsZero() {
-		cell := t.CellAt(m.timeline.at)
-		var said []string
-		for _, mk := range lanes[i].marks {
-			if t.CellAt(mk.at) == cell {
-				said = append(said, mk.at.Format("15:04")+" "+string(mk.glyph)+" "+mk.text)
-			}
-		}
-		picked = "  " + lanes[i].name + ": " + strings.Join(said, " · ")
-	}
-
+// timelineSummary says how long agents waited for you in the time shown,
+// and what is left for you to do.
+func (m *Model) timelineSummary(t ui.Timeline, lanes []lane, now time.Time) string {
 	var waited time.Duration
-	end := t.CellTime(t.Cells())
 	for _, l := range lanes {
-		for _, p := range l.ui.Periods {
+		for _, p := range l.periods {
 			if p.State != ui.StateWaiting {
 				continue
 			}
@@ -696,8 +636,7 @@ func (m *Model) timelineFooter(t ui.Timeline, lanes []lane, i int, now time.Time
 			if to.IsZero() {
 				to = now
 			}
-			from, to := maxTime(p.From, t.From), minTime(to, end)
-			if to.After(from) {
+			if from := maxTime(p.From, t.From); to.After(from) {
 				waited += to.Sub(from)
 			}
 		}
@@ -721,67 +660,38 @@ func (m *Model) timelineFooter(t ui.Timeline, lanes []lane, i int, now time.Time
 		sums = append(sums, fmt.Sprintf("%d note(s) not sent", notes))
 	}
 	if queued > 0 {
-		sums = append(sums, fmt.Sprintf("%d queued", queued))
+		sums = append(sums, fmt.Sprintf("%d message(s) queued", queued))
 	}
-	summary := "  " + strings.Join(sums, " · ")
+	legend := ui.Dim.Render(" · █ working ▲ waits for you ─ idle ✓ done ✕ failed")
 	if len(sums) == 0 {
-		summary = "  nothing is left for you"
+		return ui.Dim.Render(" nothing is left for you") + legend
 	}
-	legend := "  █ working ▲ waits for you ─ idle ✓ done ✕ failed │ ↵ answered m message t notes k ask x stop o worktree ◆ card ● commit + several"
-	return []string{
-		ui.Fit(picked, m.width),
-		ui.Fit(summary, m.width),
-		ui.Dim.Render(ui.Fit(legend, m.width)),
-	}
+	return " " + strings.Join(sums, " · ") + legend
 }
 
-// renderTimelineList draws a narrow timeline as a list of what the user
-// did, the newest first.
-func (m *Model) renderTimelineList(lanes []lane, height int) []string {
-	type line struct {
-		at   time.Time
-		text string
-	}
-	var lines []line
-	for _, l := range lanes {
-		for _, mk := range l.marks {
-			lines = append(lines, line{mk.at, mk.at.Format("15:04") + " " + string(mk.glyph) + " " + l.name + ": " + mk.text})
-		}
-	}
-	slices.SortStableFunc(lines, func(a, b line) int { return b.at.Compare(a.at) })
-	var rows []string
-	for _, l := range lines {
-		rows = append(rows, ui.Fit(" "+l.text, m.width))
-	}
-	if len(rows) == 0 {
-		rows = append(rows, ui.Dim.Render(ui.Fit(" nothing you did in this time", m.width)))
-	}
-	return ui.Block(rows, m.width, height)
-}
+// statusGlyph is the status mark of a session without its colour.
+func statusGlyph(s *session.Session) string { return ansi.Strip(badge(s)) }
 
 // timelineHint is what the status bar says the keys of the timeline do.
 func (m *Model) timelineHint() string {
 	if m.timeline.turn != nil {
 		return "j/k move · enter open · esc back"
 	}
-	return "j/k lane · h/l what you did · d turn · enter go · +/- zoom · H/L scroll · s since you left · q back"
+	return "j/k move · d turn · enter go · m queue · +/- time · s since you left · q back"
 }
 
 // span says how long a time is, to the minute, as "1h20m".
 func span(d time.Duration) string {
 	d = d.Round(time.Minute)
-	if d < time.Hour {
+	switch {
+	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
-	}
-	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
-}
-
-// cellName says how long a cell lasts, as "5m" or "1h".
-func cellName(d time.Duration) string {
-	if d >= time.Hour {
+	case d >= 48*time.Hour && d%(24*time.Hour) == 0:
+		return fmt.Sprintf("%dd", int(d.Hours())/24)
+	case d%time.Hour == 0:
 		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
-	return fmt.Sprintf("%dm", int(d.Minutes()))
+	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 func minTime(a, b time.Time) time.Time {
