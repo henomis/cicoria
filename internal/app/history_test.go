@@ -228,24 +228,24 @@ func TestTimelineKeys(t *testing.T) {
 	}
 }
 
-// The bars keep their cells as time passes, until now reaches their end.
-func TestTimelineFrameStays(t *testing.T) {
+// As time passes the bars keep the length of their cells and now stays in
+// the last one: they move left by whole cells.
+func TestTimelineBarsSlide(t *testing.T) {
 	m := timelineModel(t, 100, 24)
 	m.openTimeline()
 	now := time.Now()
 	t0, _, _ := m.timelineData(now)
-	t1, _, _ := m.timelineData(now.Add(time.Minute))
-	if !t1.From.Equal(t0.From) || t1.Step != t0.Step {
-		t.Errorf("a minute later the bars start at %v by %v, not %v by %v", t1.From, t1.Step, t0.From, t0.Step)
-	}
-	if c := t1.CellAt(t1.Now); c >= t1.Cells() {
-		t.Errorf("now is in cell %d of %d", c, t1.Cells())
-	}
-	// Past their end, they are laid out again, with now in sight.
-	later := now.Add(time.Hour)
-	t2, _, _ := m.timelineData(later)
-	if c := t2.CellAt(later); c < 0 || c >= t2.Cells() {
-		t.Errorf("an hour later now is in cell %d of %d", c, t2.Cells())
+	for _, d := range []time.Duration{time.Second, time.Minute, time.Hour} {
+		t1, _, _ := m.timelineData(now.Add(d))
+		if t1.Step != t0.Step {
+			t.Errorf("%v later a cell lasts %v, not %v", d, t1.Step, t0.Step)
+		}
+		if c := t1.CellAt(t1.Now); c != t1.Cells()-1 {
+			t.Errorf("%v later now is in cell %d of %d", d, c, t1.Cells())
+		}
+		if moved := t1.From.Sub(t0.From); moved%t0.Step != 0 {
+			t.Errorf("%v later the bars moved by %v, not whole cells of %v", d, moved, t0.Step)
+		}
 	}
 	// Another time is laid out at once.
 	m.timeline.rng = 3
