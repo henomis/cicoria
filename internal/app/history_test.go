@@ -511,3 +511,23 @@ func TestSecondCicoriaRecordsNothingYet(t *testing.T) {
 		t.Errorf("once agreed: %+v", got)
 	}
 }
+
+// TestClosedLanesKeepTheirOrder checks that the bars of closed sessions are
+// in the same order at every redraw, the last closed first, and not in the
+// order of a map, which changes each time and makes them flicker.
+func TestClosedLanesKeepTheirOrder(t *testing.T) {
+	at := time.Date(2026, 11, 20, 10, 6, 0, 0, time.UTC)
+	byID := map[string][]session.Event{
+		"live":   {{S: "live", T: at}},
+		"old":    {{S: "old", T: at.Add(-2 * time.Hour)}},
+		"shell":  {{S: "shell", T: at}},
+		"pack":   {{S: "pack", T: at}},
+		"stiggy": {{S: "stiggy", T: at.Add(time.Second)}},
+	}
+	want := []string{"stiggy", "pack", "shell"}
+	for range 50 {
+		if got := closedIDs(byID, []string{"live"}, at.Add(-time.Hour)); !slices.Equal(got, want) {
+			t.Fatalf("closedIDs = %v, want %v", got, want)
+		}
+	}
+}

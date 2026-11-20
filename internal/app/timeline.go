@@ -225,11 +225,7 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	for _, s := range m.sessions {
 		ids = append(ids, s.ID)
 	}
-	for id, evs := range byID {
-		if !slices.Contains(ids, id) && !evs[len(evs)-1].T.Before(from) {
-			ids = append(ids, id)
-		}
-	}
+	ids = append(ids, closedIDs(byID, ids, from)...)
 
 	width := 0
 	for _, id := range ids {
@@ -268,6 +264,26 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	}
 	slices.SortStableFunc(log, func(a, b entry) int { return b.at.Compare(a.at) })
 	return t, lanes, append(nowLines(lanes, now), log...)
+}
+
+// closedIDs returns the sessions of the history that are not live and did
+// something since from, the last closed first. The order is the same at
+// every redraw, so their bars stay where they are.
+func closedIDs(byID map[string][]session.Event, live []string, from time.Time) []string {
+	var ids []string
+	for id, evs := range byID {
+		if !slices.Contains(live, id) && !evs[len(evs)-1].T.Before(from) {
+			ids = append(ids, id)
+		}
+	}
+	slices.SortFunc(ids, func(a, b string) int {
+		ea, eb := byID[a], byID[b]
+		if c := eb[len(eb)-1].T.Compare(ea[len(ea)-1].T); c != 0 {
+			return c
+		}
+		return strings.Compare(a, b)
+	})
+	return ids
 }
 
 // layOut returns where the bars start and how long a cell lasts, for the
