@@ -181,6 +181,8 @@ type Model struct {
 	runs       []*run
 	lastRun    *run
 	runHistory []string
+	// leftBehind are the commands that ended but left processes running.
+	leftBehind []*run
 	// commandFrom is what was on screen when the command that runs was
 	// asked for, before it went back to the workspace.
 	commandFrom mode

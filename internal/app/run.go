@@ -49,6 +49,9 @@ type run struct {
 	end  time.Time
 	code int
 	err  error
+	// left says the command ended but left processes running, which
+	// still hold its output: they are stopped with cicoria.
+	left bool
 }
 
 // maxRunOutput is how much of what a command writes is kept: the end.
@@ -180,6 +183,10 @@ func (m *Model) startRun(s *session.Session, line string) tea.Cmd {
 		r.end = time.Now()
 		var exit *exec.ExitError
 		switch {
+		case errors.Is(err, exec.ErrWaitDelay):
+			// The shell ended, as it says; what it started in the
+			// background goes on.
+			r.code, r.left = cmd.ProcessState.ExitCode(), true
 		case errors.As(err, &exit):
 			r.code = exit.ExitCode()
 			if r.code < 0 {
@@ -197,11 +204,17 @@ func (m *Model) startRun(s *session.Session, line string) tea.Cmd {
 func (m *Model) runDone(r *run) tea.Cmd {
 	m.runs = slices.DeleteFunc(m.runs, func(x *run) bool { return x == r })
 	r.mu.Lock()
-	ok := r.err == nil && r.code == 0
+	ok, left := r.err == nil && r.code == 0, r.left
 	r.mu.Unlock()
-	if ok {
+	if left {
+		m.leftBehind = append(m.leftBehind, r)
+	}
+	switch {
+	case ok && left:
+		m.say(ui.Good.Render("✓") + " " + r.line + " " + ui.Dim.Render(r.result()+" · left a process running"))
+	case ok:
 		m.say(ui.Good.Render("✓") + " " + r.line + " " + ui.Dim.Render(r.result()))
-	} else {
+	default:
 		m.say(ui.Bad.Render("✕") + " " + r.line + ": " + r.result() + ui.Dim.Render(" · "+m.cfg.Prefix+" . output"))
 	}
 	if m.mode == modeView && m.view.output == r {
@@ -210,9 +223,10 @@ func (m *Model) runDone(r *run) tea.Cmd {
 	return nil
 }
 
-// stopRuns stops the commands still running, as cicoria closes.
+// stopRuns stops the commands still running, and what the ended ones left
+// running, as cicoria closes.
 func (m *Model) stopRuns() {
-	for _, r := range m.runs {
+	for _, r := range slices.Concat(m.runs, m.leftBehind) {
 		if p := r.cmd.Process; p != nil {
 			_ = syscall.Kill(-p.Pid, syscall.SIGKILL)
 		}
@@ -263,11 +277,17 @@ func (m *Model) showOutput(r *run) {
 	case len(lines) == 0:
 		lines = append(lines, ui.Dim.Render("no output"))
 	}
+	// A cursor at the end follows what the command writes; one moved up
+	// stays where it is.
 	top, cursor := m.view.pager.Top, m.view.pager.Cursor
+	atEnd := cursor >= m.view.pager.Len()-1
 	m.view.pager.SetContent(lines, nil)
 	m.view.plain = lines
 	m.view.pager.Top = top
 	m.view.pager.SetCursor(cursor, m.viewHeight())
+	if atEnd {
+		m.view.pager.Move(m.view.pager.Len(), m.viewHeight())
+	}
 }
 
 // tickOutput updates the output on screen while its command runs.

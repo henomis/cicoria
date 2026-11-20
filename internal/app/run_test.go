@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -224,5 +225,53 @@ func TestQuitWithRun(t *testing.T) {
 	m.askQuit()
 	if m.confirm == nil || !strings.Contains(m.confirm.question, "1 command(s) still running") {
 		t.Errorf("confirm = %+v", m.confirm)
+	}
+}
+
+// While its command runs, the output view follows what it writes, as long
+// as the cursor is at the end.
+func TestRunOutputFollows(t *testing.T) {
+	m, s := historyModel(t)
+	m.width, m.height = 80, 10
+	cmd := m.startRun(s, "echo a; sleep 0.5; seq 40; sleep 3")
+	defer m.stopRuns()
+	_ = cmd
+	m.openOutput()
+	time.Sleep(time.Second)
+	m.Update(runTickMsg{m.lastRun})
+	p := m.view.pager
+	if p.Len() < 41 || p.Cursor != p.Len()-1 {
+		t.Errorf("cursor %d of %d lines: the view does not follow", p.Cursor, p.Len())
+	}
+
+	// Scrolled up, it stays where it is.
+	m.view.pager.Move(-5, m.viewHeight())
+	at := m.view.pager.Cursor
+	m.Update(runTickMsg{m.lastRun})
+	if m.view.pager.Cursor != at {
+		t.Errorf("cursor moved from %d to %d", at, m.view.pager.Cursor)
+	}
+}
+
+// A command that leaves a process behind ended as it says, and what it
+// left is stopped with cicoria.
+func TestRunLeavesAProcess(t *testing.T) {
+	m, s := historyModel(t)
+	cmd := m.startRun(s, "sleep 30 & echo started")
+	r := finish(t, m, func() any { return cmd() })
+	if r.err != nil || r.code != 0 || !strings.Contains(m.message, "✓") {
+		t.Fatalf("code %d, err %v, status %q", r.code, r.err, m.message)
+	}
+	pgid := r.cmd.Process.Pid
+	if err := syscall.Kill(-pgid, 0); err != nil {
+		t.Fatalf("the process left behind is gone already: %v", err)
+	}
+	m.stopRuns()
+	deadline := time.Now().Add(3 * time.Second)
+	for syscall.Kill(-pgid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the process left behind outlives cicoria")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

@@ -994,15 +994,16 @@ func (m *Model) askLeave(question, next string) tea.Cmd {
 		m.next = next
 		return m.play(ui.Wilt, "ciao", tea.Quit)
 	}
-	if working == 0 && len(m.runs) == 0 {
+	running := len(m.runs) + len(m.leftBehind)
+	if working == 0 && running == 0 {
 		return quit()
 	}
 	var stopped []string
 	if working > 0 {
 		stopped = append(stopped, fmt.Sprintf("%d session(s) still working", working))
 	}
-	if len(m.runs) > 0 {
-		stopped = append(stopped, fmt.Sprintf("%d command(s) still running", len(m.runs)))
+	if running > 0 {
+		stopped = append(stopped, fmt.Sprintf("%d command(s) still running", running))
 	}
 	m.confirm = &confirm{
 		question: fmt.Sprintf("%s will be stopped. %s", strings.Join(stopped, " and "), question),
