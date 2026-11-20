@@ -55,6 +55,9 @@ type fullView struct {
 	// output is set when the view shows what a command of the run box
 	// wrote.
 	output *run
+	// outputOpen counts the times the output was opened: a refresh of an
+	// earlier one stops.
+	outputOpen int
 	// search is set while the user types a search.
 	search *ui.Input
 	// commit is set when the view shows the whole diff of a commit, which

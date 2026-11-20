@@ -895,7 +895,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.runDone(msg.r)
 
 	case runTickMsg:
-		if m.mode == modeView && m.view.output == msg.r {
+		if m.mode == modeView && m.view.output == msg.r && m.view.outputOpen == msg.open {
 			m.showOutput(msg.r)
 			return m.tickOutput(msg.r)
 		}

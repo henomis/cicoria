@@ -115,8 +115,12 @@ func (r *run) result() string {
 // runDoneMsg says a command of the run box ended.
 type runDoneMsg struct{ r *run }
 
-// runTickMsg updates the output of a command shown while it runs.
-type runTickMsg struct{ r *run }
+// runTickMsg updates the output of a command shown while it runs, in the
+// view opened the open-th time.
+type runTickMsg struct {
+	r    *run
+	open int
+}
 
 // runShell returns the shell commands run in.
 func runShell() string {
@@ -255,7 +259,9 @@ func (m *Model) openOutput() tea.Cmd {
 	m.view.plain, m.view.refs = nil, nil
 	m.view.pager.Fixed, m.view.pager.Wrap = 0, m.view.wrap
 	m.mode = modeView
-	m.view.pager.Top, m.view.pager.Cursor = 0, 0
+	m.view.outputOpen++
+	// Each time it opens, it starts at the end, scrolled to the left.
+	m.view.pager.SetContent(nil, nil)
 	m.showOutput(r)
 	// The end is where a failure is told.
 	m.view.pager.Move(m.view.pager.Len(), m.viewHeight())
@@ -279,12 +285,9 @@ func (m *Model) showOutput(r *run) {
 	}
 	// A cursor at the end follows what the command writes; one moved up
 	// stays where it is.
-	top, cursor := m.view.pager.Top, m.view.pager.Cursor
-	atEnd := cursor >= m.view.pager.Len()-1
-	m.view.pager.SetContent(lines, nil)
+	atEnd := m.view.pager.Cursor >= m.view.pager.Len()-1
+	m.view.pager.Update(lines)
 	m.view.plain = lines
-	m.view.pager.Top = top
-	m.view.pager.SetCursor(cursor, m.viewHeight())
 	if atEnd {
 		m.view.pager.Move(m.view.pager.Len(), m.viewHeight())
 	}
@@ -295,7 +298,8 @@ func (m *Model) tickOutput(r *run) tea.Cmd {
 	if _, _, done := r.snapshot(); done {
 		return nil
 	}
-	return tea.Tick(time.Second, func(time.Time) tea.Msg { return runTickMsg{r} })
+	open := m.view.outputOpen
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return runTickMsg{r, open} })
 }
 
 // outputViewKey handles the keys that mean something else for a file.

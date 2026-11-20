@@ -238,7 +238,7 @@ func TestRunOutputFollows(t *testing.T) {
 	_ = cmd
 	m.openOutput()
 	time.Sleep(time.Second)
-	m.Update(runTickMsg{m.lastRun})
+	m.Update(runTickMsg{m.lastRun, m.view.outputOpen})
 	p := m.view.pager
 	if p.Len() < 41 || p.Cursor != p.Len()-1 {
 		t.Errorf("cursor %d of %d lines: the view does not follow", p.Cursor, p.Len())
@@ -247,7 +247,7 @@ func TestRunOutputFollows(t *testing.T) {
 	// Scrolled up, it stays where it is.
 	m.view.pager.Move(-5, m.viewHeight())
 	at := m.view.pager.Cursor
-	m.Update(runTickMsg{m.lastRun})
+	m.Update(runTickMsg{m.lastRun, m.view.outputOpen})
 	if m.view.pager.Cursor != at {
 		t.Errorf("cursor moved from %d to %d", at, m.view.pager.Cursor)
 	}
@@ -273,5 +273,26 @@ func TestRunLeavesAProcess(t *testing.T) {
 			t.Fatal("the process left behind outlives cicoria")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// Opening the output again does not start a second refresh: the one of the
+// view opened before stops.
+func TestRunOutputOneRefresh(t *testing.T) {
+	m, s := historyModel(t)
+	m.width, m.height = 80, 10
+	m.startRun(s, "sleep 3")
+	defer m.stopRuns()
+	if m.openOutput() == nil {
+		t.Fatal("a running command's output is not refreshed")
+	}
+	old := m.view.outputOpen
+	m.closeView()
+	m.openOutput()
+	if _, cmd := m.Update(runTickMsg{r: m.lastRun, open: old}); cmd != nil {
+		t.Error("the refresh of the view opened before goes on")
+	}
+	if _, cmd := m.Update(runTickMsg{r: m.lastRun, open: m.view.outputOpen}); cmd == nil {
+		t.Error("the refresh of the view on screen stopped")
 	}
 }

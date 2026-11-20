@@ -83,6 +83,37 @@ func (p *Pager) SetContent(lines []string, marks []int) {
 	p.Search(p.query)
 }
 
+// Update replaces the text with a newer version of it, as the output of a
+// command that goes on, and keeps where the user is: the scroll, the
+// cursor and the search, which stays on its match instead of jumping.
+func (p *Pager) Update(lines []string) {
+	on := -1
+	if p.match < len(p.matches) {
+		on = p.matches[p.match]
+	}
+	p.lines, p.marks, p.wrapped = lines, nil, nil
+	p.plain = make([]string, len(lines))
+	for i, l := range lines {
+		p.plain[i] = strings.ToLower(ansi.Strip(l))
+	}
+	last := max(len(lines)-1, 0)
+	p.Top, p.Cursor = min(p.Top, last), min(p.Cursor, last)
+
+	p.matches, p.match = nil, 0
+	if p.query == "" {
+		return
+	}
+	needle := strings.ToLower(p.query)
+	for i, l := range p.plain {
+		if strings.Contains(l, needle) {
+			if i <= on {
+				p.match = len(p.matches)
+			}
+			p.matches = append(p.matches, i)
+		}
+	}
+}
+
 // Len returns the number of lines.
 func (p *Pager) Len() int { return len(p.lines) }
 
