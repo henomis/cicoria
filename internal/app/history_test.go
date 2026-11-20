@@ -531,3 +531,34 @@ func TestClosedLanesKeepTheirOrder(t *testing.T) {
 		}
 	}
 }
+
+// A shell is a way to run a command, not a session at work: the timeline
+// neither records nor shows it.
+func TestShellNotInTimeline(t *testing.T) {
+	m, api := historyModel(t)
+	sh := session.New("s9", "shell-1", m.dir, agent.NewGeneric(config.Shell, []string{"sh"}))
+	m.sessions = append(m.sessions, sh)
+	m.track(sh)
+
+	before := len(m.history.Events())
+	m.record(sh, session.Event{K: session.KindSessionOpen, V: sh.Name})
+	m.enqueueFrom(sh, session.Message{Text: "ls"}, session.FromTUI)
+	if sh.OnStatus != nil {
+		t.Error("the status of a shell is recorded")
+	}
+	if got := m.history.Events()[before:]; len(got) != 0 {
+		t.Errorf("a shell was recorded: %+v", got)
+	}
+
+	m.enqueueFrom(api, session.Message{Text: "add tests"}, session.FromTUI)
+	m.width, m.height = 120, 30
+	_, lanes, _ := m.timelineData(time.Now())
+	for _, l := range lanes {
+		if l.id == sh.ID {
+			t.Error("the shell has a lane")
+		}
+	}
+	if len(lanes) != 1 || lanes[0].id != api.ID {
+		t.Errorf("lanes = %d", len(lanes))
+	}
+}

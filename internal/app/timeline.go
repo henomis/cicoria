@@ -222,10 +222,16 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 		byID[e.S] = append(byID[e.S], e)
 	}
 	ids := []string{}
+	var shells []string
 	for _, s := range m.sessions {
-		ids = append(ids, s.ID)
+		if isShell(s.Adapter) {
+			shells = append(shells, s.ID)
+		} else {
+			ids = append(ids, s.ID)
+		}
 	}
-	ids = append(ids, closedIDs(byID, ids, from)...)
+	// What a shell left in the history before it was kept out stays out.
+	ids = append(ids, closedIDs(byID, slices.Concat(ids, shells), from)...)
 
 	width := 0
 	for _, id := range ids {
