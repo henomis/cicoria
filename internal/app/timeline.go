@@ -698,16 +698,27 @@ func (m *Model) timelineHeader(t ui.Timeline, lanes []lane, now time.Time) strin
 // timelineLegend is the rule under the timeline, with what the bars and
 // the marks of the lines mean, as much of it as fits.
 func (m *Model) timelineLegend() string {
-	legend := " ▄ working █ waits for you ─ idle ✓ done ✕ failed ~ guessed · › message ↵ answer ? ask □ card ◆ commit "
+	// The blocks are in their colours, the rest faint.
+	states := func(waits string) string {
+		var b strings.Builder
+		for _, s := range []struct {
+			state ui.State
+			label string
+		}{{ui.StateWorking, "working"}, {ui.StateWaiting, waits}, {ui.StateIdle, "idle"}, {ui.StateDone, "done"}, {ui.StateFailed, "failed"}} {
+			b.WriteString(" " + ui.StateMark(s.state) + ui.Dim.Render(" "+s.label))
+		}
+		return b.String()
+	}
+	legend := states("waits for you") + ui.Dim.Render(" ~ guessed · › message ↵ answer ? ask □ card ◆ commit ")
 	w := ansi.StringWidth(legend)
 	if w+4 > m.width {
-		legend = " ▄ working █ waits ─ idle ✓ done ✕ failed "
+		legend = states("waits") + " "
 		w = ansi.StringWidth(legend)
 	}
 	if w+4 > m.width {
 		return ui.Dim.Render(strings.Repeat("─", max(m.width, 0)))
 	}
-	return ui.Dim.Render("──" + legend + strings.Repeat("─", m.width-w-2))
+	return ui.Dim.Render("──") + legend + ui.Dim.Render(strings.Repeat("─", m.width-w-2))
 }
 
 // statusGlyph is the status mark of a session without its colour.

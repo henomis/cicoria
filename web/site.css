@@ -242,6 +242,7 @@ p code, li code, td code { background: var(--shade); border-radius: 4px; padding
 .doc li { margin-bottom: 0.4em; }
 .doc pre { margin: 0 0 1.2em; background: var(--night); color: var(--term); border-radius: 8px; padding: 0.9rem 1.1rem; font-size: 0.8125rem; line-height: 1.55; overflow-x: auto; max-width: 48rem; }
 .doc pre .c { color: var(--t-dim); }
+.doc pre .tl-idle { color: var(--t-dim); } .doc pre .tl-work { color: var(--t-green); } .doc pre .tl-done { color: var(--t-blue); } .doc pre .tl-wait { color: var(--t-amber); } .doc pre .tl-fail { color: var(--t-red); }
 .table { overflow-x: auto; margin: 0 0 1.4em; max-width: 52rem; }
 table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; line-height: 1.45; }
 th { text-align: left; font-weight: 600; padding: 0 1rem 0.55rem 0; border-bottom: 1px solid var(--ink); vertical-align: bottom; }

@@ -174,7 +174,7 @@ func TestTimelineRenders(t *testing.T) {
 	m.openTimeline()
 	out := ansi.Strip(strings.Join(m.renderTimeline(), "\n"))
 	t.Log("\n" + out)
-	for _, want := range []string{"api", "docs", "█", "✓", "agents waited for you 15m", "now", "answered “Yes” · it waited 15m", "queued “add pagination”", "closed it", "typed “fix it” → done in 14m, 1 file"} {
+	for _, want := range []string{"api", "docs", "█", "█ working", "agents waited for you 15m", "now", "answered “Yes” · it waited 15m", "queued “add pagination”", "closed it", "typed “fix it” → done in 14m, 1 file"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the timeline does not show %q", want)
 		}

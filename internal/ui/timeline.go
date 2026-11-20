@@ -34,14 +34,16 @@ const (
 	StateFailed
 )
 
-// stateGlyphs and stateStyles draw each state, the more it needs you the
-// heavier: waiting is a full block, working half of one. The glyphs alone
-// tell them apart, without colour.
-var (
-	stateGlyphs = [...]rune{' ', '─', '▄', '✓', '█', '✕'}
-	failed      = Bad.Reverse(true)
-	stateStyles = [...]*lipgloss.Style{nil, &Dim, &Good, nil, &Warn, &failed}
-)
+// stateStyles colour the full block every state is drawn with: grey idle,
+// green working, blue a turn that ended, yellow waiting for you, red failed.
+var stateStyles = [...]lipgloss.Style{{}, Dim, Good, Info, Warn, Bad}
+
+// block is what a cell of a bar is drawn with, whatever its state.
+const block = '█'
+
+// StateMark returns the block a state is drawn with, in its colour, as a
+// legend shows it.
+func StateMark(s State) string { return stateStyles[s].Render(string(block)) }
 
 // Period is a state a session was in from From to To. A period whose To is
 // zero lasts until now; one whose To is From is a moment, as a turn ending.
@@ -202,11 +204,15 @@ func (t Timeline) Render(bars []Bar) []string {
 	for _, bar := range bars {
 		c := newCanvas(n, 1)
 		for x, s := range t.States(bar.Periods) {
-			st := stateStyles[s]
-			if bar.Dim && st != nil {
-				st = &Dim
+			if s == StateNone {
+				continue
 			}
-			c.put(x, 0, stateGlyphs[s], st)
+			// A closed session keeps its colours, faint.
+			st := stateStyles[s]
+			if bar.Dim {
+				st = st.Faint(true)
+			}
+			c.put(x, 0, block, &st)
 		}
 		// Now is where the bars end.
 		if now >= 0 && now+1 < n {

@@ -62,7 +62,7 @@ func TestRenderFitsWidth(t *testing.T) {
 	}
 	tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: 80, LabelWidth: 10}
 	bar := ansi.Strip(tl.Render(bars)[0])
-	if !strings.Contains(bar, "▄▄▄") || !strings.Contains(bar, "│") {
+	if !strings.Contains(bar, "███") || !strings.Contains(bar, "│") {
 		t.Errorf("bar = %q", bar)
 	}
 	axis := ansi.Strip(tl.Axis(minute(3)))
@@ -74,10 +74,26 @@ func TestRenderFitsWidth(t *testing.T) {
 	}
 }
 
-// Waiting weighs more than working, so that it stands out.
-func TestWaitingIsHeaviest(t *testing.T) {
-	if stateGlyphs[StateWaiting] != '█' || stateGlyphs[StateWorking] != '▄' {
-		t.Errorf("waiting is %q and working %q", stateGlyphs[StateWaiting], stateGlyphs[StateWorking])
+// Every state is a full block, told from the others by its colour alone.
+func TestStatesByColour(t *testing.T) {
+	seen := map[string]State{}
+	for s := StateIdle; s <= StateFailed; s++ {
+		mark := StateMark(s)
+		if ansi.Strip(mark) != "█" {
+			t.Errorf("state %d is drawn %q", s, ansi.Strip(mark))
+		}
+		if other, ok := seen[mark]; ok {
+			t.Errorf("states %d and %d have the same colour", other, s)
+		}
+		seen[mark] = s
+	}
+	// A closed session's bar keeps the colours, faint.
+	tl := Timeline{From: tl0, Step: time.Minute, Now: minute(40), Width: 60, LabelWidth: 10}
+	periods := []Period{{From: minute(0), State: StateWaiting}}
+	open := tl.Render([]Bar{{Label: "api", Periods: periods}})[0]
+	closed := tl.Render([]Bar{{Label: "api", Periods: periods, Dim: true}})[0]
+	if ansi.Strip(open) != ansi.Strip(closed) || open == closed {
+		t.Errorf("closed bar:\n%q\nopen:\n%q", closed, open)
 	}
 }
 
@@ -92,7 +108,7 @@ func TestSelectedBarKeepsItsCells(t *testing.T) {
 	if a, b := []rune(ansi.Strip(plain)), []rune(ansi.Strip(lit)); string(a[10:]) != string(b[10:]) {
 		t.Errorf("the cells changed:\n%q\n%q", string(a[10:]), string(b[10:]))
 	}
-	if strings.Contains(lit[strings.Index(lit, "▄"):], "\x1b[7") {
+	if strings.Contains(lit[strings.Index(lit, "█"):], "\x1b[7") {
 		t.Error("the cells of the selected bar are reversed")
 	}
 	// Its time is marked on the axis instead.
