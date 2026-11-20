@@ -61,6 +61,8 @@ type State struct {
 	Active   int     `json:"active"`
 	// Cards is the backlog: work written down for sessions not started yet.
 	Cards []Card `json:"cards,omitempty"`
+	// Runs are the command lines of the run box, the last first.
+	Runs []string `json:"runs,omitempty"`
 }
 
 // StatePath returns where the workspace opened on dir is saved.

@@ -67,6 +67,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 			if p.complete != nil {
 				p.input.Set(p.complete(p.input.Value()))
 			}
+		case "up", "down":
+			p.step(key == "up")
 		default:
 			p.input.Key(k)
 		}

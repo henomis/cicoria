@@ -71,7 +71,11 @@ func resolveDir(base, text string) (string, error) {
 // completeDir extends a partly typed directory as far as the directories
 // that exist allow: to the only match, or to what all matches share. The
 // text keeps the form it was typed in.
-func completeDir(base, text string) string {
+func completeDir(base, text string) string { return completePath(base, text, false) }
+
+// completePath extends a partly typed path as completeDir does, to files
+// too when files is set.
+func completePath(base, text string, files bool) string {
 	// Split what was typed into the directory to look in and the start of
 	// the name looked for.
 	cut := strings.LastIndex(text, "/") + 1
@@ -97,6 +101,8 @@ func completeDir(base, text string) string {
 		}
 		// Follow symlinks: a link to a directory is as good as one.
 		if st, err := os.Stat(filepath.Join(lookIn, name)); err == nil && st.IsDir() {
+			matches = append(matches, name+"/")
+		} else if err == nil && files {
 			matches = append(matches, name)
 		}
 	}
@@ -105,7 +111,7 @@ func completeDir(base, text string) string {
 	case 0:
 		return text
 	case 1:
-		return typedDir + matches[0] + "/"
+		return typedDir + matches[0]
 	}
 	common := matches[0]
 	for _, name := range matches[1:] {

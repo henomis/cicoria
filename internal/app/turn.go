@@ -185,6 +185,7 @@ func (m *Model) openTurnFile(s *session.Session, path string, asDiff bool) {
 		return
 	}
 	m.view.dir, m.view.path, m.view.diff, m.view.commit = s.Dir, path, true, nil
+	m.view.output = nil
 	m.view.plain, m.view.refs = nil, nil
 	m.view.rendered, m.view.spans = false, nil
 	m.view.pager.Title, m.view.pager.Wrap = path, m.view.wrap

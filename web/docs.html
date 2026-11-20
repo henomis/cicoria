@@ -55,6 +55,7 @@
           <li><a href="#split">Split</a></li>
           <li><a href="#status">Status</a></li>
           <li><a href="#panels">Side panels</a></li>
+          <li><a href="#run-box">Run a command</a></li>
           <li><a href="#review">Review</a></li>
           <li><a href="#notes">Notes</a></li>
           <li><a href="#queue">Queue</a></li>
@@ -163,6 +164,8 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>t</td><td>Send your review notes to the agent</td></tr>
           <tr><td>h</td><td>Count the session's changes from the last commit</td></tr>
           <tr><td>/</td><td>Find a file by name</td></tr>
+          <tr><td>!</td><td>Run a command in the session's directory, such as <code>make build</code></td></tr>
+          <tr><td>.</td><td>Show the output of the last command run</td></tr>
           <tr><td>b</td><td>Show or hide the side panels</td></tr>
           <tr><td>[ ]</td><td>Show or hide the left, the right panels</td></tr>
           <tr><td>space</td><td>Command palette: every command, by name</td></tr>
@@ -250,6 +253,13 @@ cicoria -version                     <span class="c"># which version this is</sp
       </table></div>
       <p>In the file tree folders are blue, files an integrated agent edited in this run are highlighted, and changed files carry git's letter. Ignored files are listed in grey and an ignored folder is read when you open it. <kbd>o</kbd> uses <code>xdg-open</code>, <code>open</code> on macOS or <code>explorer.exe</code> in WSL, so an image goes to the image viewer and a folder to the file manager.</p>
       <p><kbd>ctrl+a</kbd> <kbd>[</kbd> and <kbd>]</kbd> hide one side, <kbd>b</kbd> both. A terminal too narrow for the agent and the panels shows the agent alone.</p>
+    </section>
+
+    <section id="run-box">
+      <h2>Run a command</h2>
+      <p><kbd>ctrl+a</kbd> <kbd>!</kbd> runs a command such as <code>make build</code> without opening a shell for it: with your <code>$SHELL</code>, in the directory of the session on screen, its worktree if it has one, and with its <code>CICORIA_PORT</code>. <kbd>tab</kbd> completes a path, and <kbd>up</kbd> <kbd>down</kbd> go through the last 50 commands run, the last first.</p>
+      <p>It runs in the background. The status bar shows <code>▸ make build</code>, then <code>✓ make build done (4s)</code> or <code>✕ make build: exit 2 (4s)</code>. <kbd>ctrl+a</kbd> <kbd>.</kbd> shows what it wrote full screen, at its end, and follows it while it runs; the last megabyte is kept.</p>
+      <p>A command gets no input, so one that asks for some ends instead of waiting: anything that needs a terminal is for a <code>shell</code> session. Quitting cicoria stops the commands still running, and asks first.</p>
     </section>
 
     <section id="review">

@@ -761,6 +761,9 @@ func (m *Model) renderStatus() string {
 	if m.prefix {
 		left = append(left, ui.Reverse.Render(" "+m.cfg.Prefix+" "))
 	}
+	if r := m.runningStatus(); r != "" {
+		left = append(left, r)
+	}
 	if m.message != "" {
 		left = append(left, m.message)
 	}
@@ -781,6 +784,9 @@ func (m *Model) renderStatus() string {
 		right = "q back · / search · [ ] hunks · tab file · d diff · v select · c note · t send"
 		if m.view.commit != nil {
 			right = "q back · / search · [ ] hunks · tab next file · @ mention"
+		}
+		if m.view.output != nil {
+			right = "q back · / search · w wrap · " + m.cfg.Prefix + " ! run again"
 		}
 		if m.mode == modePalette {
 			right = "esc back"

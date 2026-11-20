@@ -52,6 +52,9 @@ type fullView struct {
 	// which line of the file it is. Lines that show none cannot carry a note.
 	plain []string
 	refs  []ui.LineRef
+	// output is set when the view shows what a command of the run box
+	// wrote.
+	output *run
 	// search is set while the user types a search.
 	search *ui.Input
 	// commit is set when the view shows the whole diff of a commit, which
@@ -68,6 +71,7 @@ func (m *Model) viewHeight() int { return max(m.height-2, 1) }
 // openDiff shows the diff of a changed file on the whole screen.
 func (m *Model) openDiff(c git.Change) {
 	m.view.dir, m.view.path, m.view.diff, m.view.commit = m.project(), c.Path, true, nil
+	m.view.output = nil
 	m.view.plain, m.view.refs = nil, nil
 	m.view.rendered, m.view.spans = false, nil
 	m.view.pager.Title, m.view.pager.Wrap = c.Path, m.view.wrap
@@ -95,6 +99,7 @@ func (m *Model) openDiff(c git.Change) {
 // notes.
 func (m *Model) openCommit(c git.Commit) {
 	m.view.dir, m.view.path, m.view.diff, m.view.commit = m.project(), "", true, &c
+	m.view.output = nil
 	m.view.rendered, m.view.spans = false, nil
 	m.view.plain, m.view.refs = nil, nil
 	m.view.pager.Title, m.view.pager.Wrap = c.Short, m.view.wrap
@@ -168,6 +173,7 @@ func (m *Model) openRendered(path string) {
 		return
 	}
 	m.view.path, m.view.diff, m.view.rendered, m.view.commit = path, false, true, nil
+	m.view.output = nil
 	m.view.plain, m.view.refs = nil, nil
 	m.mode = modeView
 
@@ -183,6 +189,7 @@ func (m *Model) openRendered(path string) {
 // openFile shows the text of a file on the whole screen.
 func (m *Model) openFile(path string) {
 	m.view.dir, m.view.path, m.view.diff, m.view.commit = m.project(), path, false, nil
+	m.view.output = nil
 	m.view.rendered, m.view.spans = false, nil
 	m.view.pager.Title, m.view.pager.Wrap = path, m.view.wrap
 	m.mode = modeView
@@ -447,6 +454,10 @@ func (m *Model) sendReview(queue bool) tea.Cmd {
 // reloadView reads again what the full-screen view shows, keeping its place.
 func (m *Model) reloadView() {
 	top, cursor, wrap, left := m.view.pager.Top, m.view.pager.Cursor, m.view.pager.Wrap, m.view.pager.Left
+	if r := m.view.output; r != nil {
+		m.showOutput(r)
+		return
+	}
 	if c := m.view.commit; c != nil {
 		m.openCommit(*c)
 	} else if c, ok := m.change(m.view.path); m.view.diff && ok {
@@ -565,6 +576,9 @@ func (m *Model) viewKey(k tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if m.view.commit != nil && m.commitViewKey(k.String()) {
+		return nil
+	}
+	if m.view.output != nil && m.outputViewKey(k.String()) {
 		return nil
 	}
 

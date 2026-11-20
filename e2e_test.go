@@ -2915,3 +2915,29 @@ func TestBoardCardAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The run box runs a command in the session's directory, tells how it
+// ended, shows its output, and offers it again.
+func TestRunBox(t *testing.T) {
+	w := newWorkspace(t)
+	w.launch(140, 40)
+	w.see("claude-1 · claude")
+
+	w.prefix('!')
+	w.see("run in claude-1:")
+	w.line("echo hello-run; test -f main.go && exit 2")
+	w.see("✕ echo hello-run; test -f main.go && exit 2: exit 2")
+
+	w.prefix('.')
+	w.see("hello-run", "q back")
+	w.typeText("q")
+	w.gone("hello-run")
+
+	w.prefix('!')
+	w.see("run in claude-1:")
+	w.tm.SendKey(uv.Key{Code: uv.KeyUp})
+	w.see("run in claude-1: echo hello-run")
+	w.tm.SendKey(uv.Key{Code: uv.KeyEscape})
+	w.gone("run in claude-1:")
+	w.quit()
+}

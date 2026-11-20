@@ -78,6 +78,8 @@ func init() {
 		{"t", "Send review notes to the agent", (*Model).askSendNotes, true},
 		{"h", "Review from here: count changes from the last commit", (*Model).rebase, false},
 		{"/", "Find a file by name…", (*Model).askFile, true},
+		{"!", "Run a command in the session's directory…", (*Model).askRun, true},
+		{".", "Show the output of the last command run", (*Model).openOutput, true},
 		{"b", "Show or hide side panels", (*Model).togglePanels, false},
 		{"[", "Show or hide the left panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideLeft) }, false},
 		{"]", "Show or hide the right panels", func(m *Model) tea.Cmd { return m.toggleSide(&m.hideRight) }, false},
@@ -992,11 +994,18 @@ func (m *Model) askLeave(question, next string) tea.Cmd {
 		m.next = next
 		return m.play(ui.Wilt, "ciao", tea.Quit)
 	}
-	if working == 0 {
+	if working == 0 && len(m.runs) == 0 {
 		return quit()
 	}
+	var stopped []string
+	if working > 0 {
+		stopped = append(stopped, fmt.Sprintf("%d session(s) still working", working))
+	}
+	if len(m.runs) > 0 {
+		stopped = append(stopped, fmt.Sprintf("%d command(s) still running", len(m.runs)))
+	}
 	m.confirm = &confirm{
-		question: fmt.Sprintf("%d session(s) still working will be stopped. %s", working, question),
+		question: fmt.Sprintf("%s will be stopped. %s", strings.Join(stopped, " and "), question),
 		yes:      quit,
 	}
 	return nil

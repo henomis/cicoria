@@ -82,6 +82,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `t` | Send review notes to the agent |
 | `h` | Review from here: count changes from the last commit |
 | `/` | Find a file by name |
+| `!` | Run a command in the session's directory, such as `make build` |
+| `.` | Show the output of the last command run |
 | `b` | Show or hide the side panels |
 | `[` `]` | Show or hide the left, right panels |
 | `space` | Command palette |
@@ -152,6 +154,14 @@ Each session has 10 ports of its own, so that the dev servers of two worktrees d
 Each row also shows for how long the session has been in its status. The terminal's window title names the session on screen and its status, such as `api · working · cicoria`, after a `▲ name` for each other session that needs input, so a tab or a window in the background tells you too. The title the terminal had is put back when cicoria quits, where the terminal keeps a stack of titles, as xterm and GNOME Terminal do. A Claude Code, Copilot CLI or Codex CLI session that says it is working but has given no sign of life for 30 seconds reads `working?`, as after an interrupted turn.
 
 A session closes when its agent or shell exits. It is kept, marked `✕`, when the agent exits within three seconds of starting, so that its error can be read, when it has queued messages, and when a file, the palette or a question is open at that moment. `close_on_exit = false` in the settings keeps every session.
+
+### Run a command
+
+`ctrl+a !` runs a command such as `make build` or `go test ./...` without opening a shell for it. It asks `run in api: ` on the status line and runs what you type with your `$SHELL`, in the directory of the session on screen (its worktree, if it has one) and with its `CICORIA_PORT`. `tab` completes the path you are typing, and `up` and `down` go through the commands run before, the last first, so running one again is `ctrl+a !`, `up`, `enter`. The workspace remembers the last 50.
+
+The command runs in the background, and the status bar shows `▸ make build` while it does, then `✓ make build done (4s)` or `✕ make build: exit 2 (4s)`. `ctrl+a .` shows what it wrote, both streams, full screen, at its end, where a failure is told: `/` searches it and `q` goes back. While it runs, the view follows what it writes. Of a command that writes a lot, the last megabyte is kept.
+
+A command gets no input: one that asks for some ends instead of waiting. Anything that needs a terminal, such as an editor, is for a `shell` session. Quitting cicoria stops the commands still running, and asks first.
 
 ## Review
 
