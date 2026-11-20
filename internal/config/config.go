@@ -56,6 +56,10 @@ type Config struct {
 	// Animations enables the ASCII art that plays when cicoria opens and
 	// quits and when a session is created or closed.
 	Animations bool `toml:"animations"`
+	// AgentMessages gives the agents cicoria's MCP server, through which
+	// they send a message to another session, or ask it a question, when
+	// told to.
+	AgentMessages bool `toml:"agent_messages"`
 	// WebAddress is the address the web cockpit listens on, host and port.
 	// Port 0 picks a free one.
 	WebAddress string `toml:"web_address"`
@@ -117,7 +121,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10, Timeline: TimelineConfig{Text: "preview", KeepDays: 30}}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, AgentMessages: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10, Timeline: TimelineConfig{Text: "preview", KeepDays: 30}}
 }
 
 // Path returns where the config file is looked for: under $XDG_CONFIG_HOME

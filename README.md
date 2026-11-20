@@ -4,7 +4,7 @@
 
 Work with several coding agents at once, in your terminal: see which one needs you, review what each one changed, and send your notes back.
 
-cicoria is an interface for you, not an orchestrator. It does not run workflows between agents or keep them running without you: every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.
+cicoria is an interface for you, not an orchestrator. It does not run workflows between agents or keep them running without you: every message an agent gets is one you write or queue, or one another agent sends when you tell it to, and they stop when cicoria closes.
 
 [![A recorded cicoria session: Claude Code writes a Go HTTP server while a README waits in the queue, a second session gets a git worktree of its own and writes a Makefile there, both are shown in a split pane, a note on the diff asks the first one for a new endpoint, and the second commits on a branch and its worktree is removed](assets/demo.gif)](https://henomis.github.io/cicoria/demo.mp4)
 
@@ -21,7 +21,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Keeps a backlog on a board**: cards you write for work not started yet, next to every session in a column for what it needs from you. A card becomes a session only when you start it.
 - **Draws a timeline of what happened, and what you did**: a bar per session for what its agent did over time, and under it a log in words of each answer, message, note and question of yours, so you know where you stand without reading the agents' consoles, and how long they waited for you.
-- **Passes a question from one session to another**: you ask it, and the answer is handed back to the session you asked from, so you stop copying between panes.
+- **Passes a question from one session to another**: you ask it, or tell an agent to, and the answer is handed back to the session it was asked from, so you stop copying between panes.
 - **Follows you on your phone**: a web cockpit, turned on when you want it, puts first the sessions that need you and what they ask, shows what each agent said last and its changes, and takes your answers and queued messages, or only queued messages for a session you share to watch.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
 
@@ -198,6 +198,20 @@ Update the client to handle it.
 
 Neither agent knows of the other: one gets a message, the other a message with an answer in it. Only Claude Code and Codex CLI can be asked, since they are the ones that tell what they said when a turn ends: for Copilot CLI the choice says `not supported`, and the other agents are only sent messages. Only the turn the question starts counts: if it ends on an error, if you interrupt it, or if the agent says nothing, no answer is sent back and the status bar says so. A question that was still being answered when cicoria closed is lost too.
 
+### Agents messaging each other
+
+You can also tell an agent to do it: "send the cicoria session api a message saying the client handles empty carts", or "ask the cicoria session api which port it listens on". cicoria gives the agents it launches an [MCP](https://modelcontextprotocol.io) server of its own, `cicoria`, with three tools:
+
+| Tool | Does |
+|---|---|
+| `list_sessions` | names the other sessions, with their agent, status and directory, and whether they can be asked |
+| `send_message` | queues a message for another session, as `ctrl+a k` does |
+| `ask_session` | queues a question there; what its agent says at the end of that turn is queued back for the agent that asked |
+
+A session is named as the sessions panel shows it. The message reaches the other agent through its queue, when it ends its turn, and says which session's agent sent it; in the queue panel it reads `from <session>`, and the timeline says which agent sent it. A question returns at once: the answer comes later, as a message of its own that starts `You asked the session "api":`. The same agents can be asked as with `ctrl+a k`. A shell session takes no messages from agents, since it would run them as commands.
+
+The server is given as Claude Code, Codex CLI and Copilot CLI are given their hooks, on the command line, without touching your settings. Your agent asks your permission to use a tool as it does for any MCP server: that is where you say yes or no. `agent_messages = false` in the settings gives agents no such tools.
+
 ## Board
 
 `ctrl+a 0` shows the board on the whole screen: the backlog, then every session in the column of what it needs from you.
@@ -266,6 +280,7 @@ changes = "uncommitted"  # "session" opens on everything a session changed since
 ignored_files = true     # false opens with the files git ignores left out of the files panel
 close_on_exit = true     # false keeps a session whose agent has exited, to restart or close by hand
 animations = true        # ASCII art when cicoria opens and quits, and a session is created or closed
+agent_messages = true    # false gives agents no tools to message other sessions
 web_address = "0.0.0.0:0"  # where the web cockpit listens: every address, a free port; "127.0.0.1:0" keeps it to this machine
 port_base = 20000        # the first port given to sessions, in CICORIA_PORT; 0 gives none
 ports_per_session = 10   # how many ports each session has to itself

@@ -91,3 +91,77 @@ func TestCloseWhileEventsArrive(t *testing.T) {
 		}
 	}
 }
+
+// A call reaches the app with what it asks, and the app's answer comes back
+// to the caller.
+func TestCallGetsReply(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	srv, err := Listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = srv.Close() }()
+
+	go func() {
+		ev := <-srv.Events()
+		if ev.Session != "s1" || ev.Call == nil || ev.Call.Op != OpSend || ev.Call.To != "api" || ev.Call.Text != "hi" {
+			ev.Answer(Reply{Text: "bad call"})
+			return
+		}
+		ev.Answer(Reply{OK: true, Text: "queued", Sessions: []SessionInfo{{Name: "api"}}})
+	}()
+
+	r, err := Request(srv.Path(), Event{Session: "s1", Call: &Call{Op: OpSend, To: "api", Text: "hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.OK || r.Text != "queued" || len(r.Sessions) != 1 || r.Sessions[0].Name != "api" {
+		t.Errorf("got %+v", r)
+	}
+}
+
+// A call the app does not answer fails, rather than hanging the agent.
+func TestCallWithoutReplyFails(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	srv, err := Listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = srv.Close() }()
+	srv.callTimeout = 100 * time.Millisecond
+	go func() { <-srv.Events() }()
+
+	if _, err := Request(srv.Path(), Event{Session: "s1", Call: &Call{Op: OpList}}); err == nil {
+		t.Error("Call succeeded with no reply")
+	}
+}
+
+// Answering an event that carries no call does nothing.
+func TestAnswerWithoutCall(t *testing.T) {
+	Event{Session: "s1"}.Answer(Reply{OK: true})
+}
+
+// A call the app takes after its caller gave up says so, and one taken in
+// time does not.
+func TestCallExpires(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	srv, err := Listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = srv.Close() }()
+	srv.callTimeout = 50 * time.Millisecond
+
+	if _, err := Request(srv.Path(), Event{Session: "s1", Call: &Call{Op: OpSend}}); err == nil {
+		t.Fatal("Request succeeded with no reply")
+	}
+	if ev := <-srv.Events(); !ev.Expired(time.Now()) {
+		t.Error("a call whose caller gave up has not expired")
+	}
+	if (Event{Call: &Call{Op: OpSend}, Deadline: time.Now().Add(time.Minute)}).Expired(time.Now()) {
+		t.Error("a call in time has expired")
+	}
+	if (Event{Session: "s1"}).Expired(time.Now()) {
+		t.Error("a hook event has expired")
+	}
+}

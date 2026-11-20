@@ -198,6 +198,8 @@ func (m *Model) enqueueFrom(s *session.Session, msg session.Message, src string)
 	e := session.Event{K: session.KindQueue, V: msg.From, Src: src}
 	if msg.ReplyTo != "" {
 		e.To = msg.ReplyTo
+	} else if msg.Sender != "" {
+		e.To = msg.Sender
 	}
 	m.recordText(s, e, msg.Text)
 	m.save()
@@ -225,7 +227,15 @@ func (m *Model) sendNext(s *session.Session) tea.Cmd {
 	if msg.ReplyTo != "" {
 		s.Ask(msg)
 	}
-	return m.deliver(s, msg.Text, msg.From, "")
+	text := msg.Text
+	if msg.Sender != "" {
+		name := "another session"
+		if from, _ := m.byID(msg.Sender); from != nil {
+			name = from.Name
+		}
+		text = session.AgentPrompt(name, msg)
+	}
+	return m.deliver(s, text, msg.From, "")
 }
 
 // deliver gives a message to a running agent: pasted now, with enter
@@ -338,8 +348,13 @@ func (m *Model) renderQueue(r rect) []string {
 		if more != "" {
 			text += " …"
 		}
-		// A question says who gets the answer.
-		if from, _ := m.byID(s.Queue[i].ReplyTo); from != nil {
+		// A question says who gets the answer, and a message from an agent
+		// whose it is.
+		id := s.Queue[i].ReplyTo
+		if id == "" {
+			id = s.Queue[i].Sender
+		}
+		if from, _ := m.byID(id); from != nil {
 			text = "from " + from.Name + ": " + text
 		}
 		lines = append(lines, ui.Selected(lead+text, inner, focused && i == cursor, true))

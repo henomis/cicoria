@@ -18,6 +18,7 @@ package agent
 
 import (
 	"encoding/json"
+	"maps"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -69,7 +70,33 @@ type LaunchOpts struct {
 	// Port is the first of the ports the session has to itself, or 0 when
 	// it has none.
 	Port int
+	// Messages gives the agent cicoria's MCP server, through which it can
+	// send a message to another session, or ask it a question.
+	Messages bool
 }
+
+// mcpServer returns the command and arguments that start cicoria's MCP
+// server for the session, or false when the agent is not to have it. The
+// session and the socket are arguments, not the environment, as Codex CLI
+// does not hand the environment to the servers it starts.
+func mcpServer(o LaunchOpts) (string, []string, bool) {
+	if !o.Messages || o.Self == "" || o.Socket == "" || o.SessionID == "" {
+		return "", nil, false
+	}
+	return o.Self, []string{"mcp", "-session", o.SessionID, "-socket", o.Socket}, true
+}
+
+// mcpJSON returns the configuration of cicoria's MCP server as Claude Code
+// and Copilot CLI read it, with extra fields in the server's entry.
+func mcpJSON(command string, args []string, extra map[string]any) string {
+	server := map[string]any{"command": command, "args": args}
+	maps.Copy(server, extra)
+	b, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{mcpName: server}})
+	return string(b)
+}
+
+// mcpName is the name agents know cicoria's MCP server by.
+const mcpName = "cicoria"
 
 // EnvPort tells the agent the first of the ports its session has to itself.
 const EnvPort = "CICORIA_PORT"

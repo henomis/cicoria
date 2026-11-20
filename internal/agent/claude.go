@@ -100,6 +100,11 @@ func (c *Claude) Command(o LaunchOpts) *exec.Cmd {
 		argv = append(argv, "--session-id", o.SessionID)
 	}
 
+	// The option takes several values: given with "=", it takes only this
+	// one.
+	if command, args, ok := mcpServer(o); ok {
+		argv = append(argv, "--mcp-config="+mcpJSON(command, args, nil))
+	}
 	if o.Self != "" && o.Socket != "" {
 		argv = append(argv, "--settings", hookSettings(strconv.Quote(o.Self)+" hook"))
 	}

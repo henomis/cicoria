@@ -59,6 +59,9 @@ const (
 	FromTUI  = "tui"
 	FromWeb  = "web"
 	FromHook = "hook"
+	// FromAgent is the agent of another session, through cicoria's MCP
+	// server.
+	FromAgent = "agent"
 )
 
 // How much of the text the user sends the ledger keeps.

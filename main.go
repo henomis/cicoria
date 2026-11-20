@@ -16,12 +16,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -29,6 +32,7 @@ import (
 	"github.com/henomis/cicoria/internal/app"
 	"github.com/henomis/cicoria/internal/config"
 	"github.com/henomis/cicoria/internal/ipc"
+	"github.com/henomis/cicoria/internal/mcp"
 )
 
 const usage = `cicoria — a terminal workspace for supervising coding agents
@@ -36,6 +40,9 @@ const usage = `cicoria — a terminal workspace for supervising coding agents
 Usage:
   cicoria [flags] [directory]   open the workspace of a project (default: .)
   cicoria hook [name]           report an agent hook event (used by agents)
+  cicoria mcp -session ID -socket PATH
+                                the MCP server through which an agent messages
+                                other sessions (started by agents)
 
 Flags:
 `
@@ -49,6 +56,16 @@ func main() {
 			name = os.Args[2]
 		}
 		_ = ipc.Forward(name, os.Stdin)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		err := mcp.Serve(ctx, os.Args[2:], version())
+		stop()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "cicoria:", err)
+			os.Exit(1)
+		}
 		return
 	}
 

@@ -73,11 +73,25 @@ func codexHooks() []string {
 	return argv
 }
 
+// codexMCP returns the configuration value that gives Codex CLI cicoria's
+// MCP server. A JSON string is a TOML string too.
+func codexMCP(command string, args []string) string {
+	quote := func(v string) string { b, _ := json.Marshal(v); return string(b) }
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = quote(a)
+	}
+	return "mcp_servers." + mcpName + "={command=" + quote(command) + ",args=[" + strings.Join(quoted, ",") + "]}"
+}
+
 // Command implements Adapter.
 func (c *Codex) Command(o LaunchOpts) *exec.Cmd {
 	argv := append([]string{}, c.argv...)
 	if o.Self != "" && o.Socket != "" {
 		argv = append(argv, codexHooks()...)
+	}
+	if command, args, ok := mcpServer(o); ok {
+		argv = append(argv, "-c", codexMCP(command, args))
 	}
 	// Codex CLI names its conversations itself, and tells the name through
 	// the hooks: one that it told is continued.

@@ -127,6 +127,9 @@ func (c *Copilot) Command(o LaunchOpts) *exec.Cmd {
 			argv = append(argv, "--plugin-dir", dir)
 		}
 	}
+	if command, args, ok := mcpServer(o); ok {
+		argv = append(argv, "--additional-mcp-config", mcpJSON(command, args, map[string]any{"type": "local", "tools": []string{"*"}}))
+	}
 	return baseCommand(o, argv)
 }
 

@@ -86,6 +86,10 @@ func sentFrom(from string) string {
 		return "a message from another session"
 	case fromAnswer:
 		return "the answer of another session"
+	case fromAgent:
+		return "a message from the agent of another session"
+	case fromAgentAsk:
+		return "a question from the agent of another session"
 	}
 	return "a message"
 }
@@ -292,6 +296,18 @@ func (l lane) say(k int, name func(id string) string, now time.Time) (entry, boo
 		case fromAnswer:
 			line.kind = '‹'
 			text = "got the answer it asked another session for"
+		case fromAgent, fromAgentAsk:
+			// Agents send messages and questions on their own: the line says
+			// whose it was.
+			sender := "another session"
+			if e.To != "" {
+				sender = name(e.To)
+			}
+			text = "got" + quoted(e) + " from the agent of " + sender
+			if e.V == fromAgentAsk {
+				line.kind = '?'
+				text = "was asked" + quoted(e) + " by the agent of " + sender
+			}
 		default:
 			what := quoted(e)
 			if what == "" {

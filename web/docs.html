@@ -133,7 +133,7 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>Prefix</td><td>The key, <kbd>ctrl+a</kbd> by default, that makes the next key a cicoria command instead of input for the agent.</td></tr>
         </tbody>
       </table></div>
-      <div class="note"><p>cicoria is an interface for you, not an orchestrator. Every message an agent gets is one you write or queue, agents never contact each other on their own, and they stop when cicoria closes.</p></div>
+      <div class="note"><p>cicoria is an interface for you, not an orchestrator. Every message an agent gets is one you write or queue, or one another agent sends when you tell it to, and they stop when cicoria closes.</p></div>
     </section>
 
 
@@ -343,6 +343,17 @@ It answered:
 Update the client to handle it.</pre>
       <p>The answer is the agent's last message in the <code>Stop</code> hook's payload, so only Claude Code and Codex CLI can be asked. Copilot CLI's hooks do not carry it, and cicoria does not read transcripts, so for Copilot the choice says <code>not supported</code>.</p>
       <p>Only the turn the question starts counts. When another message was taken first, which is how an interrupted turn shows, or the turn ends on an error, or the agent says nothing, no answer goes back and the status bar says so. Claude Code names the message a turn is for, which settles this exactly. A question still being answered when cicoria closes is lost.</p>
+      <h3>Agents messaging each other</h3>
+      <p>You can also tell an agent to do it: “ask the cicoria session api which port it listens on”. cicoria gives the agents it launches an <a href="https://modelcontextprotocol.io">MCP</a> server of its own, <code>cicoria</code>, on the command line as it gives their hooks, without touching your settings:</p>
+      <div class="table"><table>
+        <thead><tr><th>Tool</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td>list_sessions</td><td>Names the other sessions, with their agent, status and directory, and whether they can be asked</td></tr>
+          <tr><td>send_message</td><td>Queues a message for another session, as <kbd>ctrl+a</kbd> <kbd>k</kbd> does</td></tr>
+          <tr><td>ask_session</td><td>Queues a question there; what its agent says at the end of that turn is queued back for the agent that asked</td></tr>
+        </tbody>
+      </table></div>
+      <p>The message reaches the other agent through its queue and says which session's agent sent it; the queue panel and the timeline say so too. A question returns at once, and the answer comes later as a message of its own. A shell session takes no messages from agents, since it would run them as commands. Your agent asks your permission to use a tool as for any MCP server: that is where you say yes or no. <code>agent_messages = false</code> gives agents no such tools.</p>
     </section>
 
     <section id="board">
@@ -502,6 +513,7 @@ and add a test for it.</pre>
           <tr><td>changes</td><td><code>"uncommitted"</code></td><td><code>"session"</code> opens the changes panel on everything since the session started</td></tr>
           <tr><td>ignored_files</td><td><code>true</code></td><td><code>false</code> leaves ignored files out of the file tree until <kbd>i</kbd></td></tr>
           <tr><td>close_on_exit</td><td><code>true</code></td><td><code>false</code> keeps a session whose agent exited, to restart or close by hand</td></tr>
+          <tr><td>agent_messages</td><td><code>true</code></td><td><code>false</code> gives agents no tools to message other sessions</td></tr>
           <tr><td>animations</td><td><code>true</code></td><td>A second of ASCII art when cicoria opens and quits and a session is created or closed</td></tr>
           <tr><td>web_address</td><td><code>"0.0.0.0:0"</code></td><td>Where the <a href="#web">web cockpit</a> listens, host and port: every address by default, and port 0 picks a free one. <code>"127.0.0.1:0"</code> keeps it to this machine</td></tr>
           <tr><td>port_base</td><td><code>20000</code></td><td>The first of the ports given to sessions, each its own range, told in <code>CICORIA_PORT</code>. <code>0</code> gives sessions no ports</td></tr>

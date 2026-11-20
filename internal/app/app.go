@@ -678,7 +678,7 @@ func (m *Model) startAll() tea.Cmd {
 func (m *Model) start(s *session.Session) tea.Cmd {
 	pane := m.pane(s)
 	m.track(s)
-	err := s.Start(agent.LaunchOpts{Self: m.self, Socket: m.ipc.Path()}, pane.w, pane.h)
+	err := s.Start(agent.LaunchOpts{Self: m.self, Socket: m.ipc.Path(), Messages: m.cfg.AgentMessages}, pane.w, pane.h)
 	if err != nil {
 		m.say(err.Error())
 		return nil
@@ -885,6 +885,16 @@ func (m *Model) seen() {
 }
 
 func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
+	if ev.Call != nil {
+		// The agent was told the call failed: doing it now would surprise it.
+		if ev.Expired(time.Now()) {
+			m.say("a call from an agent came too late and was dropped")
+			return nil
+		}
+		r, cmd := m.handleCall(ev.Session, *ev.Call)
+		ev.Answer(r)
+		return cmd
+	}
 	s, i := m.byID(ev.Session)
 	if s == nil {
 		return nil

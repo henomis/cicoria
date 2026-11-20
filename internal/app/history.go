@@ -42,7 +42,11 @@ const (
 	fromNotes  = "notes"
 	fromAsk    = "ask"
 	fromAnswer = "answer"
-	fromCard   = "card"
+	// fromAgent and fromAgentAsk are a message and a question the agent of
+	// another session sent.
+	fromAgent    = "agent"
+	fromAgentAsk = "agent-ask"
+	fromCard     = "card"
 )
 
 // openHistory reads the history of the workspace, after making room in it

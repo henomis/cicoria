@@ -131,6 +131,20 @@ type Message struct {
 	// From says where the message came from when it was not typed into the
 	// queue: review notes, a card, a question or its answer.
 	From string `json:"from,omitempty"`
+	// Sender is the ID of the session whose agent sent the message, when an
+	// agent did rather than the user.
+	Sender string `json:"sender,omitempty"`
+}
+
+// AgentPrompt writes a message an agent sent, for the agent it is sent to, so
+// that it knows where it came from. sender is the name of the session that
+// sent it; a question says that the answer goes back there.
+func AgentPrompt(sender string, m Message) string {
+	if m.ReplyTo != "" {
+		return fmt.Sprintf("A question from the agent of the cicoria session %q. "+
+			"What you say at the end of this turn goes back to it as your answer.\n\n%s", sender, m.Text)
+	}
+	return fmt.Sprintf("A message from the agent of the cicoria session %q:\n\n%s", sender, m.Text)
 }
 
 // UnmarshalJSON reads a message. Queues saved before a message could be a
@@ -147,7 +161,12 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 // message for the session the question was asked from.
 func Answer(from string, q Message, answer string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "I asked the session %q:\n", from)
+	// The agent that asked is told so, not that the user did.
+	asker := "I"
+	if q.Sender != "" {
+		asker = "You"
+	}
+	fmt.Fprintf(&b, "%s asked the session %q:\n", asker, from)
 	quote(&b, q.Text)
 	b.WriteString("\nIt answered:\n")
 	quote(&b, answer)
