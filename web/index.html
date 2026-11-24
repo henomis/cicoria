@@ -123,6 +123,19 @@ this session a worktree of its own?</span> [y/N] y</pre>
 <span class="g">3f9c2e1</span></pre></div>
         </div>
       </div>
+
+      <div class="ability">
+        <div>
+          <h3>Run a command without leaving the agent</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>!</kbd> runs a command such as <code>make build</code> in the background, in the directory of the session on screen, with its port. The status bar says when it is done or how it failed, and <kbd>ctrl+a</kbd> <kbd>.</kbd> shows its output.</p>
+        </div>
+        <div class="term">
+          <pre><span class="d">run in ~/src/shop ›</span> make build</pre>
+          <pre><span class="d">▸ make build</span>
+<span class="g">✓ make build done (4s)</span>
+<span class="r">✕ make test: exit 2 (11s)</span></pre>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -169,7 +182,61 @@ this session a worktree of its own?</span> [y/N] y</pre>
     </div>
   </section>
 
-  <section class="band band-shade" aria-labelledby="steer">
+  <section class="band band-shade" aria-labelledby="see">
+    <div class="wrap">
+      <div class="intro">
+        <h2 id="see">See where you stand, and how it went</h2>
+        <p>Three screens put every session in one view, so you do not read the agents' consoles one by one to find out.</p>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>A board of what each session needs</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>0</kbd> shows your backlog next to every session, in a column for what it needs from you. Write a card for work not started yet; it becomes a session, in a worktree of its own if you like, only when you start it.</p>
+        </div>
+        <div class="term">
+          <pre><span class="d">Backlog         ▲ Needs you      ● Working        ✓ To review</span>
+□ rate limiter  <span class="w">api         2m</span>   <span class="g">web        12m</span>   <span class="b">docs</span>
+□ dark mode     <span class="d">Bash: npm test</span>   <span class="d">wt · 3 files</span>     <span class="d">2 commits</span></pre>
+        </div>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>A timeline of what happened, and what you did</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>e</kbd> draws a bar for each session over time, in the colour of what its agent did, and under it a log in words of your answers, messages and notes, with what came of each one and how long agents waited for you.</p>
+        </div>
+        <div class="term">
+          <pre><span class="d">timeline  12:39 → now · agents waited for you 11m</span>
+api  <span class="g">██████</span><span class="w">███</span><span class="g">███████</span><span class="b">█</span><span class="d">█████</span><span class="g">████</span><span class="w">██</span>
+web  <span class="g">█████████</span><span class="b">█</span><span class="d">███████</span><span class="g">███████</span><span class="r">█</span>
+<span class="d">13:05</span> api ↵ answered “Yes” · it waited 6m
+<span class="d">13:41</span> api › sent review notes → done in 28m, 3 files</pre>
+        </div>
+      </div>
+
+      <div class="ability">
+        <div>
+          <h3>Stats of how your work went, over days</h3>
+          <p><kbd>ctrl+a</kbd> <kbd>i</kbd> charts today, the last week or the last month: when you work with agents, how long their turns take, how long they wait for you and sit idle after a turn, how often more than one works at once, and how the agents you run compare.</p>
+        </div>
+        <div class="term">
+          <pre><span class="d">turns per day</span>
+<span class="d">60 ┤</span>                 <span class="b">███</span>
+<span class="d">   ┤</span> <span class="b">▃▃▃</span>             <span class="b">███</span>
+<span class="d"> 0 ┤</span> <span class="b">███</span>         <span class="b">▅▅▅</span> <span class="b">███</span>
+<span class="d">     Fri Sat Sun Mon Tue</span>
+
+<span class="d">agents at once, the most in a day</span>
+<span class="d"> 2 ┤</span> <span class="g">███</span>
+<span class="d"> 1 ┤</span> <span class="g">███</span>         <span class="g">███ ███</span>
+<span class="d">     Fri Sat Sun Mon Tue</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="steer">
     <div class="wrap">
       <div class="intro">
         <h2 id="steer">Review what they did, and say what you think</h2>
@@ -223,7 +290,7 @@ return an error, the caller ignores nil</pre>
       <div class="ability">
         <div>
           <h3>Ask one session about another's work</h3>
-          <p><kbd>ctrl+a</kbd> <kbd>k</kbd> puts your question to another session. Its answer comes back to the session you asked from, with your question and what to do with it, so you stop copying between panes.</p>
+          <p><kbd>ctrl+a</kbd> <kbd>k</kbd> puts your question to another session. Its answer comes back to the session you asked from, with your question and what to do with it, so you stop copying between panes. You can also tell an agent to do it, as in "ask the session api which port it listens on": cicoria gives the agents it launches the tools to message other sessions, and the agent asks your permission for them as for any other tool.</p>
         </div>
         <div class="term">
           <pre><span class="d">I asked the session "api":</span>
