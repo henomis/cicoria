@@ -166,6 +166,8 @@ func (m *Model) View() tea.View {
 		rows = m.renderBoard()
 	case modeTimeline:
 		rows = m.renderTimeline()
+	case modeStats:
+		rows = m.renderStats()
 	default:
 		l := m.layout()
 		if m.mode == modePalette && m.paletteFrom == modeView {
@@ -174,6 +176,8 @@ func (m *Model) View() tea.View {
 			rows = m.renderBoard()
 		} else if m.mode == modePalette && m.paletteFrom == modeTimeline {
 			rows = m.renderTimeline()
+		} else if m.mode == modePalette && m.paletteFrom == modeStats {
+			rows = m.renderStats()
 		} else {
 			rows = m.renderWorkspace(l)
 		}
@@ -797,6 +801,11 @@ func (m *Model) renderStatus() string {
 		right = "j/k move · space share ⇄ stop sharing · x stop · esc back"
 	case modeTimeline:
 		right = m.timelineHint()
+		if m.mode == modePalette {
+			right = "esc back"
+		}
+	case modeStats:
+		right = m.statsHint()
 		if m.mode == modePalette {
 			right = "esc back"
 		}

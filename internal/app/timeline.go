@@ -206,20 +206,11 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 		return "a closed session"
 	}
 	byID := map[string][]session.Event{}
-	var runEnds []time.Time
-	for k, e := range events {
-		if e.S == "" {
-			switch {
-			case e.K == session.KindRunEnd:
-				runEnds = append(runEnds, e.T)
-			case e.K == session.KindRunStart && k > 0 && events[k-1].K != session.KindRunEnd:
-				// The run before ended without saying so, as when the
-				// terminal was closed: after the last thing it recorded.
-				runEnds = append(runEnds, events[k-1].T)
-			}
-			continue
+	ends := runEnds(events)
+	for _, e := range events {
+		if e.S != "" {
+			byID[e.S] = append(byID[e.S], e)
 		}
-		byID[e.S] = append(byID[e.S], e)
 	}
 	ids := []string{}
 	var shells []string
@@ -245,7 +236,7 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	for _, id := range ids {
 		s, _ := m.byID(id)
 		l := lane{id: id, s: s, name: name(id), events: byID[id]}
-		l.periods = periods(l.events, runEnds)
+		l.periods = periods(l.events, ends)
 		said := 0
 		for k, e := range l.events {
 			if e.T.Before(from) {
@@ -270,6 +261,23 @@ func (m *Model) timelineData(now time.Time) (ui.Timeline, []lane, []entry) {
 	}
 	slices.SortStableFunc(log, func(a, b entry) int { return b.at.Compare(a.at) })
 	return t, lanes, append(nowLines(lanes, now), log...)
+}
+
+// runEnds returns when each run of cicoria in the history ended.
+func runEnds(events []session.Event) []time.Time {
+	var ends []time.Time
+	for k, e := range events {
+		switch {
+		case e.S != "":
+		case e.K == session.KindRunEnd:
+			ends = append(ends, e.T)
+		case e.K == session.KindRunStart && k > 0 && events[k-1].K != session.KindRunEnd:
+			// The run before ended without saying so, as when the
+			// terminal was closed: after the last thing it recorded.
+			ends = append(ends, events[k-1].T)
+		}
+	}
+	return ends
 }
 
 // closedIDs returns the sessions of the history that are not live and did

@@ -80,6 +80,7 @@ const (
 	modeWeb
 	modeBoard
 	modeTimeline
+	modeStats
 )
 
 // Model is the root Bubble Tea model.
@@ -174,6 +175,8 @@ type Model struct {
 	board board
 	// timeline is what the timeline shows.
 	timeline timeline
+	// stats is what Stats shows.
+	stats stats
 
 	// runs are the commands of the run box still running, lastRun the
 	// one whose output ctrl+a . shows, and runHistory the command lines
@@ -835,6 +838,13 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case timelineMsg:
 		m.timeline.polling = false
 		m.timeline.commits = msg.commits
+
+	case statsMsg:
+		m.stats.loading = false
+		m.stats.file = msg.events
+		if msg.err != nil {
+			m.say("could not read the history: " + msg.err.Error())
+		}
 
 	case cardEditedMsg:
 		m.cardEdited(msg)

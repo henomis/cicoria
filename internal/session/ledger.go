@@ -97,6 +97,8 @@ type Event struct {
 	X string `json:"x,omitempty"`
 	// Files are the files the agent changed in a turn that ended.
 	Files []string `json:"files,omitempty"`
+	// Agent is the agent a session runs, when it opened.
+	Agent string `json:"agent,omitempty"`
 }
 
 // EventsPath returns where the ledger of the workspace opened on dir is

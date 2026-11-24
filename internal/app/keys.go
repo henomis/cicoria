@@ -102,6 +102,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		return m.boardKey(k)
 	case modeTimeline:
 		return m.timelineKey(k)
+	case modeStats:
+		return m.statsKey(k)
 	case modePalette:
 		if key == "esc" {
 			m.mode, m.palette = m.paletteFrom, nil
@@ -373,7 +375,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	case modeBoard:
 		return m.boardMouse(msg)
-	case modePalette, modeWeb, modeTimeline:
+	case modePalette, modeWeb, modeTimeline, modeStats:
 		return nil
 	}
 

@@ -101,6 +101,9 @@ func (m *Model) record(s *session.Session, e session.Event) {
 			return
 		}
 		e.S = s.ID
+		if e.K == session.KindSessionOpen {
+			e.Agent = s.Adapter.Name()
+		}
 	}
 	m.history.Record(e)
 }

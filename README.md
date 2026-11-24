@@ -21,6 +21,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Queues messages** and sends each one when the agent ends its turn.
 - **Keeps a backlog on a board**: cards you write for work not started yet, next to every session in a column for what it needs from you. A card becomes a session only when you start it.
 - **Draws a timeline of what happened, and what you did**: a bar per session for what its agent did over time, and under it a log in words of each answer, message, note and question of yours, so you know where you stand without reading the agents' consoles, and how long they waited for you.
+- **Counts how your work went, over days**: turns by hour and by day, how many you typed and how many cicoria sent, how long they took, how long agents waited for you, and how many agents worked at once, from the same history.
 - **Passes a question from one session to another**: you ask it, or tell an agent to, and the answer is handed back to the session it was asked from, so you stop copying between panes.
 - **Follows you on your phone**: a web cockpit, turned on when you want it, puts first the sessions that need you and what they ask, shows what each agent said last and its changes, and takes your answers and queued messages, or only queued messages for a session you share to watch.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
@@ -72,6 +73,7 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `o` | Worktrees: list them, open a session or a shell in one, or remove it |
 | `0` | Board: the backlog, and every session by what it needs |
 | `e` | Timeline: what happened, and what you did |
+| `i` | Stats: how your work went, over days |
 | `v` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
@@ -259,6 +261,16 @@ It opens on the time since you were last away: since the last pause of ten minut
 `j`/`k` move, and `g`/`G` go to the first and the last line; `a` goes to the next session that waits for you. `enter` goes to the session of the line, and `m` queues a message for it. `d` shows the turn of the line: what it was for, how long it took, the files the agent changed through its tools, the commits made in it, and what the agent said at its end. There, `d` or `enter` opens the diff of a file since the session started, or a commit, `v` the file itself, and `q` comes back to the turn. `q` or `esc` goes back. A terminal narrower than 60 columns has no bars.
 
 The history is kept next to the saved sessions, in `events.jsonl`, readable only by you, for 30 days. Of the messages cicoria sends and queues, the notes, the prompts you type in the pane of Claude Code, Copilot CLI or Codex CLI, which tell them, and what the agent said at the end of each turn, it keeps the first 120 characters; keys never. `[timeline]` in the settings changes that. For an agent other than Claude Code, Copilot CLI and Codex CLI, turns are guessed from its output, and a burst shorter than two seconds is not kept.
+
+## Stats
+
+`ctrl+a i` shows on the whole screen how your work went in the workspace over days, counted from the history the [timeline](#timeline) keeps. It reads it all, up to 30 days, and acts on nothing.
+
+It draws charts, and `t` shows the same as numbers instead, until cicoria closes: a punchcard of the turns by day of the week and hour, in shades from `·` for none to `█` for the most; the turns of each day, or of each hour today, as a column on its label, typed below and sent by cicoria above; how turns started and how many were cut short, as bars of the whole; how long turns took, and how long agents waited for you and for their next message, as histograms from under ten seconds to over fifteen minutes, the two waits back to back; and the most agents that worked at once in each day, or in each hour today, as a column a row high for each agent, up to four, on the same labels as the turns. A terminal narrower than 60 columns shows the numbers.
+
+It shows the turns by hour of the day and by day of the week; how they started, typed by you in an agent's pane or sent by cicoria from the queue, the notes or another session, and how many were interrupted or failed; how long they took, as the median, the time three in four took less than, and the longest; how many times agents waited for you, for how long in all; how long an agent that ended a turn waited for its next one, idle after done, leaving out pauses of over four hours and the times cicoria was closed; and for how long one, two, three, or four or more agents worked at once. Then each agent, Claude Code, Codex CLI, Copilot CLI or another, with its turns, sessions, median turn, the share interrupted, how many times it asked you and how long it waited for you; a session opened before cicoria kept its agent in the history counts as not recorded. Last, the files agents changed most.
+
+It opens on the last 7 days; `h`/`l` or the arrows show today or the last 30 days. `j`/`k`, `space`/`b` and `g`/`G` scroll, and `t` switches between charts and numbers. `q` or `esc` goes back, as `ctrl+a i` does. A terminal 100 columns wide or more shows two columns, and one narrower than 60 shows numbers without bars.
 
 ## Web cockpit
 
