@@ -296,6 +296,23 @@ func graphWaits(sum summary, w int) []string {
 	return append(out, ui.Dim.Render(fmt.Sprintf("  %d wait(s), %s in all · %d idle, median %s", len(sum.waits), span(total), len(sum.idle), span(quantile(sum.idle, 0.5)))))
 }
 
+// togetherValues returns the most agents that worked at once in each day,
+// or in each hour today, up to togetherRows.
+func togetherValues(sum summary) []int {
+	y, mo, d := sum.from.Date()
+	// Cell k starts at midnight plus k days, or at hour k of the clock today:
+	// a day can have 23 or 25 hours, and an hour that does not exist is empty.
+	at := func(k int) time.Time { return time.Date(y, mo, d+k, 0, 0, 0, 0, sum.from.Location()) }
+	if sum.buckets == 24 {
+		at = func(k int) time.Time { return time.Date(y, mo, d, k, 0, 0, 0, sum.from.Location()) }
+	}
+	values := make([]int, sum.buckets)
+	for k := range values {
+		values[k] = min(atOnce(sum.work, at(k), minTime(at(k+1), sum.now), 1)[0], togetherRows)
+	}
+	return values
+}
+
 // togetherRows is the most agents at once its columns tell apart.
 const togetherRows = 4
 
@@ -303,18 +320,10 @@ const togetherRows = 4
 // in each hour today, as a column a row high for each agent.
 func graphTogether(sum summary, w int) []string {
 	title := "agents at once, the most in a day"
-	step := func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }
 	if sum.buckets == 24 {
 		title = "agents at once, the most in an hour"
-		step = func(t time.Time) time.Time { return t.Add(time.Hour) }
 	}
-	values := make([]int, sum.buckets)
-	start := sum.from
-	for k := range values {
-		next := step(start)
-		values[k] = min(atOnce(sum.work, start, minTime(next, sum.now), 1)[0], togetherRows)
-		start = next
-	}
+	values := togetherValues(sum)
 	label := func(row int) string {
 		if row == 0 {
 			return fmt.Sprintf("%d+", togetherRows)

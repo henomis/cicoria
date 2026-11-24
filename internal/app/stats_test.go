@@ -257,3 +257,25 @@ func TestAtOnce(t *testing.T) {
 		t.Errorf("atOnce = %v", got)
 	}
 }
+
+// On days of 23 or 25 hours, each column of today is the hour of its label.
+func TestTogetherHoursOnDSTDays(t *testing.T) {
+	rome, err := time.LoadLocation("Europe/Rome")
+	if err != nil {
+		t.Skip("no zone data:", err)
+	}
+	for _, c := range []struct {
+		day   int
+		month time.Month
+		hour  int
+	}{{25, time.October, 23}, {25, time.October, 1}, {29, time.March, 5}, {29, time.March, 23}} {
+		at := func(h, m int) time.Time { return time.Date(2026, c.month, c.day, h, m, 0, 0, rome) }
+		sum := summary{buckets: 24, from: at(0, 0), now: at(23, 59), work: [][2]time.Time{{at(c.hour, 10), at(c.hour, 40)}}}
+		got := togetherValues(sum)
+		for h, n := range got {
+			if want := map[bool]int{true: 1, false: 0}[h == c.hour]; n != want {
+				t.Errorf("%s, work at %02d:10: hour %02d = %d, want %d", c.month, c.hour, h, n, want)
+			}
+		}
+	}
+}
