@@ -76,12 +76,16 @@ func TestKeysReachCommand(t *testing.T) {
 	for _, k := range []uv.Key{
 		{Code: 'h', Text: "h"},
 		{Code: 'i', Text: "I", Mod: uv.ModShift},
-		{Code: uv.KeyEnter},
+		// Windows Terminal (win32-input-mode) adds the base key and the
+		// lock keys, and a held key repeats.
+		{Code: uv.KeyBackspace, BaseCode: uv.KeyBackspace, Mod: uv.ModNumLock},
+		{Code: 'i', Text: "i", BaseCode: 'i', IsRepeat: true},
+		{Code: uv.KeyEnter, BaseCode: uv.KeyEnter, Mod: uv.ModNumLock},
 	} {
 		tm.SendKey(k)
 	}
-	// The tty echoes the line and cat prints it back.
-	waitFor(t, tm, "hI\nhI")
+	// Backspace takes the I back; the tty echoes the line and cat prints it.
+	waitFor(t, tm, "hi\nhi")
 
 	tm.SendKey(uv.Key{Code: 'd', Mod: uv.ModCtrl})
 	select {
