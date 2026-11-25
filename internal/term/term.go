@@ -279,9 +279,11 @@ func (t *Terminal) SendKey(k uv.Key) {
 		t.emu.SendText(seq)
 		return
 	}
-	// The emulator matches keys by exact value, so drop what it ignores.
-	k.Text = ""
-	t.emu.SendKey(uv.KeyPressEvent(k))
+	// The emulator matches keys by exact value, so keep only the key and its
+	// modifiers: Windows Terminal also reports the base key, the lock keys
+	// and repeats, and esc or the arrows would otherwise send nothing.
+	mod := k.Mod &^ (uv.ModCapsLock | uv.ModNumLock | uv.ModScrollLock)
+	t.emu.SendKey(uv.KeyPressEvent{Code: k.Code, Mod: mod})
 }
 
 // SendMouse sends a mouse event to the command, if it asked for them.
