@@ -365,10 +365,10 @@ func Diff(dir string, c Change, base string) (string, error) {
 }
 
 // Files lists the files under dir, relative to it and sorted. In a work tree
-// it leaves out what git ignores; elsewhere it skips hidden directories, and
-// more says the list stopped at maxWalk.
-func Files(dir string) (files []string, more bool, err error) {
-
+// it leaves out what git ignores. Elsewhere it skips hidden directories, and
+// lists a directory as its path with a slash, not looked into unless it is
+// one of open. more says the list stopped at maxWalk.
+func Files(dir string, open []string) (files []string, more bool, err error) {
 	if _, ok := Root(dir); ok {
 		out, err := run(dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
 		if err != nil {
@@ -380,27 +380,34 @@ func Files(dir string) (files []string, more bool, err error) {
 			}
 		}
 	} else {
-		if _, err := os.Stat(dir); err != nil {
-			return nil, false, err
+		isOpen := map[string]bool{}
+		for _, d := range open {
+			isOpen[d] = true
 		}
 		// Breadth first, so that when maxWalk cuts the list short it is the
-		// deepest files that are missing, not whole directories at the top.
+		// deepest paths that are missing.
 		queue := []string{""}
 	walk:
 		for len(queue) > 0 {
 			rel := queue[0]
 			queue = queue[1:]
-			entries, _ := os.ReadDir(filepath.Join(dir, rel))
+			entries, err := os.ReadDir(filepath.Join(dir, filepath.FromSlash(rel)))
+			if err != nil && rel == "" {
+				return nil, false, err
+			}
 			for _, e := range entries {
-				p := filepath.Join(rel, e.Name())
+				p := rel + e.Name()
 				switch {
-				case e.IsDir():
-					if !strings.HasPrefix(e.Name(), ".") {
-						queue = append(queue, p)
-					}
+				case e.IsDir() && strings.HasPrefix(e.Name(), "."):
+					// Hidden directories are left out.
 				case len(files) >= maxWalk:
 					more = true
 					break walk
+				case e.IsDir():
+					files = append(files, p+"/")
+					if isOpen[p] {
+						queue = append(queue, p+"/")
+					}
 				default:
 					files = append(files, p)
 				}
@@ -415,21 +422,21 @@ func Files(dir string) (files []string, more bool, err error) {
 // Ignored lists what git ignores under dir, relative to it and sorted. A
 // directory ends in a slash and is not looked into, as it may hold a great
 // many files, unless it is one of open: then what is directly inside it is
-// listed as well.
-func Ignored(dir string, open []string) []string {
+// listed as well. more says the list stopped at maxWalk.
+func Ignored(dir string, open []string) (paths []string, more bool) {
 	out, err := run(dir, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	isOpen := map[string]bool{}
 	for _, d := range open {
 		isOpen[d] = true
 	}
 
-	var paths []string
 	var add func(p string)
 	add = func(p string) {
 		if len(paths) >= maxWalk {
+			more = true
 			return
 		}
 		paths = append(paths, p)
@@ -452,7 +459,7 @@ func Ignored(dir string, open []string) []string {
 		}
 	}
 	slices.Sort(paths)
-	return slices.Compact(paths)
+	return slices.Compact(paths), more
 }
 
 // Main returns the main work tree of the repository of dir: the one the

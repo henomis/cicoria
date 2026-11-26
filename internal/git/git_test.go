@@ -256,7 +256,7 @@ func TestFiles(t *testing.T) {
 	writeFile(t, dir, "sub/new.txt", "a\n")
 	writeFile(t, dir, "ignored/x.txt", "x\n")
 
-	files, more, err := Files(dir)
+	files, more, err := Files(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,45 +268,68 @@ func TestFiles(t *testing.T) {
 	// What git ignores is listed apart, a directory without what it holds
 	// until it is open.
 	writeFile(t, dir, "ignored/deep/y.txt", "y\n")
-	if got := Ignored(dir, nil); !slices.Equal(got, []string{"ignored/"}) {
+	ignored := func(open ...string) []string {
+		t.Helper()
+		got, more := Ignored(dir, open)
+		if more {
+			t.Errorf("ignored %v: more", open)
+		}
+		return got
+	}
+	if got := ignored(); !slices.Equal(got, []string{"ignored/"}) {
 		t.Errorf("ignored = %v", got)
 	}
 	want = []string{"ignored/", "ignored/deep/", "ignored/x.txt"}
-	if got := Ignored(dir, []string{"ignored"}); !slices.Equal(got, want) {
+	if got := ignored("ignored"); !slices.Equal(got, want) {
 		t.Errorf("ignored, open = %v, want %v", got, want)
 	}
 	want = []string{"ignored/", "ignored/deep/", "ignored/deep/y.txt", "ignored/x.txt"}
-	if got := Ignored(dir, []string{"ignored", "ignored/deep"}); !slices.Equal(got, want) {
+	if got := ignored("ignored", "ignored/deep"); !slices.Equal(got, want) {
 		t.Errorf("ignored, both open = %v, want %v", got, want)
 	}
 
+	// Outside a repository a directory is read only while it is open, so one
+	// with its files deep inside is still listed.
 	plain := t.TempDir()
 	writeFile(t, plain, "a.txt", "")
 	writeFile(t, plain, "d/b.txt", "")
+	writeFile(t, plain, "z/p/q/x", "")
 	writeFile(t, plain, ".hidden/c.txt", "")
-	files, more, err = Files(plain)
-	if err != nil {
-		t.Fatal(err)
+	for _, c := range []struct {
+		open []string
+		want []string
+	}{
+		{nil, []string{"a.txt", "d/", "z/"}},
+		{[]string{"d"}, []string{"a.txt", "d/", "d/b.txt", "z/"}},
+		{[]string{"z", "z/p"}, []string{"a.txt", "d/", "z/", "z/p/", "z/p/q/"}},
+	} {
+		files, more, err = Files(plain, c.open)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(files, c.want) || more {
+			t.Errorf("files outside a repository, open %v = %v, more %v, want %v", c.open, files, more, c.want)
+		}
 	}
-	if !slices.Equal(files, []string{"a.txt", "d/b.txt"}) || more {
-		t.Errorf("files outside a repository = %v", files)
-	}
-	if got := Ignored(plain, nil); got != nil {
+	if got, _ := Ignored(plain, nil); got != nil {
 		t.Errorf("ignored outside a repository = %v", got)
 	}
+	if _, _, err := Files(filepath.Join(plain, "a.txt"), nil); err == nil {
+		t.Error("files of a regular file: no error")
+	}
 
-	// A deep directory full of files does not crowd out the others.
+	// An open directory full of files stops the list, after the others.
 	full := t.TempDir()
 	for i := range maxWalk {
 		writeFile(t, full, fmt.Sprintf("a/deep/%d", i), "")
 	}
 	writeFile(t, full, "z/x.txt", "")
-	files, more, err = Files(full)
+	files, more, err = Files(full, []string{"a", "a/deep"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != maxWalk || !more || !slices.Contains(files, "z/x.txt") {
-		t.Errorf("files past the limit: %d, more %v, z/x.txt listed: %v", len(files), more, slices.Contains(files, "z/x.txt"))
+	if len(files) != maxWalk || !more || !slices.Contains(files, "z/") {
+		t.Errorf("files past the limit: %d, more %v, z/ listed: %v", len(files), more, slices.Contains(files, "z/"))
 	}
 }
 

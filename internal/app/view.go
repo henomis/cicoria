@@ -434,7 +434,7 @@ func (m *Model) renderFiles(r rect) []string {
 	if m.filesMore {
 		// Room for the "… more" row, in view when the cursor is on the last row.
 		total++
-		if cursor == len(rows)-1 {
+		if cursor == len(rows)-1 && height > 1 {
 			cursor++
 		}
 	}

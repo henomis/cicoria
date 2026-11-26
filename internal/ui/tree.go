@@ -48,8 +48,8 @@ func NewTree() *Tree {
 }
 
 // SetFiles replaces the files shown, and those among them that git ignores.
-// The paths must be sorted; an ignored one that ends in a slash is a
-// directory, shown even when nothing is known to be inside. The cursor stays
+// The paths must be sorted; one that ends in a slash is a directory, shown
+// even when nothing is known to be inside. The cursor stays
 // on the same path when it is still there.
 func (t *Tree) SetFiles(files, ignored []string) {
 	if slices.Equal(files, t.files) && slices.Equal(ignored, t.ignored) {
@@ -82,14 +82,10 @@ func (t *Tree) rebuild() {
 			entries = append(entries, entry{dir, true})
 		}
 	}
-	for _, f := range t.files {
-		parents(f)
-		entries = append(entries, entry{f, false})
-	}
-	ignored := map[string]bool{}
-	for _, f := range t.ignored {
+	// A path that ends in a slash is a directory, shown even when nothing is
+	// known to be inside.
+	add := func(f string) string {
 		p := strings.TrimSuffix(f, "/")
-		ignored[p] = true
 		parents(p)
 		if p == f {
 			entries = append(entries, entry{p, false})
@@ -97,6 +93,14 @@ func (t *Tree) rebuild() {
 			seen[p] = true
 			entries = append(entries, entry{p, true})
 		}
+		return p
+	}
+	for _, f := range t.files {
+		add(f)
+	}
+	ignored := map[string]bool{}
+	for _, f := range t.ignored {
+		ignored[add(f)] = true
 	}
 	dirs := map[string]bool{}
 	for _, e := range entries {

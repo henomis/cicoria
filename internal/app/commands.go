@@ -808,10 +808,7 @@ func (m *Model) askCommand() tea.Cmd {
 
 func (m *Model) askFile() tea.Cmd {
 	var items []ui.Item
-	for _, f := range m.files {
-		items = append(items, ui.Item{Label: f, Value: f})
-	}
-	for _, f := range m.ignored {
+	for _, f := range slices.Concat(m.files, m.ignored) {
 		if !strings.HasSuffix(f, "/") {
 			items = append(items, ui.Item{Label: f, Value: f})
 		}
