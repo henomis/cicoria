@@ -397,20 +397,13 @@ func Files(dir string, open []string) (files []string, more bool, err error) {
 			}
 			for _, e := range entries {
 				p := rel + e.Name()
-				isDir := e.IsDir()
-				if e.Type()&fs.ModeSymlink != 0 {
-					// A link to a directory is listed as one. Only open ones are
-					// read, so a link that loops back is not followed for ever.
-					fi, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p)))
-					isDir = err == nil && fi.IsDir()
-				}
 				switch {
-				case isDir && strings.HasPrefix(e.Name(), "."):
+				case e.IsDir() && strings.HasPrefix(e.Name(), "."):
 					// Hidden directories are left out.
 				case len(files) >= maxWalk:
 					more = true
 					break walk
-				case isDir:
+				case e.IsDir():
 					files = append(files, p+"/")
 					if isOpen[p] {
 						queue = append(queue, p+"/")

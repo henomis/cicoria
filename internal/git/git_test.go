@@ -311,20 +311,17 @@ func TestFiles(t *testing.T) {
 			t.Errorf("files outside a repository, open %v = %v, more %v, want %v", c.open, files, more, c.want)
 		}
 	}
-	// A link to a directory is a directory, even one that loops back.
+	// A link to a directory is listed as a file, as git does, and is not
+	// followed even when asked to open it.
 	if err := os.Symlink(filepath.Join(plain, "d"), filepath.Join(plain, "link")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(plain, filepath.Join(plain, "d", "loop")); err != nil {
-		t.Fatal(err)
-	}
-	files, _, err = Files(plain, []string{"link", "link/loop"})
+	files, _, err = Files(plain, []string{"link"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want = []string{"a.txt", "d/", "link/", "link/b.txt", "link/loop/", "link/loop/a.txt", "link/loop/d/", "link/loop/link/", "link/loop/z/", "z/"}
-	if !slices.Equal(files, want) {
-		t.Errorf("files with links = %v, want %v", files, want)
+	if want := []string{"a.txt", "d/", "link", "z/"}; !slices.Equal(files, want) {
+		t.Errorf("files with a link = %v, want %v", files, want)
 	}
 	if got, _ := Ignored(plain, nil); got != nil {
 		t.Errorf("ignored outside a repository = %v", got)
