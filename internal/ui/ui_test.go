@@ -152,6 +152,11 @@ func TestTreeIgnored(t *testing.T) {
 	if got := paths(tr.Rows()); !slices.Equal(got, []string{"src", "main.go"}) {
 		t.Fatalf("ignored hidden = %v", got)
 	}
+	// A directory not read yet is shown too, and is not ignored.
+	tr.SetFiles([]string{"d/", "main.go"}, nil)
+	if r := tr.Rows()[0]; r.Path != "d" || !r.Dir || r.Ignored {
+		t.Errorf("unread directory row = %+v", r)
+	}
 }
 
 func TestFuzzy(t *testing.T) {

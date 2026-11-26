@@ -226,7 +226,7 @@ func (m *Model) filesKey(key string) tea.Cmd {
 	case "enter", "l", "right":
 		if row.Dir {
 			m.tree().SetOpen(key != "enter" || !row.Open)
-			if row.Ignored {
+			if row.Ignored || !m.repo {
 				return m.refreshNow()
 			}
 		} else if row.Path != "" {

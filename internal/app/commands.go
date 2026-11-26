@@ -235,7 +235,7 @@ func (m *Model) focusOther() tea.Cmd {
 func (m *Model) showProject() tea.Cmd {
 	if m.project() != m.shown {
 		m.shown = m.project()
-		m.files, m.changes, m.repo, m.loading = nil, nil, false, true
+		m.files, m.filesMore, m.changes, m.repo, m.loading = nil, false, nil, false, true
 		m.branch = ""
 		m.changeCursor, m.changeTop = 0, 0
 	}
@@ -808,10 +808,7 @@ func (m *Model) askCommand() tea.Cmd {
 
 func (m *Model) askFile() tea.Cmd {
 	var items []ui.Item
-	for _, f := range m.files {
-		items = append(items, ui.Item{Label: f, Value: f})
-	}
-	for _, f := range m.ignored {
+	for _, f := range slices.Concat(m.files, m.ignored) {
 		if !strings.HasSuffix(f, "/") {
 			items = append(items, ui.Item{Label: f, Value: f})
 		}

@@ -131,6 +131,8 @@ type Model struct {
 	shown         string
 	loading       bool
 	files         []string
+	// filesMore says files or ignored stopped at the cap of git.
+	filesMore bool
 	// ignored are the files git ignores, listed when showIgnored is set.
 	ignored     []string
 	showIgnored bool
@@ -292,6 +294,7 @@ type (
 		base    string
 		lost    bool
 		files   []string
+		more    bool
 		ignored []string
 		changes []git.Change
 		commits int
@@ -674,13 +677,16 @@ func (m *Model) refresh() tea.Cmd {
 	}
 	m.refreshing = true
 	dir, base, since, commit := m.project(), m.reviewBase(), m.sessionBase(), m.commit
-	// What an ignored directory holds is only read while it is open.
+	// What an ignored directory, or one outside a repository, holds is only
+	// read while it is open.
 	ignored, open := m.showIgnored, m.tree().Open()
 	return func() tea.Msg {
 		msg := refreshMsg{dir: dir, base: base, since: since, commit: commit}
-		msg.files, _ = git.Files(dir)
+		msg.files, msg.more, _ = git.Files(dir, open)
 		if ignored {
-			msg.ignored = git.Ignored(dir, open)
+			var more bool
+			msg.ignored, more = git.Ignored(dir, open)
+			msg.more = msg.more || more
 		}
 		if base != "" && !git.Exists(dir, base) {
 			base, msg.lost = "", true
@@ -1037,7 +1043,7 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 
 func (m *Model) applyRefresh(msg refreshMsg) {
 	m.loading = false
-	m.files, m.ignored = msg.files, msg.ignored
+	m.files, m.filesMore, m.ignored = msg.files, msg.more, msg.ignored
 	m.tree().SetFiles(msg.files, msg.ignored)
 	m.repo = msg.repo
 	m.changesBase, m.commits, m.branch = msg.base, msg.commits, msg.branch
