@@ -16,6 +16,7 @@ package git
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -255,13 +256,13 @@ func TestFiles(t *testing.T) {
 	writeFile(t, dir, "sub/new.txt", "a\n")
 	writeFile(t, dir, "ignored/x.txt", "x\n")
 
-	files, err := Files(dir)
+	files, more, err := Files(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{".gitignore", "gone.txt", "kept.txt", "old name.txt", "sub/new.txt"}
-	if !slices.Equal(files, want) {
-		t.Errorf("files = %v, want %v", files, want)
+	if !slices.Equal(files, want) || more {
+		t.Errorf("files = %v, more %v, want %v", files, more, want)
 	}
 
 	// What git ignores is listed apart, a directory without what it holds
@@ -283,15 +284,29 @@ func TestFiles(t *testing.T) {
 	writeFile(t, plain, "a.txt", "")
 	writeFile(t, plain, "d/b.txt", "")
 	writeFile(t, plain, ".hidden/c.txt", "")
-	files, err = Files(plain)
+	files, more, err = Files(plain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(files, []string{"a.txt", "d/b.txt"}) {
+	if !slices.Equal(files, []string{"a.txt", "d/b.txt"}) || more {
 		t.Errorf("files outside a repository = %v", files)
 	}
 	if got := Ignored(plain, nil); got != nil {
 		t.Errorf("ignored outside a repository = %v", got)
+	}
+
+	// A deep directory full of files does not crowd out the others.
+	full := t.TempDir()
+	for i := range maxWalk {
+		writeFile(t, full, fmt.Sprintf("a/deep/%d", i), "")
+	}
+	writeFile(t, full, "z/x.txt", "")
+	files, more, err = Files(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != maxWalk || !more || !slices.Contains(files, "z/x.txt") {
+		t.Errorf("files past the limit: %d, more %v, z/x.txt listed: %v", len(files), more, slices.Contains(files, "z/x.txt"))
 	}
 }
 

@@ -430,7 +430,15 @@ func (m *Model) renderFiles(r rect) []string {
 	inner, height := r.w-2, r.h-2
 	tree := m.tree()
 	rows := tree.Rows()
-	tree.Top = ui.Window(tree.Cursor, tree.Top, height, len(rows))
+	total, cursor := len(rows), tree.Cursor
+	if m.filesMore {
+		// Room for the "… more" row, in view when the cursor is on the last row.
+		total++
+		if cursor == len(rows)-1 {
+			cursor++
+		}
+	}
+	tree.Top = ui.Window(cursor, tree.Top, height, total)
 
 	marks := map[string]string{}
 	dirty := map[string]bool{}
@@ -482,6 +490,9 @@ func (m *Model) renderFiles(r rect) []string {
 			text = ui.Fit(text, inner-2) + " " + tail
 		}
 		lines = append(lines, ui.Selected(text, inner, i == tree.Cursor, focused))
+	}
+	if m.filesMore && len(lines) < height {
+		lines = append(lines, ui.Dim.Render("  … more"))
 	}
 	if len(rows) == 0 && !m.loading {
 		lines = []string{ui.Dim.Render(" no files")}

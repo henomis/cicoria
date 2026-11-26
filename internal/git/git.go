@@ -365,14 +365,14 @@ func Diff(dir string, c Change, base string) (string, error) {
 }
 
 // Files lists the files under dir, relative to it and sorted. In a work tree
-// it leaves out what git ignores; elsewhere it skips hidden directories.
-func Files(dir string) ([]string, error) {
-	var files []string
+// it leaves out what git ignores; elsewhere it skips hidden directories, and
+// more says the list stopped at maxWalk.
+func Files(dir string) (files []string, more bool, err error) {
 
 	if _, ok := Root(dir); ok {
 		out, err := run(dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		for f := range strings.SplitSeq(string(out), "\x00") {
 			if f != "" {
@@ -380,31 +380,36 @@ func Files(dir string) ([]string, error) {
 			}
 		}
 	} else {
-		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if path != dir && strings.HasPrefix(d.Name(), ".") {
-					return filepath.SkipDir
+		if _, err := os.Stat(dir); err != nil {
+			return nil, false, err
+		}
+		// Breadth first, so that when maxWalk cuts the list short it is the
+		// deepest files that are missing, not whole directories at the top.
+		queue := []string{""}
+	walk:
+		for len(queue) > 0 {
+			rel := queue[0]
+			queue = queue[1:]
+			entries, _ := os.ReadDir(filepath.Join(dir, rel))
+			for _, e := range entries {
+				p := filepath.Join(rel, e.Name())
+				switch {
+				case e.IsDir():
+					if !strings.HasPrefix(e.Name(), ".") {
+						queue = append(queue, p)
+					}
+				case len(files) >= maxWalk:
+					more = true
+					break walk
+				default:
+					files = append(files, p)
 				}
-				return nil
 			}
-			if len(files) >= maxWalk {
-				return filepath.SkipAll
-			}
-			if rel, err := filepath.Rel(dir, path); err == nil {
-				files = append(files, rel)
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
 		}
 	}
 
 	slices.Sort(files)
-	return slices.Compact(files), nil
+	return slices.Compact(files), more, nil
 }
 
 // Ignored lists what git ignores under dir, relative to it and sorted. A
