@@ -530,3 +530,34 @@ func TestHoldAway(t *testing.T) {
 		t.Errorf("away from %v, want the earlier absence %v", m.awayFrom, left)
 	}
 }
+
+// TestHoldAwayEnter ends a long hold with enter, as the user does: the enter
+// goes through noteKey first, which must not decide the absence.
+func TestHoldAwayEnter(t *testing.T) {
+	m, _ := historyModel(t)
+	now := time.Now()
+	since := now.Add(-20 * time.Minute)
+	left := since.Add(-time.Hour)
+	for _, c := range []struct {
+		name   string
+		active time.Time
+		want   time.Time
+	}{
+		{"hold right on coming back", since.Add(-time.Minute), left},
+		{"back for a while", since.Add(-30 * time.Minute), since},
+	} {
+		m.awayFrom, m.activeFrom = left, c.active
+		m.startHold()
+		m.prompt = nil
+		m.hold.since = since
+		// The z that started the hold is the last key noteKey saw.
+		m.lastKey = since
+		m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+		if m.hold != nil {
+			t.Fatalf("%s: enter did not end the hold", c.name)
+		}
+		if !m.awayFrom.Equal(c.want) {
+			t.Errorf("%s: away from %v, want %v", c.name, m.awayFrom, c.want)
+		}
+	}
+}

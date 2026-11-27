@@ -44,12 +44,16 @@ type hold struct {
 	// note is what the user wrote down when the hold started, shown until
 	// it ends: writing it down is what lets it go.
 	note string
+	// away and active are awayFrom and activeFrom when the hold started:
+	// the enter that ends it goes through noteKey first, which overwrites
+	// them after a long hold.
+	away, active time.Time
 }
 
 // startHold starts a hold, and asks what is on the user's mind, to write it
 // down on the hold screen. It is never sent to an agent, nor kept.
 func (m *Model) startHold() tea.Cmd {
-	h := &hold{since: time.Now(), web: m.web != nil}
+	h := &hold{since: time.Now(), web: m.web != nil, away: m.awayFrom, active: m.activeFrom}
 	for _, s := range m.sessions {
 		if !s.Paused {
 			s.Paused = true
@@ -85,8 +89,10 @@ func (m *Model) endHold() tea.Cmd {
 	// shortcut: activeFrom moves only after breakMin, so an absence of
 	// awayAfter to breakMin before the hold is lost; record in noteKey when
 	// the user came back if that matters.
-	if m.awayFrom.IsZero() || !m.awayFrom.Before(m.activeFrom) || h.since.Sub(m.activeFrom) >= awayAfter {
+	if h.away.IsZero() || !h.away.Before(h.active) || h.since.Sub(h.active) >= awayAfter {
 		m.awayFrom = h.since
+	} else {
+		m.awayFrom = h.away
 	}
 	var cmds []tea.Cmd
 	for _, id := range h.paused {
