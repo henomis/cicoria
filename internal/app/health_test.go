@@ -16,6 +16,7 @@ package app
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -221,7 +222,13 @@ func TestHold(t *testing.T) {
 	if m.hold == nil || !m.lastKey.Equal(before) {
 		t.Fatalf("a key other than enter ended the hold, or counted: hold %v, last key moved %v", m.hold, !m.lastKey.Equal(before))
 	}
+	// An agent that exited during the hold is sent nothing when it ends.
+	other.Queue = []session.Message{{Text: "for a dead agent"}}
+	other.Status = agent.Exited
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if len(other.Queue) != 1 {
+		t.Errorf("the exited agent's queue after the hold: %+v", other.Queue)
+	}
 	// Back as it was: on the workspace, the queues the hold paused resumed,
 	// the one the user paused still paused, the note gone with the hold.
 	if m.hold != nil || m.mode != modeWorkspace {
@@ -470,5 +477,56 @@ func TestHoldRestartsWeb(t *testing.T) {
 	defer m.stopWeb()
 	if m.web == nil || s.Web || !other.Web {
 		t.Errorf("after the hold: web %v, shared %v %v", m.web != nil, s.Web, other.Web)
+	}
+}
+
+func TestHoldWebFails(t *testing.T) {
+	m, s := historyModel(t)
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = taken.Close() }()
+	m.cfg.WebAddress = "127.0.0.1:0"
+	m.startWeb()
+	s.Web = true
+	m.startHold()
+	m.prompt = nil
+	// The address is taken while the user is away.
+	m.cfg.WebAddress = taken.Addr().String()
+	m.endHold()
+	defer m.stopWeb()
+	if m.web != nil || s.Web {
+		t.Errorf("after the hold, with the address taken: web %v, shared %v", m.web != nil, s.Web)
+	}
+}
+
+func TestHoldFromBoard(t *testing.T) {
+	m, _ := historyModel(t)
+	m.mode = modeBoard
+	m.openHealth()
+	m.healthKey(tea.KeyPressMsg{Code: 'z', Text: "z"})
+	if m.mode != modeWorkspace || m.hold == nil {
+		t.Errorf("hold from the health view of the board: mode %d, hold %v", m.mode, m.hold)
+	}
+}
+
+func TestHoldAway(t *testing.T) {
+	m, _ := historyModel(t)
+	left := time.Now().Add(-time.Hour)
+	// Back for a while, then a hold: the user left at the hold.
+	m.awayFrom, m.activeFrom = left, time.Now().Add(-30*time.Minute)
+	m.startHold()
+	since := m.hold.since
+	m.endHold()
+	if !m.awayFrom.Equal(since) {
+		t.Errorf("away from %v, want the hold start %v", m.awayFrom, since)
+	}
+	// A hold right on coming back: the user left before it.
+	m.awayFrom, m.activeFrom = left, time.Now().Add(-time.Minute)
+	m.startHold()
+	m.endHold()
+	if !m.awayFrom.Equal(left) {
+		t.Errorf("away from %v, want the earlier absence %v", m.awayFrom, left)
 	}
 }

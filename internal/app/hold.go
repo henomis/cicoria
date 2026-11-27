@@ -61,6 +61,8 @@ func (m *Model) startHold() tea.Cmd {
 	}
 	m.stopWeb()
 	m.hold = h
+	// The hold screen is drawn only on the workspace, wherever it started.
+	m.mode = modeWorkspace
 	m.save()
 	m.prompt = &prompt{
 		input: ui.Input{Prompt: "on hold · what's in your head? (esc skips) "},
@@ -78,7 +80,14 @@ func (m *Model) startHold() tea.Cmd {
 func (m *Model) endHold() tea.Cmd {
 	h := m.hold
 	m.hold = nil
-	m.awayFrom = h.since
+	// A hold started right on coming back from an absence continues it: the
+	// user left then, not at the hold.
+	// shortcut: activeFrom moves only after breakMin, so an absence of
+	// awayAfter to breakMin before the hold is lost; record in noteKey when
+	// the user came back if that matters.
+	if m.awayFrom.IsZero() || !m.awayFrom.Before(m.activeFrom) || h.since.Sub(m.activeFrom) >= awayAfter {
+		m.awayFrom = h.since
+	}
 	var cmds []tea.Cmd
 	for _, id := range h.paused {
 		if s, _ := m.byID(id); s != nil {
@@ -86,8 +95,11 @@ func (m *Model) endHold() tea.Cmd {
 			cmds = append(cmds, m.trySend(s))
 		}
 	}
+	// Share again only on a cockpit that started: startWeb only says why not.
 	if h.web {
 		cmds = append(cmds, m.startWeb())
+	}
+	if h.web && m.web != nil {
 		for _, id := range h.shared {
 			if s, _ := m.byID(id); s != nil {
 				s.Web = true
