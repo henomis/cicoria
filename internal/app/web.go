@@ -58,34 +58,31 @@ func waitWeb(srv *web.Server) tea.Cmd {
 func (m *Model) askWeb() tea.Cmd {
 	var cmd tea.Cmd
 	if m.web == nil {
-		srv, err := web.Start(m.cfg.WebAddress)
-		if err != nil {
-			m.say("web cockpit: " + err.Error())
+		if cmd = m.startWeb(); m.web == nil {
 			return nil
-		}
-		m.web, m.webQR = srv, nil
-		if qr, err := ui.QR(srv.URL()); err == nil {
-			m.webQR = qr
 		}
 		if s := m.current(); s != nil {
 			s.Web = true
 		}
-		// After a hold that stopped it, the sessions shared then are again.
-		if b := m.back; b != nil && b.web {
-			for _, id := range b.shared {
-				if s, _ := m.byID(id); s != nil {
-					s.Web = true
-				}
-			}
-			b.web = false
-			m.save()
-		}
-		// The columns of the board need a look at the work of each session.
-		cmd = tea.Batch(waitWeb(srv), m.pollBoard())
 	}
 	m.mode, m.webCursor = modeWeb, m.active
 	m.publish()
 	return cmd
+}
+
+// startWeb starts the web cockpit, sharing nothing yet.
+func (m *Model) startWeb() tea.Cmd {
+	srv, err := web.Start(m.cfg.WebAddress)
+	if err != nil {
+		m.say("web cockpit: " + err.Error())
+		return nil
+	}
+	m.web, m.webQR = srv, nil
+	if qr, err := ui.QR(srv.URL()); err == nil {
+		m.webQR = qr
+	}
+	// The columns of the board need a look at the work of each session.
+	return tea.Batch(waitWeb(srv), m.pollBoard())
 }
 
 // stopWeb stops the web cockpit; no session is shared any more.

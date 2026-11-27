@@ -295,10 +295,10 @@ A click on it, or `ctrl+a y`, opens the **health view**. First, live, every rule
 
 - Every queue is paused, no desktop notification is sent, and the web cockpit stops, so the phone does not call you back. An agent in the middle of a turn finishes it, then waits; nothing is sent to any agent.
 - The agents go out of sight: the screen shows the hold, how long it has lasted against the 15 minutes, and what is paused.
-- It asks what is in your head, to write it down and leave it there: a note for you, kept with the workspace until you clear it, never sent to an agent. `esc` skips it.
+- It asks what is in your head, to write it down and leave it there: the hold screen shows it while the hold lasts. It is never sent to an agent, and goes with the hold. `esc` skips it.
 - `enter` ends the hold, or a click; other keys do nothing, so that one pressed to wake the screen does not end the break.
 
-The timeline then opens on what happened since you left, the session that waited longest under the cursor, and above it what the hold left for you: how long you were away, the queues still paused, the web cockpit to start again, and your note. `enter` goes to a session, one at a time; `p` resumes a paused queue, the one under the cursor first, and sends its next message if its agent is ready; `x` clears the note and the whole block, saying the note once more in the status bar so that you can copy it back; `ctrl+a v` starts the web cockpit with a new link, the same sessions shared. Each line goes once it is done, and the block is kept with the workspace until then.
+Ending it puts everything back as it was: the queues the hold paused resume, each sending its next message when its agent is ready, and the web cockpit starts again with the same sessions shared, on a new link unless `web_address` has a fixed port. A queue you had paused yourself stays paused. `ctrl+a e` shows what happened while you were away.
 
 Starting a session, or a card, that would make four agents work at once asks first: `enter` starts it anyway, `esc` gives up.
 

@@ -19,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -193,7 +192,9 @@ func TestHold(t *testing.T) {
 	m, s := historyModel(t)
 	m.width, m.height = 160, 30
 	other := session.New("s2", "docs", m.dir, agent.NewClaude(nil))
-	m.sessions = append(m.sessions, other)
+	mine := session.New("s3", "web", m.dir, agent.NewClaude(nil))
+	mine.Paused = true
+	m.sessions = append(m.sessions, other, mine)
 	s.Queue = []session.Message{{Text: "later"}}
 	key := func(k string) { m.handleKey(tea.KeyPressMsg{Code: []rune(k)[0], Text: k}) }
 
@@ -203,81 +204,37 @@ func TestHold(t *testing.T) {
 	}
 	m.prompt.done("check the 429 path")
 	m.prompt = nil
-	// The note is the user's, kept with the workspace, never a card.
-	st, err := session.LoadState(session.StatePath(m.dir))
-	if err != nil || st.Note != "check the 429 path" || len(m.cards) != 0 {
-		t.Errorf("note saved %q, cards %+v, %v", st.Note, m.cards, err)
-	}
 	// Killed now, cicoria would bring the queues back as they were.
-	if len(st.Sessions) != 2 || st.Sessions[0].Paused || st.Sessions[1].Paused {
-		t.Errorf("saved during the hold: %+v", st.Sessions)
+	st, err := session.LoadState(session.StatePath(m.dir))
+	if err != nil || len(st.Sessions) != 3 || st.Sessions[0].Paused || st.Sessions[1].Paused || !st.Sessions[2].Paused {
+		t.Errorf("saved during the hold: %+v, %v", st.Sessions, err)
 	}
-	// The hold takes the screen, in place of the agents.
+	// The hold takes the screen, in place of the agents, with the note.
 	if text := ansi.Strip(strings.Join(m.renderHold(), "\n")); !strings.Contains(text, "you wrote: check the 429 path") || !strings.Contains(text, "of 15m") || !strings.Contains(text, "enter: back to work") {
 		t.Errorf("hold screen:\n%s", text)
 	}
 
-	// A key pressed to wake the screen does not end the break; enter does.
-	// Nor does it count as acting: the break goes on.
-	last := m.lastKey
+	// A key pressed to wake the screen does not end the break, nor counts
+	// as the user back; enter does.
+	before := m.lastKey
 	key("x")
-	if m.hold == nil {
-		t.Fatal("a key other than enter ended the hold")
-	}
-	if !m.lastKey.Equal(last) {
-		t.Error("a key ignored by the hold cut the break short")
+	if m.hold == nil || !m.lastKey.Equal(before) {
+		t.Fatalf("a key other than enter ended the hold, or counted: hold %v, last key moved %v", m.hold, !m.lastKey.Equal(before))
 	}
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.hold != nil || m.mode != modeTimeline {
+	// Back as it was: on the workspace, the queues the hold paused resumed,
+	// the one the user paused still paused, the note gone with the hold.
+	if m.hold != nil || m.mode != modeWorkspace {
 		t.Fatalf("enter did not end the hold: hold %v, mode %d", m.hold, m.mode)
 	}
-	if !s.Paused || other.Paused {
-		t.Errorf("after the hold: queued session paused %v, empty one paused %v", s.Paused, other.Paused)
+	if s.Paused || other.Paused || !mine.Paused {
+		t.Errorf("after the hold: paused %v %v, the user's %v", s.Paused, other.Paused, mine.Paused)
 	}
-	// What the hold left comes back after a restart.
-	again, err := New(config.Default(), m.dir, true, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b := again.back; b == nil || !b.since.Equal(m.back.since) || !b.end.Equal(m.back.end) || !slices.Equal(b.paused, []string{s.ID}) {
-		t.Errorf("after a restart, back %+v, want %+v", b, m.back)
-	}
-	_ = again.Close()
-	// The timeline says the user was away, and what is left for them.
-	text := ansi.Strip(strings.Join(m.renderTimeline(), "\n"))
-	for _, want := range []string{"back after", "paused: api (1)", "you wrote: check the 429 path", "since you were away"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the timeline after a hold misses %q:\n%s", want, text)
-		}
-	}
-	// p resumes a queue the hold left paused, even of a session with no
-	// line; x clears the note, and says it once more.
-	key("p")
-	key("x")
-	// Drawn with nothing left, the block goes.
-	if left := m.backLines(); s.Paused || m.note != "" || m.back != nil || len(left) != 0 {
-		t.Errorf("after p and x: paused %v, note %q, back %v", s.Paused, m.note, m.back)
-	}
-	if !strings.Contains(m.message, "check the 429 path") {
-		t.Errorf("x said %q", m.message)
-	}
-	// With no hold behind, p resumes nothing: the hint does not offer it.
-	s.Paused = true
-	key("p")
-	if !s.Paused {
-		t.Error("p resumed a queue with no hold behind")
-	}
-	s.Paused = false
-	// x clears the block of a hold even with no note: here the web cockpit
-	// never started again.
-	m.back = &hold{web: true}
-	key("x")
-	if m.back != nil {
-		t.Error("x left the block of the hold")
+	if !m.awayFrom.Before(time.Now()) || m.awayFrom.IsZero() {
+		t.Error("the timeline does not know the user was away")
 	}
 
 	// A click ends a hold too, once the note is written.
-	m.mode = modeWorkspace
 	m.startHold()
 	m.handleMouse(tea.MouseClickMsg{X: 1, Y: 1})
 	if m.hold == nil || m.prompt == nil {
@@ -285,18 +242,8 @@ func TestHold(t *testing.T) {
 	}
 	m.prompt = nil
 	m.handleMouse(tea.MouseClickMsg{X: 1, Y: 1})
-	if m.hold != nil || m.mode != modeTimeline {
+	if m.hold != nil || m.mode != modeWorkspace {
 		t.Errorf("a click did not end the hold: hold %v, mode %d", m.hold, m.mode)
-	}
-
-	// A queue paused before the hold stays paused after it.
-	m.mode = modeWorkspace
-	s.Paused = true
-	m.startHold()
-	m.prompt = nil
-	m.endHold()
-	if !s.Paused {
-		t.Error("a queue paused before the hold was resumed")
 	}
 }
 
@@ -505,17 +452,23 @@ func TestEventsSince(t *testing.T) {
 	}
 }
 
-// Started again after a hold stopped it, the web cockpit shares what it
+// Ended, a hold that stopped the web cockpit starts it again, with what it
 // shared then.
-func TestWebAfterHold(t *testing.T) {
+func TestHoldRestartsWeb(t *testing.T) {
 	m, s := historyModel(t)
 	m.cfg.WebAddress = "127.0.0.1:0"
 	other := session.New("s2", "docs", m.dir, agent.NewClaude(nil))
 	m.sessions = append(m.sessions, other)
-	m.back = &hold{web: true, shared: []string{other.ID}}
-	m.askWeb()
+	m.startWeb()
+	s.Web, other.Web = false, true
+	m.startHold()
+	m.prompt = nil
+	if m.web != nil || other.Web {
+		t.Fatal("the hold did not stop the web cockpit")
+	}
+	m.endHold()
 	defer m.stopWeb()
-	if m.web == nil || !s.Web || !other.Web || m.back.web {
-		t.Errorf("web %v, shared %v %v, still to start %v", m.web != nil, s.Web, other.Web, m.back.web)
+	if m.web == nil || s.Web || !other.Web {
+		t.Errorf("after the hold: web %v, shared %v %v", m.web != nil, s.Web, other.Web)
 	}
 }

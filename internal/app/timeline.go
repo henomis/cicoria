@@ -429,34 +429,6 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 		m.zoomTimeline(1, now)
 	case "s":
 		m.timeline.rng = sinceAway
-	case "x":
-		// The whole block a hold left goes; the note is said once more, to
-		// be copied back.
-		if m.note != "" {
-			m.say("cleared the note: “" + m.note + "”")
-		}
-		if m.note != "" || m.back != nil {
-			m.note, m.back = "", nil
-			m.save()
-		}
-	case "p":
-		// Only after a hold, as the hint says: the queue of the line under
-		// the cursor, else the first one the hold left paused, since an idle
-		// session may have no line.
-		if m.back == nil {
-			return nil
-		}
-		var ids []string
-		if i >= 0 {
-			ids = append(ids, lines[i].id)
-		}
-		ids = append(ids, m.back.paused...)
-		for _, id := range ids {
-			if s, _ := m.byID(id); s != nil && s.Paused {
-				return m.resumeQueue(id)
-			}
-		}
-		m.say("no queue is paused")
 	case "a":
 		// The next session that waits for you, round the list.
 		var waits []int
@@ -544,12 +516,12 @@ func (m *Model) timelineTitle(now time.Time) string {
 }
 
 // awayLong reports whether the user was away long enough for the timeline
-// to say so: half an hour, or a hold they took.
+// to say so.
 func (m *Model) awayLong(now time.Time) bool {
 	if m.awayFrom.IsZero() {
 		return false
 	}
-	return now.Sub(m.awayFrom) >= minRange || m.back != nil && m.back.since.Equal(m.awayFrom)
+	return now.Sub(m.awayFrom) >= minRange
 }
 
 // renderTimeline draws the timeline over the whole screen but the status
@@ -566,12 +538,7 @@ func (m *Model) renderTimeline() []string {
 		sel = &lines[i]
 	}
 
-	// What a hold left to resume comes first, until it is acted on.
-	var rows []string
-	for _, l := range m.backLines() {
-		rows = append(rows, ui.Fit(l, m.width))
-	}
-	rows = append(rows, ui.Reverse.Render(ui.Fit(m.timelineHeader(t, lanes, now), m.width)))
+	rows := []string{ui.Reverse.Render(ui.Fit(m.timelineHeader(t, lanes, now), m.width))}
 
 	if m.width >= timelineNarrow && len(lanes) > 0 {
 		// The bars take at most half of the screen; those that wait for
@@ -785,12 +752,6 @@ func (m *Model) timelineHint() string {
 		return "j/k move · d/enter diff · v file · q back"
 	}
 	hint := "j/k move · a next waiting · d turn · enter go · m queue · +/- time"
-	if m.back != nil {
-		hint += " · p resume queue"
-	}
-	if m.note != "" || m.back != nil {
-		hint += " · x clear"
-	}
 	return hint + " · q back"
 }
 

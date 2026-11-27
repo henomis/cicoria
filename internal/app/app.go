@@ -185,10 +185,6 @@ type Model struct {
 	health health
 	meter  level
 	hold   *hold
-	// back is the hold the user came back from, while something it left is
-	// still to resume, and note what they wrote down then.
-	back *hold
-	note string
 
 	// runs are the commands of the run box still running, lastRun the
 	// one whose output ctrl+a . shows, and runHistory the command lines
@@ -442,10 +438,6 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 	m.sessionCursor = m.active
 	m.cards = st.Cards
 	m.runHistory = st.Runs
-	m.note = st.Note
-	if b := st.Back; b != nil {
-		m.back = &hold{since: b.Since, end: b.End, paused: b.Paused, web: b.Web, shared: b.Shared}
-	}
 
 	return m, nil
 }
@@ -569,10 +561,7 @@ func (m *Model) say(msg string) {
 
 // save remembers the sessions for the next run.
 func (m *Model) save() {
-	st := session.State{Dir: m.dir, Cards: m.cards, Runs: m.runHistory, Note: m.note}
-	if b := m.back; b != nil {
-		st.Back = &session.Back{Since: b.since, End: b.end, Paused: b.paused, Web: b.web, Shared: b.shared}
-	}
+	st := session.State{Dir: m.dir, Cards: m.cards, Runs: m.runHistory}
 	for i, s := range m.sessions {
 		// The setup of a worktree is not run again: it ended with cicoria.
 		if s.Setup {
