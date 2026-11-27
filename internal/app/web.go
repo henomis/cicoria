@@ -78,6 +78,7 @@ func (m *Model) askWeb() tea.Cmd {
 				}
 			}
 			b.web = false
+			m.save()
 		}
 		// The columns of the board need a look at the work of each session.
 		cmd = tea.Batch(waitWeb(srv), m.pollBoard())

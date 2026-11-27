@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"slices"
 	"syscall"
+	"time"
 )
 
 // Saved is what is remembered of a session between runs.
@@ -66,6 +67,20 @@ type State struct {
 	// Note is what the user wrote down when they took a break, until they
 	// clear it.
 	Note string `json:"note,omitempty"`
+	// Back is what the last hold left for the user to resume, until they
+	// act on it or clear it.
+	Back *Back `json:"back,omitempty"`
+}
+
+// Back is a hold the user came back from: when it lasted, the sessions
+// whose queue it paused that are still to resume, and whether the web
+// cockpit it stopped, with the sessions shared then, is still to start.
+type Back struct {
+	Since  time.Time `json:"since"`
+	End    time.Time `json:"end"`
+	Paused []string  `json:"paused,omitempty"`
+	Web    bool      `json:"web,omitempty"`
+	Shared []string  `json:"shared,omitempty"`
 }
 
 // StatePath returns where the workspace opened on dir is saved.

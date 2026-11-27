@@ -121,7 +121,7 @@ func (m *Model) renderHold() []string {
 
 // backLines are what is left for the user after a hold, above the
 // timeline: the note, the queues still paused, the web cockpit to start
-// again. They stay until each is acted on.
+// again. They stay until each is acted on, or x clears them all.
 func (m *Model) backLines() []string {
 	var out []string
 	if b := m.back; b != nil {
@@ -133,8 +133,9 @@ func (m *Model) backLines() []string {
 		}
 		if len(paused) == 0 && !b.web {
 			m.back = nil
+			m.save()
 		} else {
-			out = append(out, fmt.Sprintf(" back after %s · %s → %s", span(b.end.Sub(b.since)), b.since.Format("15:04"), b.end.Format("15:04")))
+			out = append(out, fmt.Sprintf(" back after %s · %s → %s", span(b.end.Sub(b.since)), b.since.Format("15:04"), b.end.Format("15:04"))+ui.Dim.Render(" · x clears this block and the note"))
 			if len(paused) > 0 {
 				out = append(out, " paused: "+strings.Join(paused, " · ")+ui.Dim.Render(" · p resumes one, the selected first"))
 			}

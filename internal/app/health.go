@@ -212,7 +212,7 @@ func healthRules(events []session.Event, in live, now time.Time) []rule {
 
 // eventsSince returns the events, in order of time, from a time on, after
 // what the periods of work need from before it: the last status of each
-// session, and the runs of cicoria.
+// session, or its close, which ends its period, and the runs of cicoria.
 func eventsSince(events []session.Event, from time.Time) []session.Event {
 	i, _ := slices.BinarySearchFunc(events, from, func(e session.Event, t time.Time) int { return e.T.Compare(t) })
 	var before []session.Event
@@ -221,7 +221,7 @@ func eventsSince(events []session.Event, from time.Time) []session.Event {
 		switch e := events[k]; {
 		case e.K == session.KindRunStart || e.K == session.KindRunEnd:
 			before = append(before, e)
-		case e.K == session.KindStatus && !seen[e.S]:
+		case (e.K == session.KindStatus || e.K == session.KindSessionClose) && !seen[e.S]:
 			seen[e.S] = true
 			before = append(before, e)
 		}

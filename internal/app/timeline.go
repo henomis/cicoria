@@ -430,20 +430,27 @@ func (m *Model) timelineKey(k tea.KeyPressMsg) tea.Cmd {
 	case "s":
 		m.timeline.rng = sinceAway
 	case "x":
+		// The whole block a hold left goes; the note is said once more, to
+		// be copied back.
 		if m.note != "" {
-			m.note = ""
+			m.say("cleared the note: “" + m.note + "”")
+		}
+		if m.note != "" || m.back != nil {
+			m.note, m.back = "", nil
 			m.save()
 		}
 	case "p":
-		// The queue of the line under the cursor, else the first one a hold
-		// left paused: an idle session may have no line.
+		// Only after a hold, as the hint says: the queue of the line under
+		// the cursor, else the first one the hold left paused, since an idle
+		// session may have no line.
+		if m.back == nil {
+			return nil
+		}
 		var ids []string
 		if i >= 0 {
 			ids = append(ids, lines[i].id)
 		}
-		if m.back != nil {
-			ids = append(ids, m.back.paused...)
-		}
+		ids = append(ids, m.back.paused...)
 		for _, id := range ids {
 			if s, _ := m.byID(id); s != nil && s.Paused {
 				return m.resumeQueue(id)
@@ -781,8 +788,8 @@ func (m *Model) timelineHint() string {
 	if m.back != nil {
 		hint += " · p resume queue"
 	}
-	if m.note != "" {
-		hint += " · x clear note"
+	if m.note != "" || m.back != nil {
+		hint += " · x clear"
 	}
 	return hint + " · q back"
 }

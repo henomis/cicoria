@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -217,9 +218,14 @@ func TestHold(t *testing.T) {
 	}
 
 	// A key pressed to wake the screen does not end the break; enter does.
+	// Nor does it count as acting: the break goes on.
+	last := m.lastKey
 	key("x")
 	if m.hold == nil {
 		t.Fatal("a key other than enter ended the hold")
+	}
+	if !m.lastKey.Equal(last) {
+		t.Error("a key ignored by the hold cut the break short")
 	}
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.hold != nil || m.mode != modeTimeline {
@@ -228,6 +234,15 @@ func TestHold(t *testing.T) {
 	if !s.Paused || other.Paused {
 		t.Errorf("after the hold: queued session paused %v, empty one paused %v", s.Paused, other.Paused)
 	}
+	// What the hold left comes back after a restart.
+	again, err := New(config.Default(), m.dir, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := again.back; b == nil || !b.since.Equal(m.back.since) || !b.end.Equal(m.back.end) || !slices.Equal(b.paused, []string{s.ID}) {
+		t.Errorf("after a restart, back %+v, want %+v", b, m.back)
+	}
+	_ = again.Close()
 	// The timeline says the user was away, and what is left for them.
 	text := ansi.Strip(strings.Join(m.renderTimeline(), "\n"))
 	for _, want := range []string{"back after", "paused: api (1)", "you wrote: check the 429 path", "since you were away"} {
@@ -236,12 +251,29 @@ func TestHold(t *testing.T) {
 		}
 	}
 	// p resumes a queue the hold left paused, even of a session with no
-	// line; x clears the note.
+	// line; x clears the note, and says it once more.
 	key("p")
 	key("x")
 	// Drawn with nothing left, the block goes.
 	if left := m.backLines(); s.Paused || m.note != "" || m.back != nil || len(left) != 0 {
 		t.Errorf("after p and x: paused %v, note %q, back %v", s.Paused, m.note, m.back)
+	}
+	if !strings.Contains(m.message, "check the 429 path") {
+		t.Errorf("x said %q", m.message)
+	}
+	// With no hold behind, p resumes nothing: the hint does not offer it.
+	s.Paused = true
+	key("p")
+	if !s.Paused {
+		t.Error("p resumed a queue with no hold behind")
+	}
+	s.Paused = false
+	// x clears the block of a hold even with no note: here the web cockpit
+	// never started again.
+	m.back = &hold{web: true}
+	key("x")
+	if m.back != nil {
+		t.Error("x left the block of the hold")
 	}
 
 	// A click ends a hold too, once the note is written.
@@ -350,8 +382,8 @@ func TestUnreadSettles(t *testing.T) {
 		t.Errorf("unread: api.go %v, committed done.go %v", s.Unread("api.go"), s.Unread("done.go"))
 	}
 	// Narrowed to a commit, nothing is shown unread: nothing can be read there.
-	if title := ansi.Strip(m.renderChanges(rect{0, 0, 40, 5})[0]); !strings.Contains(title, "1 unread") {
-		t.Errorf("title = %q", title)
+	if rows := m.renderChanges(rect{0, 0, 40, 5}); !strings.Contains(ansi.Strip(rows[0]), "1 unread") || !strings.Contains(ansi.Strip(rows[1]), "M•api.go") {
+		t.Errorf("unread row:\n%s", ansi.Strip(strings.Join(rows, "\n")))
 	}
 	m.commit = "abc"
 	if rows := ansi.Strip(strings.Join(m.renderChanges(rect{0, 0, 40, 5}), "\n")); strings.Contains(rows, "unread") || strings.Contains(rows, "•") {
@@ -464,6 +496,12 @@ func TestEventsSince(t *testing.T) {
 		{T: at(9), S: "c", K: session.KindStatus, V: "working"}, {T: at(9), S: "d", K: session.KindStatus, V: "working"}}
 	if rules := healthRules(working, live{}, at(10).Add(30*time.Minute)); rules[2].lvl != levelHigh {
 		t.Errorf("4 agents working for the last hour: %+v", rules[2])
+	}
+	// One of them closed at 9:30 while working, before the day the rules
+	// look at, no longer counts the next day.
+	closed := append(working, session.Event{T: at(9).Add(30 * time.Minute), S: "d", K: session.KindSessionClose})
+	if rules := healthRules(closed, live{}, at(10).Add(24*time.Hour+30*time.Minute)); rules[2].lvl == levelHigh {
+		t.Errorf("3 agents working and one closed: %+v", rules[2])
 	}
 }
 

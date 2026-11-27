@@ -534,18 +534,18 @@ func (m *Model) renderChanges(r rect) []string {
 		if c.Deleted > 0 {
 			stat += ui.Bad.Render(fmt.Sprintf(" -%d", c.Deleted))
 		}
-		// A file the agent changed since its diff was last opened starts with
-		// a dot.
-		lead := " "
+		// A file the agent changed since its diff was last opened has a dot
+		// between its mark and its name.
+		gap := " "
 		if s := m.current(); s != nil && m.commit == "" && s.Unread(c.Path) {
-			lead = ui.Accent.Render("•")
+			gap = ui.Accent.Render("•")
 		}
 		// Long paths lose their start, not the file name.
 		path := c.Path
-		if room := inner - 3 - ansi.StringWidth(stat); ansi.StringWidth(path) > room && room > 1 {
+		if room := inner - 2 - ansi.StringWidth(stat); ansi.StringWidth(path) > room && room > 1 {
 			path = ansi.TruncateLeft(path, ansi.StringWidth(path)-room+1, "…")
 		}
-		text := lead + mark(c.Mark()) + " " + ui.Fit(path, max(inner-3-ansi.StringWidth(stat), 1)) + stat
+		text := mark(c.Mark()) + gap + ui.Fit(path, max(inner-2-ansi.StringWidth(stat), 1)) + stat
 		lines = append(lines, ui.Selected(text, inner, i == m.changeCursor, focused))
 	}
 
@@ -692,11 +692,13 @@ func (m *Model) renderHelp() []string {
 		"    notification, the web cockpit stops, the agents go out of sight, and",
 		"    what is in your head is written down as a note for you. Agents mid-turn",
 		"    finish. enter ends it: the timeline shows what happened and, above it,",
-		"    the note (x clears it), the queues still paused (p resumes one) and the",
-		"    cockpit to start again ("+p+" v, the same sessions shared).",
+		"    the note, the queues still paused (p resumes one) and the cockpit to",
+		"    start again ("+p+" v, the same sessions shared); x clears the note and",
+		"    this block.",
 		"    A 4th agent at once is warned of before it starts.",
-		"    In the changes panel a • at the start marks a file the agent changed since",
-		"    you last opened its diff; the diff starts with the turn that changed it.",
+		"    In the changes panel a • after the mark, as M•api.go, marks a file the",
+		"    agent changed since you last opened its diff; the diff starts with the",
+		"    turn that changed it.",
 		"    [health]: meter = true · warn_agents = 4 (0 = never)",
 		"",
 		ui.Bold.Render("  Workspaces"),
