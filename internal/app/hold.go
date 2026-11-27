@@ -21,24 +21,31 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
-	"github.com/henomis/cicoria/internal/session"
 	"github.com/henomis/cicoria/internal/ui"
 )
 
-// hold is a break the user takes: every queue is paused, notifications wait
-// and the web cockpit is stopped, so that nothing calls them back. Agents
-// in the middle of a turn finish it, then wait.
+// holdTarget is how long a break has to last to restore attention: shorter
+// pauses ease fatigue, not focus.
+const holdTarget = 15 * time.Minute
+
+// hold is a break the user takes: every queue is paused, no desktop
+// notification is sent, the web cockpit is stopped and the agents are out of
+// sight, so that nothing calls them back. Agents in the middle of a turn
+// finish it, then wait.
 type hold struct {
-	since time.Time
+	since, end time.Time
 	// paused are the sessions whose queue the hold paused.
 	paused []string
-	// web says the hold stopped the web cockpit, note that the user wrote
-	// what was in their head on the backlog.
-	web, note bool
+	// web says the hold stopped the web cockpit, shared which sessions it
+	// shared then.
+	web    bool
+	shared []string
 }
 
-// startHold starts a hold. Any key or click ends it.
+// startHold starts a hold, and asks what is on the user's mind, to write it
+// down: a note for them, kept until they clear it, never sent to an agent.
 func (m *Model) startHold() tea.Cmd {
 	h := &hold{since: time.Now(), web: m.web != nil}
 	for _, s := range m.sessions {
@@ -46,18 +53,18 @@ func (m *Model) startHold() tea.Cmd {
 			s.Paused = true
 			h.paused = append(h.paused, s.ID)
 		}
+		if s.Web {
+			h.shared = append(h.shared, s.ID)
+		}
 	}
 	m.stopWeb()
-	m.hold = h
+	m.hold, m.back = h, nil
 	m.save()
-	// What is on the user's mind goes on the backlog, so it can wait. It is
-	// a note for the user: started, the card sends the agent nothing.
 	m.prompt = &prompt{
 		input: ui.Input{Prompt: "on hold · what's in your head? (esc skips) "},
 		done: func(text string) tea.Cmd {
 			if text != "" {
-				m.cards = append(m.cards, session.Card{ID: session.NewID(), Title: text, Dir: m.project()})
-				h.note = true
+				m.note = text
 				m.save()
 			}
 			return nil
@@ -66,45 +73,88 @@ func (m *Model) startHold() tea.Cmd {
 	return nil
 }
 
-// endHold ends the hold and shows what happened while the user was away.
-// The queues that have messages stay paused, to be resumed one by one.
+// endHold ends the hold and shows what happened while the user was away,
+// with what is left for them to resume above it. The queues that have
+// messages stay paused, to be resumed one by one.
 func (m *Model) endHold() tea.Cmd {
 	h := m.hold
 	m.hold = nil
-	still := 0
-	for _, s := range m.sessions {
-		if !slices.Contains(h.paused, s.ID) {
-			continue
-		}
-		if len(s.Queue) == 0 {
+	h.end = time.Now()
+	h.paused = slices.DeleteFunc(h.paused, func(id string) bool {
+		s, _ := m.byID(id)
+		if s != nil && len(s.Queue) == 0 {
 			s.Paused = false
-		} else {
-			still++
 		}
-	}
+		return s == nil || !s.Paused
+	})
+	m.back = h
 	m.awayFrom = h.since
 	m.save()
-	var said []string
-	if h.note {
-		said = append(said, "your note is on the board: "+m.cfg.Prefix+" 0")
-	}
-	if still > 0 {
-		said = append(said, fmt.Sprintf("%d queue(s) still paused: p in the queue panel resumes one", still))
-	}
-	if h.web {
-		said = append(said, m.cfg.Prefix+" v starts the web cockpit again")
-	}
-	if len(said) > 0 {
-		m.say(strings.Join(said, " · "))
-	}
 	return m.openTimelineOn(nil)
 }
 
-// holdStatus is what the status bar says while a hold is on.
-func (m *Model) holdStatus() string {
-	text := fmt.Sprintf("on hold since %s · %d queue(s) paused · agents mid-turn still finish", m.hold.since.Format("15:04"), len(m.hold.paused))
-	if m.hold.web {
-		text += " · web cockpit stopped"
+// renderHold draws the hold over the whole screen but the status bar, in
+// place of the agents.
+func (m *Model) renderHold() []string {
+	height := max(m.height-1, 2)
+	gone := time.Since(m.hold.since).Truncate(time.Minute)
+	took := span(gone) + " of " + span(holdTarget)
+	if gone >= holdTarget {
+		took = span(gone)
 	}
-	return text
+	state := fmt.Sprintf("%d queue(s) paused · no notifications", len(m.hold.paused))
+	if m.hold.web {
+		state += " · web cockpit stopped"
+	}
+	lines := []string{"", "", ui.Bold.Render("on hold since " + m.hold.since.Format("15:04") + " · " + took), ""}
+	if m.note != "" {
+		lines = append(lines, "you wrote: "+m.note, "")
+	} else {
+		lines = append(lines, "write down where you were, then step away.", "")
+	}
+	lines = append(lines, ui.Dim.Render(state), ui.Dim.Render("agents mid-turn finish their turn, then wait"), "", ui.Dim.Render("enter: back to work"))
+	for k, l := range lines {
+		lines[k] = strings.Repeat(" ", max((m.width-ansi.StringWidth(l))/2, 0)) + l
+	}
+	return ui.Block(lines, m.width, height)
+}
+
+// backLines are what is left for the user after a hold, above the
+// timeline: the note, the queues still paused, the web cockpit to start
+// again. They stay until each is acted on.
+func (m *Model) backLines() []string {
+	var out []string
+	if b := m.back; b != nil {
+		var paused []string
+		for _, id := range b.paused {
+			if s, _ := m.byID(id); s != nil && s.Paused {
+				paused = append(paused, fmt.Sprintf("%s (%d)", s.Name, len(s.Queue)))
+			}
+		}
+		if len(paused) == 0 && !b.web {
+			m.back = nil
+		} else {
+			out = append(out, fmt.Sprintf(" back after %s · %s → %s", span(b.end.Sub(b.since)), b.since.Format("15:04"), b.end.Format("15:04")))
+			if len(paused) > 0 {
+				out = append(out, " paused: "+strings.Join(paused, " · ")+ui.Dim.Render(" · p resumes one, the selected first"))
+			}
+			if b.web {
+				out = append(out, " web cockpit stopped"+ui.Dim.Render(" · "+m.cfg.Prefix+" v starts it, new link, same sessions shared"))
+			}
+		}
+	}
+	if m.note != "" {
+		out = append(out, " you wrote: "+m.note+ui.Dim.Render(" · x clears it"))
+	}
+	return out
+}
+
+// resumeQueue resumes the paused queue of a session, and sends its next
+// message if the agent is ready for it: the user's call, from the timeline.
+func (m *Model) resumeQueue(id string) tea.Cmd {
+	s, _ := m.byID(id)
+	s.Paused = false
+	m.save()
+	m.say("resumed the queue of " + s.Name)
+	return m.trySend(s)
 }

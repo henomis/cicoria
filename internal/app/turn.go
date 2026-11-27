@@ -114,47 +114,83 @@ func (m *Model) turnAt(l lane, at, now time.Time) *turnView {
 }
 
 // fileIntent says which turn of a session last changed a file: what it was
-// for, and what the agent said at its end. Each line ends in a newline, and
-// none looks like a line of a diff.
-func (m *Model) fileIntent(id, path string) []string {
+// for, and what the agent said at its end. It is the turn under way when the
+// agent last wrote the file, as this run saw it (touched), else, as after a
+// restart, the last turn whose end named it. Each line ends in a newline,
+// and none looks like a line of a diff.
+func (m *Model) fileIntent(id, path string, touched time.Time) []string {
 	var evs []session.Event
 	for _, e := range m.history.Events() {
 		if e.S == id {
 			evs = append(evs, e)
 		}
 	}
-	last, n := -1, 0
-	for k, e := range evs {
-		if e.K == session.KindTurnEnd && slices.Contains(e.Files, path) {
-			last, n = k, n+1
+	ends := func(k session.Kind) bool {
+		return k == session.KindTurnEnd || k == session.KindTurnFailed || k == session.KindInterrupted
+	}
+	start, end := -1, -1
+	if !touched.IsZero() {
+		for k, e := range evs {
+			if e.K == session.KindTurnStart && !e.T.After(touched) {
+				start, end = k, -1
+			}
+			if start >= 0 && end < 0 && k > start && ends(e.K) {
+				end = k
+			}
+		}
+		// A turn that had ended when the file was written did not write it.
+		if end >= 0 && evs[end].T.Before(touched) {
+			start, end = -1, -1
 		}
 	}
-	if last < 0 {
+	if start < 0 {
+		for k, e := range evs {
+			if e.K == session.KindTurnEnd && slices.Contains(e.Files, path) {
+				end = k
+			}
+		}
+		for k := end - 1; k >= 0 && end >= 0; k-- {
+			if evs[k].K == session.KindTurnStart {
+				start = k
+				break
+			}
+		}
+	}
+	if start < 0 && end < 0 {
 		return nil
 	}
+	// The turns before it that named the file changed it before.
+	earlier, before := 0, start
+	if before < 0 {
+		before = end
+	}
+	for _, e := range evs[:before] {
+		if e.K == session.KindTurnEnd && slices.Contains(e.Files, path) {
+			earlier++
+		}
+	}
+
 	oneLine := func(s string) string { return strings.Join(strings.Fields(s), " ") }
 	out := []string{"why   the agent changed it in a turn\n"}
-	for k := last - 1; k >= 0; k-- {
-		st := evs[k]
-		if st.K != session.KindTurnStart {
-			continue
-		}
-		why := m.turnPurpose(evs[:k], st)
+	if start >= 0 {
+		st := evs[start]
+		why := m.turnPurpose(evs[:start], st)
 		// A prompt typed in the pane is recorded just before its turn.
-		for j := k - 1; j >= 0 && st.V == "typed" && st.T.Sub(evs[j].T) <= fromQueueWithin; j-- {
+		for j := start - 1; j >= 0 && st.V == "typed" && st.T.Sub(evs[j].T) <= fromQueueWithin; j-- {
 			if evs[j].K == session.KindPromptTyped && evs[j].X != "" {
 				why = "your prompt" + quoted(evs[j])
 				break
 			}
 		}
 		out[0] = fmt.Sprintf("why   %s for %s\n", st.T.Format("15:04"), oneLine(why))
-		break
 	}
-	if said := oneLine(evs[last].X); said != "" {
-		out = append(out, "      the agent said “"+said+"”\n")
+	if end >= 0 && evs[end].K == session.KindTurnEnd {
+		if said := oneLine(evs[end].X); said != "" {
+			out = append(out, "      the agent said “"+said+"”\n")
+		}
 	}
-	if n > 1 {
-		out = append(out, fmt.Sprintf("      and %d earlier turn(s)\n", n-1))
+	if earlier > 0 {
+		out = append(out, fmt.Sprintf("      and %d earlier turn(s)\n", earlier))
 	}
 	return append(out, "\n")
 }

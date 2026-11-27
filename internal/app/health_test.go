@@ -194,6 +194,7 @@ func TestHold(t *testing.T) {
 	other := session.New("s2", "docs", m.dir, agent.NewClaude(nil))
 	m.sessions = append(m.sessions, other)
 	s.Queue = []session.Message{{Text: "later"}}
+	key := func(k string) { m.handleKey(tea.KeyPressMsg{Code: []rune(k)[0], Text: k}) }
 
 	m.startHold()
 	if m.hold == nil || !s.Paused || !other.Paused || m.prompt == nil {
@@ -201,33 +202,55 @@ func TestHold(t *testing.T) {
 	}
 	m.prompt.done("check the 429 path")
 	m.prompt = nil
-	// The note is for the user: started, its card sends the agent nothing.
-	if len(m.cards) != 1 || m.cards[0].Title != "check the 429 path" || m.cards[0].Prompt != "" {
-		t.Errorf("cards = %+v", m.cards)
+	// The note is the user's, kept with the workspace, never a card.
+	st, err := session.LoadState(session.StatePath(m.dir))
+	if err != nil || st.Note != "check the 429 path" || len(m.cards) != 0 {
+		t.Errorf("note saved %q, cards %+v, %v", st.Note, m.cards, err)
 	}
 	// Killed now, cicoria would bring the queues back as they were.
-	st, err := session.LoadState(session.StatePath(m.dir))
-	if err != nil || len(st.Sessions) != 2 || st.Sessions[0].Paused || st.Sessions[1].Paused {
-		t.Errorf("saved during the hold: %+v, %v", st.Sessions, err)
+	if len(st.Sessions) != 2 || st.Sessions[0].Paused || st.Sessions[1].Paused {
+		t.Errorf("saved during the hold: %+v", st.Sessions)
 	}
-	if !strings.Contains(m.renderStatus(), "on hold since") {
-		t.Errorf("status = %q", m.renderStatus())
+	// The hold takes the screen, in place of the agents.
+	if text := ansi.Strip(strings.Join(m.renderHold(), "\n")); !strings.Contains(text, "you wrote: check the 429 path") || !strings.Contains(text, "of 15m") || !strings.Contains(text, "enter: back to work") {
+		t.Errorf("hold screen:\n%s", text)
 	}
 
-	m.handleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	// A key pressed to wake the screen does not end the break; enter does.
+	key("x")
+	if m.hold == nil {
+		t.Fatal("a key other than enter ended the hold")
+	}
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.hold != nil || m.mode != modeTimeline {
-		t.Errorf("a key did not end the hold: hold %v, mode %d", m.hold, m.mode)
+		t.Fatalf("enter did not end the hold: hold %v, mode %d", m.hold, m.mode)
 	}
 	if !s.Paused || other.Paused {
 		t.Errorf("after the hold: queued session paused %v, empty one paused %v", s.Paused, other.Paused)
 	}
-	if !strings.Contains(m.message, "your note is on the board") {
-		t.Errorf("message after the hold = %q", m.message)
+	// The timeline says the user was away, and what is left for them.
+	text := ansi.Strip(strings.Join(m.renderTimeline(), "\n"))
+	for _, want := range []string{"back after", "paused: api (1)", "you wrote: check the 429 path", "since you were away"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the timeline after a hold misses %q:\n%s", want, text)
+		}
+	}
+	// p resumes a queue the hold left paused, even of a session with no
+	// line; x clears the note.
+	key("p")
+	key("x")
+	// Drawn with nothing left, the block goes.
+	if left := m.backLines(); s.Paused || m.note != "" || m.back != nil || len(left) != 0 {
+		t.Errorf("after p and x: paused %v, note %q, back %v", s.Paused, m.note, m.back)
 	}
 
-	// A click ends a hold too, and does nothing else.
+	// A click ends a hold too, once the note is written.
 	m.mode = modeWorkspace
 	m.startHold()
+	m.handleMouse(tea.MouseClickMsg{X: 1, Y: 1})
+	if m.hold == nil || m.prompt == nil {
+		t.Fatal("a click while the note was written ended the hold")
+	}
 	m.prompt = nil
 	m.handleMouse(tea.MouseClickMsg{X: 1, Y: 1})
 	if m.hold != nil || m.mode != modeTimeline {
@@ -236,7 +259,7 @@ func TestHold(t *testing.T) {
 
 	// A queue paused before the hold stays paused after it.
 	m.mode = modeWorkspace
-	s.Queue = nil
+	s.Paused = true
 	m.startHold()
 	m.prompt = nil
 	m.endHold()
@@ -278,7 +301,7 @@ func TestWarnAgents(t *testing.T) {
 func TestFileIntent(t *testing.T) {
 	m := timelineModel(t, 100, 30)
 	id := m.sessions[0].ID
-	lines := m.fileIntent(id, "api.go")
+	lines := m.fileIntent(id, "api.go", time.Time{})
 	text := strings.Join(lines, "")
 	// The diff is headed by the lines as they are, with one blank line under.
 	if !strings.HasSuffix(text, "”\n\n") || strings.Count(text, "\n\n") != 1 {
@@ -294,12 +317,20 @@ func TestFileIntent(t *testing.T) {
 			}
 		}
 	}
-	m.history.Record(session.Event{T: time.Now(), S: id, K: session.KindTurnStart, V: "cicoria"})
-	m.history.Record(session.Event{T: time.Now(), S: id, K: session.KindTurnEnd, Files: []string{"api.go"}})
-	if text := strings.Join(m.fileIntent(id, "api.go"), ""); !strings.Contains(text, "and 1 earlier turn(s)") {
-		t.Errorf("two turns: %q", text)
+	// A turn that wrote the file through the shell does not name it in its
+	// end: the time the file was written finds it.
+	start := time.Now()
+	m.history.Record(session.Event{T: start, S: id, K: session.KindTurnStart, V: "cicoria"})
+	m.history.Record(session.Event{T: start.Add(time.Minute), S: id, K: session.KindTurnEnd, X: "ran sed"})
+	text = strings.Join(m.fileIntent(id, "api.go", start.Add(30*time.Second)), "")
+	if !strings.Contains(text, "a message from cicoria") || !strings.Contains(text, "“ran sed”") || !strings.Contains(text, "and 1 earlier turn(s)") {
+		t.Errorf("written in the second turn: %q", text)
 	}
-	if lines := m.fileIntent(id, "other.go"); lines != nil {
+	// Written after every turn ended: the last turn that named it.
+	if text := strings.Join(m.fileIntent(id, "api.go", start.Add(time.Hour)), ""); !strings.Contains(text, "your prompt “fix it”") {
+		t.Errorf("written between turns: %q", text)
+	}
+	if lines := m.fileIntent(id, "other.go", time.Time{}); lines != nil {
 		t.Errorf("a file no turn changed has intent %q", lines)
 	}
 }
@@ -309,9 +340,22 @@ func TestUnreadSettles(t *testing.T) {
 	now := time.Now()
 	s.Touched["api.go"], s.Touched["done.go"] = now, now
 	m.shown, m.trees = m.project(), map[string]*ui.Tree{}
-	m.applyRefresh(refreshMsg{dir: m.project(), changes: []git.Change{{Path: "api.go"}}})
+	// A look that failed lists nothing: no file is taken to have left.
+	m.applyRefresh(refreshMsg{dir: m.project()})
+	if !s.Unread("api.go") || !s.Unread("done.go") {
+		t.Error("a failed look cleared the unread files")
+	}
+	m.applyRefresh(refreshMsg{dir: m.project(), repo: true, changes: []git.Change{{Path: "api.go"}}})
 	if !s.Unread("api.go") || s.Unread("done.go") {
 		t.Errorf("unread: api.go %v, committed done.go %v", s.Unread("api.go"), s.Unread("done.go"))
+	}
+	// Narrowed to a commit, nothing is shown unread: nothing can be read there.
+	if title := ansi.Strip(m.renderChanges(rect{0, 0, 40, 5})[0]); !strings.Contains(title, "1 unread") {
+		t.Errorf("title = %q", title)
+	}
+	m.commit = "abc"
+	if rows := ansi.Strip(strings.Join(m.renderChanges(rect{0, 0, 40, 5}), "\n")); strings.Contains(rows, "unread") || strings.Contains(rows, "•") {
+		t.Errorf("narrowed to a commit:\n%s", rows)
 	}
 }
 
@@ -398,5 +442,42 @@ func TestHealthSumLive(t *testing.T) {
 	h := healthSum(events, statsFrom(0, at(10, 40)), at(10, 40), 1, live{active: 30 * time.Minute})
 	if h.longest != 40*time.Minute || h.active != 40*time.Minute || h.dayPeak != 40*time.Minute {
 		t.Errorf("with the stretch on now: longest %s, active %s, most in a day %s", h.longest, h.active, h.dayPeak)
+	}
+}
+
+// Cut to a time, the events keep what tells who was working then.
+func TestEventsSince(t *testing.T) {
+	at := func(h int) time.Time { return time.Date(2026, 11, 24, h, 0, 0, 0, time.Local) }
+	events := []session.Event{
+		{T: at(8), K: session.KindRunStart},
+		{T: at(8), S: "a", K: session.KindStatus, V: "idle"},
+		{T: at(9), S: "a", K: session.KindStatus, V: "working"},
+		{T: at(9), S: "a", K: session.KindPromptTyped},
+		{T: at(11), S: "a", K: session.KindSwitch},
+	}
+	got := eventsSince(events, at(10))
+	if len(got) != 3 || got[0].K != session.KindRunStart || got[1].V != "working" || got[2].K != session.KindSwitch {
+		t.Errorf("events since 10:00 = %+v", got)
+	}
+	// An agent working since 9:00 still counts at once at 10:30.
+	working := []session.Event{{T: at(9), S: "a", K: session.KindStatus, V: "working"}, {T: at(9), S: "b", K: session.KindStatus, V: "working"},
+		{T: at(9), S: "c", K: session.KindStatus, V: "working"}, {T: at(9), S: "d", K: session.KindStatus, V: "working"}}
+	if rules := healthRules(working, live{}, at(10).Add(30*time.Minute)); rules[2].lvl != levelHigh {
+		t.Errorf("4 agents working for the last hour: %+v", rules[2])
+	}
+}
+
+// Started again after a hold stopped it, the web cockpit shares what it
+// shared then.
+func TestWebAfterHold(t *testing.T) {
+	m, s := historyModel(t)
+	m.cfg.WebAddress = "127.0.0.1:0"
+	other := session.New("s2", "docs", m.dir, agent.NewClaude(nil))
+	m.sessions = append(m.sessions, other)
+	m.back = &hold{web: true, shared: []string{other.ID}}
+	m.askWeb()
+	defer m.stopWeb()
+	if m.web == nil || !s.Web || !other.Web || m.back.web {
+		t.Errorf("web %v, shared %v %v, still to start %v", m.web != nil, s.Web, other.Web, m.back.web)
 	}
 }

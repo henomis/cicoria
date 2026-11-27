@@ -632,7 +632,7 @@ func (m *Model) renderCard(e boardEntry, width int, selected bool) []string {
 	var rows []string
 	if e.card != nil {
 		rows = []string{"□ " + ui.Bold.Render(e.card.Title), ui.Dim.Render(tilde(e.card.Dir))}
-		if e.card.Prompt != "" && e.card.Prompt != e.card.Title {
+		if e.card.Prompt != e.card.Title {
 			for _, line := range strings.Split(e.card.Prompt, "\n") {
 				if line = strings.TrimSpace(line); line != "" && len(rows) < cardRows {
 					rows = append(rows, ui.Dim.Render(line))

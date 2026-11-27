@@ -63,6 +63,9 @@ type State struct {
 	Cards []Card `json:"cards,omitempty"`
 	// Runs are the command lines of the run box, the last first.
 	Runs []string `json:"runs,omitempty"`
+	// Note is what the user wrote down when they took a break, until they
+	// clear it.
+	Note string `json:"note,omitempty"`
 }
 
 // StatePath returns where the workspace opened on dir is saved.

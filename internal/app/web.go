@@ -70,6 +70,15 @@ func (m *Model) askWeb() tea.Cmd {
 		if s := m.current(); s != nil {
 			s.Web = true
 		}
+		// After a hold that stopped it, the sessions shared then are again.
+		if b := m.back; b != nil && b.web {
+			for _, id := range b.shared {
+				if s, _ := m.byID(id); s != nil {
+					s.Web = true
+				}
+			}
+			b.web = false
+		}
 		// The columns of the board need a look at the work of each session.
 		cmd = tea.Batch(waitWeb(srv), m.pollBoard())
 	}

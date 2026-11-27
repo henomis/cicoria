@@ -370,10 +370,7 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool, car
 	if card != nil {
 		// It goes out once the agent says it is ready for it.
 		m.recordText(s, session.Event{K: session.KindCardStart, V: card.Title, Src: session.FromTUI}, card.Prompt)
-		// A card with no prompt, as a note written for a hold, sends nothing.
-		if card.Prompt != "" {
-			s.Enqueue(session.Message{Text: card.Prompt, From: fromCard})
-		}
+		s.Enqueue(session.Message{Text: card.Prompt, From: fromCard})
 		m.dropCard(card.ID)
 	}
 	m.sessions = append(m.sessions, s)

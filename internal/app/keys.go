@@ -74,9 +74,13 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	// Any key ends a hold, and does nothing else.
+	// Enter ends a hold; any other key does nothing, so that one pressed to
+	// wake the screen does not end the break.
 	if m.hold != nil {
-		return m.endHold()
+		if key == "enter" {
+			return m.endHold()
+		}
+		return nil
 	}
 
 	switch m.mode {
@@ -351,9 +355,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	mouse := msg.Mouse()
 	_, isWheel := msg.(tea.MouseWheelMsg)
 	_, isClick := msg.(tea.MouseClickMsg)
-	// A click ends a hold, and does nothing else; the rest of the mouse waits.
+	// A click ends a hold, and does nothing else; the rest of the mouse
+	// waits, and so does the click while the note is being written.
 	if m.hold != nil {
-		if isClick {
+		if isClick && m.prompt == nil {
 			return m.endHold()
 		}
 		return nil

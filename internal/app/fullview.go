@@ -94,7 +94,7 @@ func (m *Model) openDiff(c git.Change) {
 		// The turn that changed the file heads its diff; its lines show no
 		// line of the file, so they take no notes.
 		if s := m.current(); s != nil && m.commit == "" {
-			diff = strings.Join(m.fileIntent(s.ID, c.Path), "") + diff
+			diff = strings.Join(m.fileIntent(s.ID, c.Path, s.Touched[c.Path]), "") + diff
 		}
 		m.view.pager.SetContent(ui.DiffLines(diff))
 		m.view.plain = strings.Split(strings.TrimSuffix(diff, "\n"), "\n")

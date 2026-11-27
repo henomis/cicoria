@@ -62,6 +62,9 @@ const (
 	// meterBarMin the shortest bar the meter keeps when it names a rule.
 	meterTicks  = 4
 	meterBarMin = 4
+	// healthTicks is how many ticks pass between looks at the history the
+	// health view counts.
+	healthTicks = 60
 )
 
 // level is how high the risk of brain fry is.
@@ -107,7 +110,7 @@ func (r rule) of(n int) string {
 func (r rule) next() (level, int, bool) {
 	switch r.lvl {
 	case levelHigh:
-		return levelHigh, r.high, false
+		return 0, 0, false
 	case levelRaised:
 		return levelHigh, r.high, true
 	}
@@ -144,8 +147,11 @@ func levelOf(rules []rule) level {
 // top returns the first of the rules at the highest level.
 func top(rules []rule) (rule, bool) {
 	l := levelOf(rules)
+	if l == levelLow {
+		return rule{}, false
+	}
 	for _, r := range rules {
-		if l > levelLow && r.lvl == l {
+		if r.lvl == l {
 			return r, true
 		}
 	}
@@ -154,6 +160,7 @@ func top(rules []rule) (rule, bool) {
 
 // healthRules returns every rule, in the same order, with its level now.
 func healthRules(events []session.Event, in live, now time.Time) []rule {
+	events = eventsSince(events, now.Add(-24*time.Hour))
 	minutes := func(d time.Duration) int { return int(d / time.Minute) }
 	at := func(r rule) rule {
 		switch {
@@ -201,6 +208,26 @@ func healthRules(events []session.Event, in live, now time.Time) []rule {
 			val: in.unread, raised: unreadRaised, high: unreadHigh,
 			hint: "open their diffs in the changes panel, listed below"}),
 	}
+}
+
+// eventsSince returns the events, in order of time, from a time on, after
+// what the periods of work need from before it: the last status of each
+// session, and the runs of cicoria.
+func eventsSince(events []session.Event, from time.Time) []session.Event {
+	i, _ := slices.BinarySearchFunc(events, from, func(e session.Event, t time.Time) int { return e.T.Compare(t) })
+	var before []session.Event
+	seen := map[string]bool{}
+	for k := i - 1; k >= 0; k-- {
+		switch e := events[k]; {
+		case e.K == session.KindRunStart || e.K == session.KindRunEnd:
+			before = append(before, e)
+		case e.K == session.KindStatus && !seen[e.S]:
+			seen[e.S] = true
+			before = append(before, e)
+		}
+	}
+	slices.Reverse(before)
+	return append(before, events[i:]...)
 }
 
 // quietWho is what summarize needs to count work, without names.
@@ -266,12 +293,6 @@ func stretches(acts []time.Time, now time.Time) (longest, total, last time.Durat
 	return max(longest, end.Sub(start)), total + end.Sub(start), last, breaks
 }
 
-// withLive adds the stretch going on now, known from the keys, to what
-// stretches counted of the history up to its start.
-func withLive(longest, total, last, active time.Duration) (time.Duration, time.Duration) {
-	return max(longest, last+active), total + active
-}
-
 // healthSummary is what the health view counts for a time.
 type healthSummary struct {
 	longest time.Duration
@@ -287,30 +308,31 @@ type healthSummary struct {
 
 // healthSum counts the history from from to now.
 func healthSum(events []session.Event, from, now time.Time, days int, in live) healthSummary {
+	events = eventsSince(events, from)
 	sum := summarize(events, from, now, days, quietWho(in.shells))
 	h := healthSummary{crowd: sum.together[crowdAgents-1]}
 	// The stretch on now is known from the keys, as for the rules.
 	since := maxTime(now.Add(-in.active), from)
 	acts := humanActs(events, from, since)
-	var last time.Duration
-	h.longest, h.active, last, h.breaks = stretches(acts, since)
-	h.longest, h.active = withLive(h.longest, h.active, last, now.Sub(since))
-	byDay := map[time.Time][]time.Time{}
-	for _, t := range acts {
+	longest, active, last, breaks := stretches(acts, since)
+	live := now.Sub(since)
+	h.longest, h.active, h.breaks = max(longest, last+live), active+live, breaks
+	dayOf := func(t time.Time) time.Time {
 		y, mo, d := t.Date()
-		day := time.Date(y, mo, d, 0, 0, 0, 0, t.Location())
-		byDay[day] = append(byDay[day], t)
+		return time.Date(y, mo, d, 0, 0, 0, 0, t.Location())
+	}
+	byDay := map[time.Time][]time.Time{dayOf(now): nil}
+	for _, t := range acts {
+		byDay[dayOf(t)] = append(byDay[dayOf(t)], t)
 	}
 	for day, dayActs := range byDay {
 		_, active, _, _ := stretches(dayActs, minTime(day.AddDate(0, 0, 1), since))
+		// shortcut: the stretch on now counts for today alone, even when
+		// it started yesterday.
+		if day.Equal(dayOf(now)) {
+			active += live
+		}
 		h.dayPeak = max(h.dayPeak, active)
-	}
-	// shortcut: the stretch on now counts for today alone, even when it
-	// started yesterday.
-	y, mo, d := now.Date()
-	today := time.Date(y, mo, d, 0, 0, 0, 0, now.Location())
-	if _, active, _, _ := stretches(byDay[today], since); now.After(since) {
-		h.dayPeak = max(h.dayPeak, active+now.Sub(since))
 	}
 	perHour := map[time.Time]int{}
 	for _, e := range events {
@@ -567,15 +589,12 @@ func healthRow(r rule, wide bool) string {
 		mark := []rune(ansi.Strip(healthMark(r)))[0]
 		return fmt.Sprintf(" %c %s %s · %s", mark, r.short, r.of(r.val), strings.TrimPrefix(next, "next: "))
 	}
-	row := fmt.Sprintf("  %s  %-34s %6s", healthMark(r), r.label, r.of(r.val))
-	if wide {
-		filled := 10
-		if more && at > 0 {
-			filled = min(r.val*10/at, 10)
-		}
-		row += "  " + strings.Repeat("█", filled) + ui.Dim.Render(strings.Repeat("·", 10-filled))
+	filled := 10
+	if more && at > 0 {
+		filled = min(r.val*10/at, 10)
 	}
-	return row + "  " + next
+	bar := strings.Repeat("█", filled) + ui.Dim.Render(strings.Repeat("·", 10-filled))
+	return fmt.Sprintf("  %s  %-34s %6s  %s  %s", healthMark(r), r.label, r.of(r.val), bar, next)
 }
 
 // meterBar is a bar of w cells: empty when low, half full when raised,

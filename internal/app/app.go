@@ -185,6 +185,10 @@ type Model struct {
 	health health
 	meter  level
 	hold   *hold
+	// back is the hold the user came back from, while something it left is
+	// still to resume, and note what they wrote down then.
+	back *hold
+	note string
 
 	// runs are the commands of the run box still running, lastRun the
 	// one whose output ctrl+a . shows, and runHistory the command lines
@@ -438,6 +442,7 @@ func New(cfg config.Config, dir string, dark, agreed bool) (*Model, error) {
 	m.sessionCursor = m.active
 	m.cards = st.Cards
 	m.runHistory = st.Runs
+	m.note = st.Note
 
 	return m, nil
 }
@@ -561,7 +566,7 @@ func (m *Model) say(msg string) {
 
 // save remembers the sessions for the next run.
 func (m *Model) save() {
-	st := session.State{Dir: m.dir, Cards: m.cards, Runs: m.runHistory}
+	st := session.State{Dir: m.dir, Cards: m.cards, Runs: m.runHistory, Note: m.note}
 	for i, s := range m.sessions {
 		// The setup of a worktree is not run again: it ended with cicoria.
 		if s.Setup {
@@ -1042,9 +1047,11 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 	}
 	m.ticks++
 	if m.ticks%meterTicks == 0 {
-		if m.mode == modeHealth || m.mode == modePalette && m.paletteFrom == modeHealth {
+		// The history the health view counts changes slowly: it is looked at
+		// again every healthTicks, the rules at every look.
+		if (m.mode == modeHealth || m.mode == modePalette && m.paletteFrom == modeHealth) && m.ticks%healthTicks == 0 {
 			m.countHealth(now)
-		} else if m.cfg.Health.Meter {
+		} else if m.cfg.Health.Meter || m.mode == modeHealth {
 			// The meter names the rule behind its level.
 			m.health.rules = m.healthNow(now)
 			m.meter = levelOf(m.health.rules)
@@ -1101,7 +1108,8 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 
 	// A file the agent changed that is no longer among the changes, as one
 	// it committed, has no diff to open: it is not unread any more.
-	if s := m.current(); s != nil && m.commit == "" {
+	// A look that failed lists nothing, and tells nothing of what left.
+	if s := m.current(); s != nil && m.commit == "" && m.repo {
 		changed := map[string]bool{}
 		for _, c := range m.changes {
 			changed[c.Path] = true

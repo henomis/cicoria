@@ -181,7 +181,10 @@ func (m *Model) View() tea.View {
 		rows = m.renderHealth()
 	default:
 		l := m.layout()
-		if m.mode == modePalette && m.paletteFrom == modeView {
+		if m.hold != nil {
+			// The agents are out of sight while the user takes a break.
+			rows = m.renderHold()
+		} else if m.mode == modePalette && m.paletteFrom == modeView {
 			rows = m.renderView()
 		} else if m.mode == modePalette && m.paletteFrom == modeBoard {
 			rows = m.renderBoard()
@@ -203,7 +206,7 @@ func (m *Model) View() tea.View {
 			h := min(l.body.h-2, 18)
 			box := m.palette.View("", w, h)
 			rows = ui.Overlay(rows, box, (m.width-w)/2, max((l.body.h-h)/3, 0))
-		} else if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent && m.typing() && m.anim == nil {
+		} else if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent && m.typing() && m.anim == nil && m.hold == nil {
 			if x, y, visible := s.Term.Cursor(); visible && s.Status != agent.Exited {
 				v.Cursor = tea.NewCursor(l.agent.x+x, l.agent.y+y)
 			}
@@ -534,7 +537,7 @@ func (m *Model) renderChanges(r rect) []string {
 		// A file the agent changed since its diff was last opened starts with
 		// a dot.
 		lead := " "
-		if s := m.current(); s != nil && s.Unread(c.Path) {
+		if s := m.current(); s != nil && m.commit == "" && s.Unread(c.Path) {
 			lead = ui.Accent.Render("•")
 		}
 		// Long paths lose their start, not the file name.
@@ -571,7 +574,8 @@ func (m *Model) renderChanges(r rect) []string {
 	}
 	unread := 0
 	for _, c := range m.changes {
-		if s := m.current(); s != nil && !m.loading && s.Unread(c.Path) {
+		// Narrowed to a commit, a diff marks nothing read: no file is unread.
+		if s := m.current(); s != nil && !m.loading && m.commit == "" && s.Unread(c.Path) {
 			unread++
 		}
 	}
@@ -684,10 +688,12 @@ func (m *Model) renderHelp() []string {
 		"    15-minute pause, 4 or more agents at once, many changes of session,",
 		"    changed files you have not opened, many hours active in a day. "+p+" y",
 		"    shows the rules that fire and the numbers behind them: h/l time · z hold.",
-		"    "+p+" z holds everything for a break: queues pause, notifications wait,",
-		"    the web cockpit stops, and what is in your head goes on the backlog as",
-		"    a note that sends nothing. Agents mid-turn finish; any key or click",
-		"    ends the hold and shows what happened. "+p+" v starts the cockpit again.",
+		"    "+p+" z holds everything for a break of 15 minutes: queues pause, no",
+		"    notification, the web cockpit stops, the agents go out of sight, and",
+		"    what is in your head is written down as a note for you. Agents mid-turn",
+		"    finish. enter ends it: the timeline shows what happened and, above it,",
+		"    the note (x clears it), the queues still paused (p resumes one) and the",
+		"    cockpit to start again ("+p+" v, the same sessions shared).",
 		"    A 4th agent at once is warned of before it starts.",
 		"    In the changes panel a • at the start marks a file the agent changed since",
 		"    you last opened its diff; the diff starts with the turn that changed it.",
@@ -808,11 +814,8 @@ func (m *Model) renderStatus() string {
 	case m.mode == modeView && m.view.search != nil:
 		return ui.Fit(" "+m.view.search.View(), m.width)
 	case m.hold != nil:
-		text, right := ui.Warn.Render(" "+m.holdStatus()), ui.Dim.Render("any key ends the hold ")
-		if gap := m.width - ansi.StringWidth(text) - ansi.StringWidth(right); gap > 0 {
-			return text + strings.Repeat(" ", gap) + right
-		}
-		return ui.Fit(text, m.width)
+		text, right := ui.Warn.Render(" on hold"), ui.Dim.Render("enter back to work ")
+		return text + strings.Repeat(" ", max(m.width-ansi.StringWidth(text)-ansi.StringWidth(right), 1)) + right
 	}
 
 	// A palette over the full-screen view leaves its status on screen.

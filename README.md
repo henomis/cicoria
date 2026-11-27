@@ -291,7 +291,14 @@ The **brain fry meter**, a box under the files panel, shows the risk now as a ba
 
 A click on it, or `ctrl+a y`, opens the **health view**. First, live, every rule: its level (`·` low, `◇` near when it is three quarters of the way to raised, `▲` raised, `■` high, so colour is not all that tells them apart), its value, a bar of how far it is to its next level and where that is; under a rule that is near or up, its thresholds and what lowers it. Then, from the history, for today, the last 7 or the last 30 days (`h`/`l`) the longest stretch without a pause and how many breaks you took, how long four or more agents worked at once, the most changes of session in one hour, how long you acted in all, pauses left out, and for 7 or 30 days the most of it in one day, and last, for each session, the files it changed that you have not opened. `j`/`k` scroll, `z` holds, `q` or `esc` goes back. It counts keys and what the history records: reading a diff with no key pressed looks like a pause.
 
-`ctrl+a z`, or `z` in the health view, **holds** everything for a break: every queue is paused, desktop notifications wait, and the web cockpit stops, so the phone does not call you back (its link is new when you start it again). It asks what is in your head and puts it on the backlog of the board as a note for you: started, that card sends the agent nothing. `esc` skips it. An agent in the middle of a turn finishes it, then waits. Any key or click ends the hold and opens the timeline on what happened since you left, and the status bar says where the note is; queues with messages stay paused, to resume one at a time with `p` in the queue panel, and `ctrl+a v` starts the web cockpit again.
+`ctrl+a z`, or `z` in the health view, **holds** everything for a break of at least 15 minutes, the time a break needs to restore attention:
+
+- Every queue is paused, no desktop notification is sent, and the web cockpit stops, so the phone does not call you back. An agent in the middle of a turn finishes it, then waits; nothing is sent to any agent.
+- The agents go out of sight: the screen shows the hold, how long it has lasted against the 15 minutes, and what is paused.
+- It asks what is in your head, to write it down and leave it there: a note for you, kept with the workspace until you clear it, never sent to an agent. `esc` skips it.
+- `enter` ends the hold, or a click; other keys do nothing, so that one pressed to wake the screen does not end the break.
+
+The timeline then opens on what happened since you left, the session that waited longest under the cursor, and above it what the hold left for you: how long you were away, the queues still paused, the web cockpit to start again, and your note. `enter` goes to a session, one at a time; `p` resumes a paused queue, the one under the cursor first, and sends its next message if its agent is ready; `x` clears the note; `ctrl+a v` starts the web cockpit with a new link, the same sessions shared. Each line goes once it is done.
 
 Starting a session, or a card, that would make four agents work at once asks first: `enter` starts it anyway, `esc` gives up.
 
