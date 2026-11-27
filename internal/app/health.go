@@ -612,5 +612,5 @@ func (m *Model) renderMeter(r rect) []string {
 		text += ui.Dim.Render(" · " + t.short)
 	}
 	barW := max(r.w-4-ansi.StringWidth(text), 1)
-	return ui.Box("brain fry", []string{meterBar(m.meter, barW) + " " + text}, r.w, r.h, false)
+	return ui.Box("Brain fry", []string{meterBar(m.meter, barW) + " " + text}, r.w, r.h, false)
 }
