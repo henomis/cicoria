@@ -63,6 +63,7 @@
           <li><a href="#board">Board</a></li>
           <li><a href="#timeline">Timeline</a></li>
           <li><a href="#stats">Stats</a></li>
+          <li><a href="#health">Health</a></li>
           <li><a href="#web">Web cockpit</a></li>
         </ol>
       </div>
@@ -156,6 +157,8 @@ cicoria -version                     <span class="c"># which version this is</sp
           <tr><td>0</td><td>Board: the backlog, and every session by what it needs</td></tr>
           <tr><td>e</td><td>Timeline: what happened, and what you did</td></tr>
           <tr><td>i</td><td>Stats: how your work went, over days</td></tr>
+          <tr><td>y</td><td>Health: what is behind the brain fry meter</td></tr>
+          <tr><td>z</td><td>Hold: pause queues, notifications and the web cockpit for a break</td></tr>
           <tr><td>v</td><td>Web cockpit: share sessions with a phone or a browser</td></tr>
           <tr><td>s f g</td><td>Focus the sessions, files, changes panel</td></tr>
           <tr><td>l</td><td>Focus the commits panel</td></tr>
@@ -273,6 +276,9 @@ cicoria -version                     <span class="c"># which version this is</sp
         <li><code>changes = "session"</code> opens sessions on the second view.</li>
       </ul>
       <p>Outside a git repository the panel says so and the file tree lists the directory as it is.</p>
+      <h3>Unread changes</h3>
+      <p>A <code>•</code> between the mark and the name, as in <code>M•api.go</code>, marks a file the agent changed since you last opened its diff, and the panel's title counts them. It counts what the agent wrote with its edit tools and, once its turn ends, the changed files written during the turn, as through <code>sed</code> in the shell; a file you or another session in the same directory wrote meanwhile counts too. Opening the diff clears the dot, the agent changing the file again brings it back, and a file that leaves the panel, as one committed, stops counting. It is kept only while cicoria runs: after a restart no file is marked until the agent changes it again. A diff narrowed to a commit marks nothing.</p>
+      <p>A diff opens on the turn that last changed the file: when it started, what it was for, your prompt or the message cicoria sent, what the agent said at its end, and how many turns changed it before.</p>
       <h3>Commits</h3>
       <p>In either view, the commits panel under the changes lists the commits made since the base, newest first: short hash, subject and age. It is there only once there is one, and takes at most a quarter of the column. It reads <code>git log base..HEAD</code>, up to 200 commits, and is not a history browser: other branches and older commits are not listed.</p>
       <ul>
@@ -459,6 +465,44 @@ and add a test for it.</pre>
       <p>A terminal 100 columns wide or more shows two columns, and one narrower than 60 shows numbers without bars.</p>
     </section>
 
+    <section id="health">
+      <h2>Health</h2>
+      <p>Supervising several agents at once tires in a way of its own, called <q>AI brain fry</q>: a study of 1,488 workers (BCG, in Harvard Business Review, March 2026) found it in 17.8% of software engineers, with more mistakes, and output that grows with a second agent and falls from about the fourth. How it feels is a poor guide, so cicoria counts what you do. It never sends an agent anything for it.</p>
+      <p>The <strong>brain fry meter</strong>, a box under the files panel, shows the risk now: empty and <code>low</code> in green, half full and <code>raised</code> in yellow, full and <code>high</code> in red, with the rule behind it when there is room. It is the highest level of these rules, looked at every two seconds:</p>
+      <div class="table"><table>
+        <thead><tr><th>Rule</th><th>Raised</th><th>High</th></tr></thead>
+        <tbody>
+          <tr><td>Time acting in cicoria without a pause of 15 minutes</td><td>1h30</td><td>3h</td></tr>
+          <tr><td>Time acting in cicoria in the last 24 hours, pauses of 15 minutes or more left out</td><td>4h</td><td>6h</td></tr>
+          <tr><td>Four or more agents working at once, in the last hour</td><td>10m, or four working now</td><td>30m</td></tr>
+          <tr><td>Changes of session in the last hour</td><td>20</td><td>40</td></tr>
+          <tr><td>Files an agent changed that you have not opened since</td><td>10</td><td>30</td></tr>
+        </tbody>
+      </table></div>
+      <p>Acting counts your keys and what the history records: prompts, answers, messages you send or queue, cards you start and changes of session. Reading with no key pressed looks like a pause. Brain fry comes from how much you supervise, not from the time of day, so no rule knows your working hours. The thresholds come from research, not from your days, and may change.</p>
+      <p>A click on the meter, or <kbd>ctrl+a</kbd> <kbd>y</kbd>, opens the <strong>health view</strong>. First, live, every rule: its level (<code>·</code> low, <code>◇</code> near when it is three quarters of the way to raised, <code>▲</code> raised, <code>■</code> high), its value, a bar of how far it is to its next level and where that is; under a rule that is near or up, its thresholds and what lowers it. Then, from the history, for today, the last 7 or the last 30 days: the longest stretch without a pause and the breaks you took, your active time and the most of it in one day, how long four or more agents worked at once, and the most changes of session in one hour. Last, for each session, the files it changed that you have not opened.</p>
+      <div class="table"><table>
+        <thead><tr><th>Key, in the health view</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>h l, ← →</td><td>Show today (the first shown), the last 7 days or the last 30</td></tr>
+          <tr><td>j k, space b, g G</td><td>Scroll by a line, a page; go to the top, the bottom</td></tr>
+          <tr><td>z</td><td>Hold</td></tr>
+          <tr><td>q esc</td><td>Back, as <kbd>ctrl+a</kbd> <kbd>y</kbd> is</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Hold</h3>
+      <p><kbd>ctrl+a</kbd> <kbd>z</kbd>, or <kbd>z</kbd> in the health view, holds everything for a break of at least 15 minutes, the time a break needs to restore attention:</p>
+      <ul>
+        <li>Every queue is paused, no desktop notification is sent, and the web cockpit stops, so the phone does not call you back. An agent in the middle of a turn finishes it, then waits; nothing is sent to any agent.</li>
+        <li>The agents go out of sight: the screen shows the hold, how long it has lasted against the 15 minutes, and what is paused.</li>
+        <li>It asks what is in your head, to write it down and leave it there: the hold screen shows it while the hold lasts. It is never sent to an agent, and goes with the hold. <kbd>esc</kbd> skips it.</li>
+        <li><kbd>enter</kbd> ends the hold, or a click; other keys do nothing, so that one pressed to wake the screen does not end the break.</li>
+      </ul>
+      <p>Ending it puts everything back as it was: the queues the hold paused resume, each sending its next message when its agent is ready, and the web cockpit starts again with the same sessions shared, on a new link unless <code>web_address</code> has a fixed port. A queue you had paused yourself stays paused. <kbd>ctrl+a</kbd> <kbd>e</kbd> shows what happened while you were away.</p>
+      <h3>A fourth agent</h3>
+      <p>Starting a session, or a card, that would make four agents work at once asks first: <kbd>enter</kbd> starts it anyway, <kbd>esc</kbd> gives up. <code>health.warn_agents</code> changes the number, and <code>0</code> never asks.</p>
+    </section>
+
     <section id="web">
       <h2>Web cockpit</h2>
       <p><kbd>ctrl+a</kbd> <kbd>v</kbd> starts a web server inside cicoria and shows its link as a QR code, drawn in the terminal: point a phone at it and the page opens. The page shows only the sessions you share. The session on screen is shared when the cockpit starts.</p>
@@ -549,6 +593,8 @@ and add a test for it.</pre>
           <tr><td>ports_per_session</td><td><code>10</code></td><td>How many ports each session has to itself, from <code>CICORIA_PORT</code> up</td></tr>
           <tr><td>timeline.text</td><td><code>"preview"</code></td><td>What the <a href="#timeline">timeline</a>'s history keeps of the messages and prompts you send, and of what agents answer: <code>"none"</code>, <code>"preview"</code>, the first 120 characters, or <code>"full"</code></td></tr>
           <tr><td>timeline.keep_days</td><td><code>30</code></td><td>How many days of history are kept</td></tr>
+          <tr><td>health.meter</td><td><code>true</code></td><td>Show the brain fry meter under the files panel</td></tr>
+          <tr><td>health.warn_agents</td><td><code>4</code></td><td>How many agents working at once a new session is warned of; <code>0</code> never warns</td></tr>
           <tr><td>worktree_dir</td><td><code>""</code></td><td>Where <a href="#worktrees">worktrees</a> go, as <code>&lt;worktree_dir&gt;/&lt;repository&gt;/&lt;session&gt;</code>: an absolute path, or one that starts with <code>~</code>. <code>""</code> puts them next to the repository</td></tr>
         </tbody>
       </table></div>
