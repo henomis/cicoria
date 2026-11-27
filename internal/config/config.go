@@ -81,6 +81,17 @@ type Config struct {
 	Worktrees []WorktreeConfig `toml:"worktree"`
 	// Timeline is how the history of the workspace is kept.
 	Timeline TimelineConfig `toml:"timeline"`
+	// Health is what the brain fry meter looks at.
+	Health HealthConfig `toml:"health"`
+}
+
+// HealthConfig is what the brain fry meter and the health view look at.
+type HealthConfig struct {
+	// Meter shows the brain fry meter under the files panel.
+	Meter bool `toml:"meter"`
+	// WarnAgents is how many agents working at once a new session is
+	// warned of: 0 never warns.
+	WarnAgents int `toml:"warn_agents"`
 }
 
 // TimelineConfig is how the history the timeline shows is kept.
@@ -121,7 +132,7 @@ type AgentConfig struct {
 
 // Default returns the settings used when there is no config file.
 func Default() Config {
-	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, AgentMessages: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10, Timeline: TimelineConfig{Text: "preview", KeepDays: 30}}
+	return Config{Prefix: "ctrl+a", DefaultAgent: "claude", Notify: true, LeftPanel: true, RightPanel: true, Changes: ChangesUncommitted, IgnoredFiles: true, CloseOnExit: true, Animations: true, AgentMessages: true, WebAddress: "0.0.0.0:0", PortBase: 20000, PortsPerSession: 10, Timeline: TimelineConfig{Text: "preview", KeepDays: 30}, Health: HealthConfig{Meter: true, WarnAgents: 4}}
 }
 
 // Path returns where the config file is looked for: under $XDG_CONFIG_HOME
@@ -180,6 +191,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Timeline.KeepDays < 1 {
 		return cfg, fmt.Errorf("%s: timeline keep_days is %d: it is at least 1", path, cfg.Timeline.KeepDays)
+	}
+	if cfg.Health.WarnAgents < 0 {
+		return cfg, fmt.Errorf("%s: health warn_agents is %d: it is 0 or more", path, cfg.Health.WarnAgents)
 	}
 	for name, a := range cfg.Agents {
 		if len(a.Command) == 0 {

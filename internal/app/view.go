@@ -46,6 +46,8 @@ type layout struct {
 	// included. queue is empty unless the session on screen has messages
 	// waiting.
 	sessions, files, changes, log, queue rect
+	// meter is the brain fry meter, under the files; empty when hidden.
+	meter rect
 	// agentBox is the agent pane with its border; agent is the terminal
 	// inside it. Without side panels there is no border and they are equal,
 	// unless the pane is split.
@@ -54,6 +56,9 @@ type layout struct {
 	// pane is split in two. They are empty when it is not.
 	otherBox, other rect
 }
+
+// meterH is the height of the brain fry meter.
+const meterH = 3
 
 // splitMin is the height below which the agent pane is not split.
 const splitMin = 12
@@ -103,6 +108,10 @@ func (m *Model) layout() layout {
 		sessionsH := max(min(len(m.sessions)+2, l.body.h/2), 3)
 		l.sessions = rect{0, 0, left, sessionsH}
 		l.files = rect{0, sessionsH, left, l.body.h - sessionsH}
+		if m.cfg.Health.Meter && l.files.h >= meterH+3 {
+			l.files.h -= meterH
+			l.meter = rect{0, l.body.h - meterH, left, meterH}
+		}
 	}
 	if l.right {
 		l.changes = rect{m.width - right, 0, right, l.body.h}
@@ -168,6 +177,8 @@ func (m *Model) View() tea.View {
 		rows = m.renderTimeline()
 	case modeStats:
 		rows = m.renderStats()
+	case modeHealth:
+		rows = m.renderHealth()
 	default:
 		l := m.layout()
 		if m.mode == modePalette && m.paletteFrom == modeView {
@@ -178,6 +189,8 @@ func (m *Model) View() tea.View {
 			rows = m.renderTimeline()
 		} else if m.mode == modePalette && m.paletteFrom == modeStats {
 			rows = m.renderStats()
+		} else if m.mode == modePalette && m.paletteFrom == modeHealth {
+			rows = m.renderHealth()
 		} else {
 			rows = m.renderWorkspace(l)
 		}
@@ -223,6 +236,9 @@ func (m *Model) renderWorkspace(l layout) []string {
 	rows := agentRows
 	if l.left {
 		left := append(m.renderSessions(l.sessions), m.renderFiles(l.files)...)
+		if l.meter.h > 0 {
+			left = append(left, m.renderMeter(l.meter)...)
+		}
 		rows = ui.JoinColumns(left, rows)
 	}
 	if l.right {
@@ -515,12 +531,18 @@ func (m *Model) renderChanges(r rect) []string {
 		if c.Deleted > 0 {
 			stat += ui.Bad.Render(fmt.Sprintf(" -%d", c.Deleted))
 		}
+		// A file the agent changed since its diff was last opened starts with
+		// a dot.
+		lead := " "
+		if s := m.current(); s != nil && s.Unread(c.Path) {
+			lead = ui.Accent.Render("•")
+		}
 		// Long paths lose their start, not the file name.
 		path := c.Path
-		if room := inner - 2 - ansi.StringWidth(stat); ansi.StringWidth(path) > room && room > 1 {
+		if room := inner - 3 - ansi.StringWidth(stat); ansi.StringWidth(path) > room && room > 1 {
 			path = ansi.TruncateLeft(path, ansi.StringWidth(path)-room+1, "…")
 		}
-		text := mark(c.Mark()) + " " + ui.Fit(path, max(inner-2-ansi.StringWidth(stat), 1)) + stat
+		text := lead + mark(c.Mark()) + " " + ui.Fit(path, max(inner-3-ansi.StringWidth(stat), 1)) + stat
 		lines = append(lines, ui.Selected(text, inner, i == m.changeCursor, focused))
 	}
 
@@ -546,6 +568,15 @@ func (m *Model) renderChanges(r rect) []string {
 		case m.commits > 1:
 			title += fmt.Sprintf(" · %d commits", m.commits)
 		}
+	}
+	unread := 0
+	for _, c := range m.changes {
+		if s := m.current(); s != nil && !m.loading && s.Unread(c.Path) {
+			unread++
+		}
+	}
+	if unread > 0 {
+		title += fmt.Sprintf(" · %d unread", unread)
 	}
 	return ui.Box(title, lines, r.w, r.h, focused)
 }
@@ -646,6 +677,21 @@ func (m *Model) renderHelp() []string {
 		"    it what needs you now, then what you did, newest first, and what came of",
 		"    it. j/k move, a the next session that waits, d the turn of the line,",
 		"    enter goes to its session, +/- a shorter or longer time.",
+		"",
+		ui.Bold.Render("  Health"),
+		"    the brain fry meter under the files says how high the risk is now:",
+		"    low, raised or high. Each rule raises it: a long stretch without a",
+		"    15-minute pause, 4 or more agents at once, many changes of session,",
+		"    changed files you have not opened, many hours active in a day. "+p+" y",
+		"    shows the rules that fire and the numbers behind them: h/l time · z hold.",
+		"    "+p+" z holds everything for a break: queues pause, notifications wait,",
+		"    the web cockpit stops, and what is in your head goes on the backlog as",
+		"    a note that sends nothing. Agents mid-turn finish; any key or click",
+		"    ends the hold and shows what happened. "+p+" v starts the cockpit again.",
+		"    A 4th agent at once is warned of before it starts.",
+		"    In the changes panel a • at the start marks a file the agent changed since",
+		"    you last opened its diff; the diff starts with the turn that changed it.",
+		"    [health]: meter = true · warn_agents = 4 (0 = never)",
 		"",
 		ui.Bold.Render("  Workspaces"),
 		"    sessions are saved for the directory cicoria was opened on, wherever they",
@@ -761,6 +807,12 @@ func (m *Model) renderStatus() string {
 		return ui.Fit(text, m.width)
 	case m.mode == modeView && m.view.search != nil:
 		return ui.Fit(" "+m.view.search.View(), m.width)
+	case m.hold != nil:
+		text, right := ui.Warn.Render(" "+m.holdStatus()), ui.Dim.Render("any key ends the hold ")
+		if gap := m.width - ansi.StringWidth(text) - ansi.StringWidth(right); gap > 0 {
+			return text + strings.Repeat(" ", gap) + right
+		}
+		return ui.Fit(text, m.width)
 	}
 
 	// A palette over the full-screen view leaves its status on screen.
@@ -817,6 +869,11 @@ func (m *Model) renderStatus() string {
 		}
 	case modeStats:
 		right = m.statsHint()
+		if m.mode == modePalette {
+			right = "esc back"
+		}
+	case modeHealth:
+		right = m.healthHint()
 		if m.mode == modePalette {
 			right = "esc back"
 		}

@@ -77,6 +77,10 @@ type Session struct {
 	// Touched records when the agent last changed each file, by path relative
 	// to Dir.
 	Touched map[string]time.Time
+	// Read records when the user last opened the diff of each file. It is
+	// not kept across runs, so after a restart no file is unread until the
+	// agent changes it again.
+	Read map[string]time.Time
 
 	// Notes are remarks on lines of code, waiting to be sent to the agent.
 	Notes []Note
@@ -341,6 +345,37 @@ func (s *Session) Apply(u agent.Update, active bool, now time.Time) {
 			s.Touched[rel] = now
 		}
 	}
+}
+
+// MarkRead records that the user opened the diff of a file.
+func (s *Session) MarkRead(path string, now time.Time) {
+	if s.Read == nil {
+		s.Read = map[string]time.Time{}
+	}
+	s.Read[path] = now
+}
+
+// Unread reports whether the agent changed a file after the user last
+// opened its diff. A file the agent has not changed in this run is not
+// unread.
+func (s *Session) Unread(path string) bool {
+	at, ok := s.Touched[path]
+	return ok && at.After(s.Read[path])
+}
+
+// UnreadCount is how many of the files the agent changed in this run the
+// user has not opened since.
+// shortcut: a file committed or reverted stops counting only once the
+// session is on screen and its changes are read again; look at every
+// session's changes if the meter misleads.
+func (s *Session) UnreadCount() int {
+	n := 0
+	for path := range s.Touched {
+		if s.Unread(path) {
+			n++
+		}
+	}
+	return n
 }
 
 // NoteInput records that the user typed into the session.

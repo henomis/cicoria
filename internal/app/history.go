@@ -15,10 +15,15 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/henomis/cicoria/internal/agent"
+	"github.com/henomis/cicoria/internal/git"
 	"github.com/henomis/cicoria/internal/session"
 )
 
@@ -108,6 +113,13 @@ func (m *Model) record(s *session.Session, e session.Event) {
 	m.history.Record(e)
 }
 
+// recordSwitch records that the user went from one session to another.
+func (m *Model) recordSwitch(was *session.Session) {
+	if s := m.current(); s != nil && s != was {
+		m.record(s, session.Event{K: session.KindSwitch, Src: session.FromTUI})
+	}
+}
+
 // recordText adds an event about a text the user sent, keeping of it what
 // the settings say.
 func (m *Model) recordText(s *session.Session, e session.Event, text string) {
@@ -120,6 +132,9 @@ func (m *Model) recordText(s *session.Session, e session.Event, text string) {
 func (m *Model) noteKey(now time.Time) {
 	if !m.lastKey.IsZero() && now.Sub(m.lastKey) >= awayAfter {
 		m.awayFrom = m.lastKey
+	}
+	if m.lastKey.IsZero() || now.Sub(m.lastKey) >= breakMin {
+		m.activeFrom = now
 	}
 	m.lastKey = now
 }
@@ -156,6 +171,56 @@ func (m *Model) recordTurn(s *session.Session, u agent.Update, now time.Time) {
 		slices.Sort(files)
 		delete(m.turnFrom, s.ID)
 		m.recordText(s, session.Event{T: now, K: session.KindTurnEnd, Src: session.FromHook, Files: files}, u.Answer)
+	}
+}
+
+// touchedMsg carries the files of a session written during its turn.
+type touchedMsg struct {
+	id    string
+	files map[string]time.Time
+}
+
+// touchedSince looks, in the background, for the changed files of a
+// session's work tree written since its turn started: what the agent wrote
+// through the shell, where its hooks name no file.
+func touchedSince(s *session.Session, start time.Time) tea.Cmd {
+	id, dir := s.ID, s.Dir
+	return func() tea.Msg { return touchedMsg{id, writtenSince(dir, start)} }
+}
+
+// writtenSince returns the changed files of the work tree of dir, relative
+// to it, last written after a time, with when they were.
+// shortcut: another session in the same directory, or the user, writing
+// during the turn counts as this agent; a file deleted in the turn is left
+// out, having no diff to read.
+func writtenSince(dir string, since time.Time) map[string]time.Time {
+	changes, err := git.Status(dir, "")
+	if err != nil {
+		return nil
+	}
+	out := map[string]time.Time{}
+	for _, c := range changes {
+		if !filepath.IsLocal(c.Path) {
+			continue
+		}
+		if fi, err := os.Stat(filepath.Join(dir, c.Path)); err == nil && !fi.IsDir() && fi.ModTime().After(since) {
+			out[c.Path] = fi.ModTime()
+		}
+	}
+	return out
+}
+
+// applyTouched records the files a session's agent wrote, unless a hook
+// told of them later.
+func (m *Model) applyTouched(msg touchedMsg) {
+	s, _ := m.byID(msg.id)
+	if s == nil {
+		return
+	}
+	for path, at := range msg.files {
+		if at.After(s.Touched[path]) {
+			s.Touched[path] = at
+		}
 	}
 }
 

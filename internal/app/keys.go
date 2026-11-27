@@ -74,6 +74,10 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
+	// Any key ends a hold, and does nothing else.
+	if m.hold != nil {
+		return m.endHold()
+	}
 
 	switch m.mode {
 	case modeHelp:
@@ -104,6 +108,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		return m.timelineKey(k)
 	case modeStats:
 		return m.statsKey(k)
+	case modeHealth:
+		return m.healthKey(k)
 	case modePalette:
 		if key == "esc" {
 			m.mode, m.palette = m.paletteFrom, nil
@@ -345,6 +351,13 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	mouse := msg.Mouse()
 	_, isWheel := msg.(tea.MouseWheelMsg)
 	_, isClick := msg.(tea.MouseClickMsg)
+	// A click ends a hold, and does nothing else; the rest of the mouse waits.
+	if m.hold != nil {
+		if isClick {
+			return m.endHold()
+		}
+		return nil
+	}
 
 	wheel := 0
 	if isWheel {
@@ -375,7 +388,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	case modeBoard:
 		return m.boardMouse(msg)
-	case modePalette, modeWeb, modeTimeline, modeStats:
+	case modePalette, modeWeb, modeTimeline, modeStats, modeHealth:
 		return nil
 	}
 
@@ -402,6 +415,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			cmd := m.switchTo(row)
 			m.focus = focusSessions
 			return cmd
+		}
+
+	case l.meter.contains(x, y):
+		if isClick {
+			return m.openHealth()
 		}
 
 	case l.files.contains(x, y):

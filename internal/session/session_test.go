@@ -434,3 +434,25 @@ func TestSettle(t *testing.T) {
 		t.Error("settled a question nobody asked")
 	}
 }
+
+func TestUnread(t *testing.T) {
+	s := New("a", "api", t.TempDir(), agent.NewClaude(nil))
+	t0 := time.Now()
+	if s.Unread("a.go") || s.UnreadCount() != 0 {
+		t.Error("a file the agent did not change is unread")
+	}
+	s.Touched["a.go"] = t0
+	if !s.Unread("a.go") || s.UnreadCount() != 1 {
+		t.Error("a changed file is not unread")
+	}
+	s.MarkRead("a.go", t0.Add(time.Second))
+	if s.Unread("a.go") || s.UnreadCount() != 0 {
+		t.Error("an opened file is still unread")
+	}
+	s.Touched["a.go"] = t0.Add(2 * time.Second)
+	if !s.Unread("a.go") {
+		t.Error("a file changed again is not unread")
+	}
+	// A session restored from disk has no read marks yet.
+	(&Session{}).MarkRead("b.go", t0)
+}

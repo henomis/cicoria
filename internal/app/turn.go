@@ -16,6 +16,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -110,6 +111,52 @@ func (m *Model) turnAt(l lane, at, now time.Time) *turnView {
 		}
 	}
 	return pick
+}
+
+// fileIntent says which turn of a session last changed a file: what it was
+// for, and what the agent said at its end. Each line ends in a newline, and
+// none looks like a line of a diff.
+func (m *Model) fileIntent(id, path string) []string {
+	var evs []session.Event
+	for _, e := range m.history.Events() {
+		if e.S == id {
+			evs = append(evs, e)
+		}
+	}
+	last, n := -1, 0
+	for k, e := range evs {
+		if e.K == session.KindTurnEnd && slices.Contains(e.Files, path) {
+			last, n = k, n+1
+		}
+	}
+	if last < 0 {
+		return nil
+	}
+	oneLine := func(s string) string { return strings.Join(strings.Fields(s), " ") }
+	out := []string{"why   the agent changed it in a turn\n"}
+	for k := last - 1; k >= 0; k-- {
+		st := evs[k]
+		if st.K != session.KindTurnStart {
+			continue
+		}
+		why := m.turnPurpose(evs[:k], st)
+		// A prompt typed in the pane is recorded just before its turn.
+		for j := k - 1; j >= 0 && st.V == "typed" && st.T.Sub(evs[j].T) <= fromQueueWithin; j-- {
+			if evs[j].K == session.KindPromptTyped && evs[j].X != "" {
+				why = "your prompt" + quoted(evs[j])
+				break
+			}
+		}
+		out[0] = fmt.Sprintf("why   %s for %s\n", st.T.Format("15:04"), oneLine(why))
+		break
+	}
+	if said := oneLine(evs[last].X); said != "" {
+		out = append(out, "      the agent said “"+said+"”\n")
+	}
+	if n > 1 {
+		out = append(out, fmt.Sprintf("      and %d earlier turn(s)\n", n-1))
+	}
+	return append(out, "\n")
 }
 
 // turnSoon is how soon after what the user did a turn that starts is taken

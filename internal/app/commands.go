@@ -67,6 +67,8 @@ func init() {
 		{"0", "Board: the backlog, and every session by what it needs", (*Model).openBoard, false},
 		{"e", "Timeline: what happened, and what you did", (*Model).openTimeline, false},
 		{"i", "Stats: how your work went, over days", (*Model).openStats, false},
+		{"y", "Health: what is behind the brain fry meter", (*Model).openHealth, false},
+		{"z", "Hold: pause queues, notifications and the web cockpit", (*Model).startHold, false},
 		{"v", "Web cockpit: share sessions with a phone or a browser…", (*Model).askWeb, false},
 		{"s", "Focus sessions", func(m *Model) tea.Cmd { return m.setFocus(focusSessions) }, false},
 		{"f", "Focus files", func(m *Model) tea.Cmd { return m.setFocus(focusFiles) }, false},
@@ -129,6 +131,9 @@ func (m *Model) runCommand(keepsView bool, run func(m *Model) tea.Cmd) tea.Cmd {
 	if m.mode == modeStats {
 		m.closeStats()
 	}
+	if m.mode == modeHealth {
+		m.closeHealth()
+	}
 	if m.mode == modeBoard {
 		m.closeBoard()
 	}
@@ -159,10 +164,12 @@ func (m *Model) switchTo(i int) tea.Cmd {
 	if s := m.other(); s != nil && s == m.sessions[i] {
 		return m.focusOther()
 	}
+	was := m.current()
 	m.active = i
 	if m.splitWith() == nil {
 		m.split, m.below = "", false
 	}
+	m.recordSwitch(was)
 	return m.shownNow()
 }
 
@@ -227,6 +234,7 @@ func (m *Model) focusOther() tea.Cmd {
 	}
 	_, m.active = m.byID(s.ID)
 	m.split, m.below = was.ID, !m.below
+	m.recordSwitch(was)
 	return m.shownNow()
 }
 
@@ -362,7 +370,10 @@ func (m *Model) newSession(a agent.Adapter, name, dir string, worktree bool, car
 	if card != nil {
 		// It goes out once the agent says it is ready for it.
 		m.recordText(s, session.Event{K: session.KindCardStart, V: card.Title, Src: session.FromTUI}, card.Prompt)
-		s.Enqueue(session.Message{Text: card.Prompt, From: fromCard})
+		// A card with no prompt, as a note written for a hold, sends nothing.
+		if card.Prompt != "" {
+			s.Enqueue(session.Message{Text: card.Prompt, From: fromCard})
+		}
 		m.dropCard(card.ID)
 	}
 	m.sessions = append(m.sessions, s)
@@ -412,6 +423,19 @@ func (m *Model) setupSession(name, main, top string) *session.Session {
 // askDir asks where a new session for an agent should work, offering the
 // project on screen, or the directory a card of the backlog was written for.
 func (m *Model) askDir(a agent.Adapter, card *session.Card) tea.Cmd {
+	if n := m.workingNow() + 1; m.cfg.Health.WarnAgents > 0 && n >= m.cfg.Health.WarnAgents && !isShell(a) {
+		m.confirm = &confirm{
+			question: fmt.Sprintf("%d agents would work at once: output drops from here. start anyway?", n),
+			yes:      func() tea.Cmd { return m.askDirNow(a, card) },
+			yesFirst: true,
+		}
+		return nil
+	}
+	return m.askDirNow(a, card)
+}
+
+// askDirNow is askDir without the warning.
+func (m *Model) askDirNow(a agent.Adapter, card *session.Card) tea.Cmd {
 	base := m.project()
 	p := &prompt{
 		input:    ui.Input{Prompt: a.Name() + " in directory: "},
