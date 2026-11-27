@@ -509,10 +509,19 @@ func (m *Model) timelineTitle(now time.Time) string {
 	if r := m.timeline.rng; r >= 0 && r < len(timelineRanges) {
 		return "the last " + span(timelineRanges[r])
 	}
-	if m.awayFrom.IsZero() || now.Sub(m.awayFrom) < minRange {
+	if !m.awayLong(now) {
 		return "the last " + span(now.Sub(m.timelineFrom(now)))
 	}
 	return "since you left at " + m.awayFrom.Format("15:04")
+}
+
+// awayLong reports whether the user was away long enough for the timeline
+// to say so.
+func (m *Model) awayLong(now time.Time) bool {
+	if m.awayFrom.IsZero() {
+		return false
+	}
+	return now.Sub(m.awayFrom) >= minRange
 }
 
 // renderTimeline draws the timeline over the whole screen but the status
@@ -635,7 +644,12 @@ func (m *Model) renderTimeline() []string {
 	log := lines[first:]
 	var out []string
 	if len(log) == 0 {
-		out = append(out, ui.Dim.Render(ui.Fit("  Nothing from you in "+m.timelineTitle(now)+". - shows a longer time.", m.width)))
+		// "the last 30m", or "since you left at 15:04".
+		when := m.timelineTitle(now)
+		if strings.HasPrefix(when, "the last") {
+			when = "in " + when
+		}
+		out = append(out, ui.Dim.Render(ui.Fit("  Nothing from you "+when+". - shows a longer time.", m.width)))
 	}
 	cur := max(i-first, 0)
 	m.timeline.top = ui.Window(cur, m.timeline.top, room, len(log))
@@ -668,7 +682,7 @@ func (m *Model) renderTimeline() []string {
 func (m *Model) timelineHeader(t ui.Timeline, lanes []lane, now time.Time) string {
 	from := m.timelineFrom(now)
 	parts := []string{" timeline  " + from.Format("15:04") + " → now, " + span(now.Sub(from))}
-	if m.timeline.rng == sinceAway && !m.awayFrom.IsZero() && now.Sub(m.awayFrom) >= minRange {
+	if m.timeline.rng == sinceAway && m.awayLong(now) {
 		parts[0] += ", since you were away"
 	}
 	var waited time.Duration
@@ -695,7 +709,7 @@ func (m *Model) timelineHeader(t ui.Timeline, lanes []lane, now time.Time) strin
 		queued += len(s.Queue)
 	}
 	if notes > 0 {
-		parts = append(parts, fmt.Sprintf("%d note(s) not sent", notes))
+		parts = append(parts, fmt.Sprintf("%d review note(s) not sent", notes))
 	}
 	if queued > 0 {
 		parts = append(parts, fmt.Sprintf("%d message(s) queued", queued))
@@ -737,7 +751,8 @@ func (m *Model) timelineHint() string {
 	if m.timeline.turn != nil {
 		return "j/k move · d/enter diff · v file · q back"
 	}
-	return "j/k move · a next waiting · d turn · enter go · m queue · +/- time · q back"
+	hint := "j/k move · a next waiting · d turn · enter go · m queue · +/- time"
+	return hint + " · q back"
 }
 
 // span says how long a time is, to the minute, as "1h20m".

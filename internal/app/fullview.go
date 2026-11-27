@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -90,9 +91,19 @@ func (m *Model) openDiff(c git.Change) {
 	case diff == "":
 		m.view.pager.SetContent([]string{ui.Dim.Render("no textual differences")}, nil)
 	default:
+		// The turn that changed the file heads its diff; its lines show no
+		// line of the file, so they take no notes.
+		if s := m.current(); s != nil && m.commit == "" {
+			diff = strings.Join(m.fileIntent(s.ID, c.Path, s.Touched[c.Path]), "") + diff
+		}
 		m.view.pager.SetContent(ui.DiffLines(diff))
 		m.view.plain = strings.Split(strings.TrimSuffix(diff, "\n"), "\n")
 		m.view.refs = ui.DiffRefs(diff)
+	}
+	// shortcut: opening a diff counts as reading it, scrolled to its end or
+	// not; the diff of a commit marks nothing.
+	if s := m.current(); s != nil && m.commit == "" {
+		s.MarkRead(c.Path, time.Now())
 	}
 	m.markNotes()
 }

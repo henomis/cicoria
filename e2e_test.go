@@ -205,14 +205,19 @@ func (w *workspace) launch(width, height int) {
 }
 
 // see waits until the screen shows every one of the given texts.
+// plain is a screen, or a text looked for on it, without the unread dot
+// of the changes panel, which sits where a space is: "M•api.go" is read as
+// "M api.go", and a row gone is gone in both forms.
+func plain(s string) string { return strings.ReplaceAll(s, "•", " ") }
+
 func (w *workspace) see(wants ...string) {
 	w.t.Helper()
 	deadline := time.After(10 * time.Second)
 	for {
-		screen := w.tm.String()
+		screen := plain(w.tm.String())
 		missing := ""
 		for _, want := range wants {
-			if !strings.Contains(screen, want) {
+			if !strings.Contains(screen, plain(want)) {
 				missing = want
 				break
 			}
@@ -247,7 +252,7 @@ func (w *workspace) title(want string) {
 func (w *workspace) gone(text string) {
 	w.t.Helper()
 	deadline := time.After(10 * time.Second)
-	for strings.Contains(w.tm.String(), text) {
+	for strings.Contains(plain(w.tm.String()), plain(text)) {
 		select {
 		case <-w.tm.Updates():
 		case <-time.After(50 * time.Millisecond):
@@ -260,8 +265,8 @@ func (w *workspace) gone(text string) {
 // at returns the column and row where text is on the screen.
 func (w *workspace) at(text string) (int, int) {
 	w.t.Helper()
-	for y, line := range strings.Split(w.tm.String(), "\n") {
-		if i := strings.Index(line, text); i >= 0 {
+	for y, line := range strings.Split(plain(w.tm.String()), "\n") {
+		if i := strings.Index(line, plain(text)); i >= 0 {
 			return ansi.StringWidth(line[:i]), y
 		}
 	}

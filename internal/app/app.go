@@ -81,6 +81,7 @@ const (
 	modeBoard
 	modeTimeline
 	modeStats
+	modeHealth
 )
 
 // Model is the root Bubble Tea model.
@@ -179,6 +180,11 @@ type Model struct {
 	timeline timeline
 	// stats is what Stats shows.
 	stats stats
+	// health is the health view, meter the level the brain fry meter
+	// shows, and hold the hold, while it is on.
+	health health
+	meter  level
+	hold   *hold
 
 	// runs are the commands of the run box still running, lastRun the
 	// one whose output ctrl+a . shows, and runHistory the command lines
@@ -209,6 +215,9 @@ type Model struct {
 	answered  map[string]time.Time
 	lastKey   time.Time
 	awayFrom  time.Time
+	// activeFrom is when the user started acting in cicoria again after a
+	// pause of breakMin or more.
+	activeFrom time.Time
 	// running says the run is recorded in the history: at once, or once
 	// the user agreed to open a workspace another cicoria has open.
 	running bool
@@ -563,7 +572,9 @@ func (m *Model) save() {
 		}
 		st.Sessions = append(st.Sessions, session.Saved{
 			ID: s.ID, Name: s.Name, Agent: s.Adapter.Name(), Dir: s.Dir, Conversation: s.Conversation, Base: s.Base,
-			Worktree: s.Worktree, Port: s.Port, Notes: s.Notes, Queue: s.Queue, Paused: s.Paused,
+			Worktree: s.Worktree, Port: s.Port, Notes: s.Notes, Queue: s.Queue,
+			// A hold is not kept: killed during one, a queue comes back as it was.
+			Paused: s.Paused && (m.hold == nil || !slices.Contains(m.hold.paused, s.ID)),
 		})
 	}
 	if err := session.SaveState(session.StatePath(m.dir), st); err != nil {
@@ -845,9 +856,15 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.timeline.polling = false
 		m.timeline.commits = msg.commits
 
+	case touchedMsg:
+		m.applyTouched(msg)
+
 	case statsMsg:
 		m.stats.loading = false
 		m.stats.file = msg.events
+		if m.mode == modeHealth {
+			m.countHealth(time.Now())
+		}
 		if msg.err != nil {
 			m.say("could not read the history: " + msg.err.Error())
 		}
@@ -930,7 +947,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.handleKey(msg)
 
 	case tea.PasteMsg:
-		if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent {
+		// Nothing reaches an agent during a hold, or past a question.
+		if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent && m.typing() && m.hold == nil {
 			s.NoteInput(time.Now())
 			s.Term.Paste(msg.Content)
 		}
@@ -973,6 +991,7 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 
 	before, conversation := s.Status, s.Conversation
 	now := time.Now()
+	turnStart, inTurn := m.turnFrom[s.ID]
 	s.Apply(u, m.watching(i), now)
 	m.recordTurn(s, u, now)
 	if s.Conversation != conversation {
@@ -986,12 +1005,15 @@ func (m *Model) handleHook(ev ipc.Event) tea.Cmd {
 	cmds = append(cmds, m.answer(s, u))
 	if u.TurnEnded {
 		cmds = append(cmds, m.trySend(s))
+		if inTurn && !isShell(s.Adapter) {
+			cmds = append(cmds, touchedSince(s, turnStart))
+		}
 	}
 	cmds = append(cmds, whenReady(s, before))
 	if u.File != "" && i == m.active {
 		cmds = append(cmds, m.refresh())
 	}
-	if s.Status == agent.NeedsInput && before != agent.NeedsInput && !m.watching(i) && m.cfg.Notify {
+	if s.Status == agent.NeedsInput && before != agent.NeedsInput && !m.watching(i) && m.cfg.Notify && m.hold == nil {
 		cmds = append(cmds, notify(s.Name+" needs input"))
 	}
 	return tea.Batch(cmds...)
@@ -1019,6 +1041,17 @@ func (m *Model) handleTick(now time.Time) tea.Cmd {
 		m.message = ""
 	}
 	m.ticks++
+	if m.ticks%meterTicks == 0 {
+		// The history the health view counts changes slowly: it is looked at
+		// again every healthTicks, the rules at every look.
+		if (m.mode == modeHealth || m.mode == modePalette && m.paletteFrom == modeHealth) && m.ticks%healthTicks == 0 {
+			m.countHealth(now)
+		} else if m.cfg.Health.Meter || m.mode == modeHealth {
+			// The meter names the rule behind its level.
+			m.health.rules = m.healthNow(now)
+			m.meter = levelOf(m.health.rules)
+		}
+	}
 	m.publish()
 	if err := m.history.Flush(now); err != nil && m.ticks%120 == 0 {
 		m.say("could not write the history: " + err.Error())
@@ -1067,6 +1100,21 @@ func (m *Model) applyRefresh(msg refreshMsg) {
 		}
 	}
 	m.changeCursor = max(min(m.changeCursor, len(m.changes)-1), 0)
+
+	// A file the agent changed that is no longer among the changes, as one
+	// it committed, has no diff to open: it is not unread any more.
+	// A look that failed lists nothing, and tells nothing of what left.
+	if s := m.current(); s != nil && m.commit == "" && m.repo {
+		changed := map[string]bool{}
+		for _, c := range m.changes {
+			changed[c.Path] = true
+		}
+		for path := range s.Touched {
+			if !changed[path] && s.Unread(path) {
+				s.MarkRead(path, time.Now())
+			}
+		}
+	}
 }
 
 // applyLog takes a fresh list of the commits, keeping the cursor on the same

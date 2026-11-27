@@ -22,6 +22,7 @@ Website and full documentation: <https://henomis.github.io/cicoria/>
 - **Keeps a backlog on a board**: cards you write for work not started yet, next to every session in a column for what it needs from you. A card becomes a session only when you start it.
 - **Draws a timeline of what happened, and what you did**: a bar per session for what its agent did over time, and under it a log in words of each answer, message, note and question of yours, so you know where you stand without reading the agents' consoles, and how long they waited for you.
 - **Counts how your work went, over days**: turns by hour and by day, how many you typed and how many cicoria sent, how long they took, how long agents waited for you, and how many agents worked at once, from the same history.
+- **Watches for brain fry**: a meter under the files says, in colour, how high the risk of the fatigue that comes from supervising many agents is now, from what you do in cicoria: long stretches without a pause, four or more agents at once, jumping between sessions, changes you have not opened, hours of activity in a day. A health view shows why, a hold pauses everything for a real break, and each diff says which turn made it.
 - **Passes a question from one session to another**: you ask it, or tell an agent to, and the answer is handed back to the session it was asked from, so you stop copying between panes.
 - **Follows you on your phone**: a web cockpit, turned on when you want it, puts first the sessions that need you and what they ask, shows what each agent said last and its changes, and takes your answers and queued messages, or only queued messages for a session you share to watch.
 - **Remembers** sessions, their directories, notes and queues between runs. Claude Code, Copilot CLI and Codex CLI sessions continue their conversation.
@@ -74,6 +75,8 @@ Everything you type goes to the agent on screen. `ctrl+a` starts a cicoria comma
 | `0` | Board: the backlog, and every session by what it needs |
 | `e` | Timeline: what happened, and what you did |
 | `i` | Stats: how your work went, over days |
+| `y` | Health: what is behind the brain fry meter |
+| `z` | Hold: pause queues, notifications and the web cockpit for a break |
 | `v` | Web cockpit: share sessions with a phone or a browser |
 | `s` `f` `g` | Focus the sessions, files, changes panel |
 | `l` | Focus the commits panel |
@@ -272,6 +275,37 @@ It shows the turns by hour of the day and by day of the week; how they started, 
 
 It opens on the last 7 days; `h`/`l` or the arrows show today or the last 30 days. `j`/`k`, `space`/`b` and `g`/`G` scroll, and `t` switches between charts and numbers. `q` or `esc` goes back, as `ctrl+a i` does. A terminal 100 columns wide or more shows two columns, and one narrower than 60 shows numbers without bars.
 
+## Health
+
+Supervising several agents at once tires in a way of its own, called "AI brain fry": a study of 1,488 workers (BCG, in Harvard Business Review, March 2026) found it in 17.8% of software engineers, with more mistakes, and output that grows with a second agent and falls from about the fourth. How it feels is a poor guide, so cicoria counts what you do. It never sends an agent anything for it.
+
+The **brain fry meter**, a box under the files panel, shows the risk now as a bar and a word: empty and `low` in green, half full and `raised` in yellow, full and `high` in red, followed by the rule behind it when there is room. It is the highest level of these rules:
+
+| Rule | Raised | High |
+|---|---|---|
+| Time you act in cicoria without a pause of 15 minutes | 1h30 | 3h |
+| Four or more agents working at once, in the last hour | 10m, or four working now | 30m |
+| Changes of session in the last hour | 20 | 40 |
+| Files an agent changed that you have not opened since | 10 | 30 |
+| Time acting in cicoria in the last 24 hours, pauses of 15 minutes or more left out | 4h | 6h |
+
+A click on it, or `ctrl+a y`, opens the **health view**. First, live, every rule: its level (`·` low, `◇` near when it is three quarters of the way to raised, `▲` raised, `■` high, so colour is not all that tells them apart), its value, a bar of how far it is to its next level and where that is; under a rule that is near or up, its thresholds and what lowers it. Then, from the history, for today, the last 7 or the last 30 days (`h`/`l`) the longest stretch without a pause and how many breaks you took, how long four or more agents worked at once, the most changes of session in one hour, how long you acted in all, pauses left out, and for 7 or 30 days the most of it in one day, and last, for each session, the files it changed that you have not opened. `j`/`k` scroll, `z` holds, `q` or `esc` goes back. It counts keys and what the history records: reading a diff with no key pressed looks like a pause.
+
+`ctrl+a z`, or `z` in the health view, **holds** everything for a break of at least 15 minutes, the time a break needs to restore attention:
+
+- Every queue is paused, no desktop notification is sent, and the web cockpit stops, so the phone does not call you back. An agent in the middle of a turn finishes it, then waits; nothing is sent to any agent.
+- The agents go out of sight: the screen shows the hold, how long it has lasted against the 15 minutes, and what is paused.
+- It asks what is in your head, to write it down and leave it there: the hold screen shows it while the hold lasts. It is never sent to an agent, and goes with the hold. `esc` skips it.
+- `enter` ends the hold, or a click; other keys do nothing, so that one pressed to wake the screen does not end the break.
+
+Ending it puts everything back as it was: the queues the hold paused resume, each sending its next message when its agent is ready, and the web cockpit starts again with the same sessions shared, on a new link unless `web_address` has a fixed port. A queue you had paused yourself stays paused. `ctrl+a e` shows what happened while you were away.
+
+Starting a session, or a card, that would make four agents work at once asks first: `enter` starts it anyway, `esc` gives up.
+
+In the changes panel, a `•` between the mark and the name, as `M•api.go`, marks a file the agent changed since you last opened its diff, and the title counts them. A file the agent writes through the shell, as with `sed`, counts too: when its turn ends, cicoria looks for the changed files written since it started, so a file you or another session in the same directory wrote meanwhile counts as well. It is kept only while cicoria runs: after a restart no file is marked until the agent changes it again. A diff opens on the turn that last changed the file: when it started, what it was for (your prompt, or the message cicoria sent), what the agent said at its end, and how many turns changed it before.
+
+Brain fry comes from how much you supervise, not from the time of day, so no rule knows your working hours: a long day is long whenever it is. The thresholds come from research, not from your days, and may change.
+
 ## Web cockpit
 
 `ctrl+a v` starts a small web server inside cicoria and shows its link as a QR code: point your phone at it and the page opens. It shows the sessions you share, and nothing else. The session on screen is shared when the cockpit starts; in its box, `space` shares or stops sharing the session under the cursor, `w` turns a shared session to watch only and back, `x` stops the cockpit and `esc` closes the box. A session shared to watch is marked `[w]`: the page can read it and queue messages for it, but not answer it, send it a message at once or interrupt it. Shared sessions are marked `↗` in the sessions panel, and the status bar says `web` while the cockpit runs.
@@ -314,6 +348,12 @@ worktree_dir = ""        # where worktrees go, as ~/worktrees/<repository>/<sess
 [timeline]
 text = "preview"
 keep_days = 30
+
+# The brain fry meter, and how many agents at once a new session is
+# warned of: 0 for never.
+[health]
+meter = true
+warn_agents = 4
 
 # Any command line can be an agent. Its status is guessed from terminal
 # activity: output means working, the bell means it needs input.

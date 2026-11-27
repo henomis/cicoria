@@ -36,7 +36,11 @@ const wheelSlide = 8
 
 func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
-	m.noteKey(time.Now())
+	// During a hold only enter is the user back: a key pressed to wake the
+	// screen does not cut the break short.
+	if m.hold == nil || key == "enter" {
+		m.noteKey(time.Now())
+	}
 
 	// Any key ends an animation. When something waits for its end, the key
 	// only brings that forward.
@@ -74,6 +78,14 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
+	// Enter ends a hold; any other key does nothing, so that one pressed to
+	// wake the screen does not end the break.
+	if m.hold != nil {
+		if key == "enter" {
+			return m.endHold()
+		}
+		return nil
+	}
 
 	switch m.mode {
 	case modeHelp:
@@ -104,6 +116,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) tea.Cmd {
 		return m.timelineKey(k)
 	case modeStats:
 		return m.statsKey(k)
+	case modeHealth:
+		return m.healthKey(k)
 	case modePalette:
 		if key == "esc" {
 			m.mode, m.palette = m.paletteFrom, nil
@@ -345,6 +359,14 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	mouse := msg.Mouse()
 	_, isWheel := msg.(tea.MouseWheelMsg)
 	_, isClick := msg.(tea.MouseClickMsg)
+	// A click ends a hold, and does nothing else; the rest of the mouse
+	// waits, and so does the click while the note is being written.
+	if m.hold != nil {
+		if isClick && m.prompt == nil {
+			return m.endHold()
+		}
+		return nil
+	}
 
 	wheel := 0
 	if isWheel {
@@ -375,7 +397,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	case modeBoard:
 		return m.boardMouse(msg)
-	case modePalette, modeWeb, modeTimeline, modeStats:
+	case modePalette, modeWeb, modeTimeline, modeStats, modeHealth:
 		return nil
 	}
 
@@ -402,6 +424,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			cmd := m.switchTo(row)
 			m.focus = focusSessions
 			return cmd
+		}
+
+	case l.meter.contains(x, y):
+		if isClick {
+			return m.openHealth()
 		}
 
 	case l.files.contains(x, y):

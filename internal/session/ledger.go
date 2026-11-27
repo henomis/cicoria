@@ -52,6 +52,8 @@ const (
 	KindRename       Kind = "rename"
 	KindRunStart     Kind = "run_start"
 	KindRunEnd       Kind = "run_end"
+	// KindSwitch is the user going to another session.
+	KindSwitch Kind = "switch"
 )
 
 // Where an event came from.

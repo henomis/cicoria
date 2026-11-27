@@ -24,12 +24,25 @@ import (
 
 // A range is skipped when a session has it, or a program listens in it.
 func TestFreePorts(t *testing.T) {
-	l, err := net.Listen("tcp", ":0")
-	if err != nil {
-		t.Fatal(err)
+	var l net.Listener
+	var busy int
+	// Other tests run alongside and open sockets too, so the 3 ports after
+	// the one in use may be taken: pick another until they are free.
+	for range 20 {
+		var err error
+		if l, err = net.Listen("tcp", ":0"); err != nil {
+			t.Fatal(err)
+		}
+		if busy = l.Addr().(*net.TCPAddr).Port; portsFree(busy+1, 3) {
+			break
+		}
+		_ = l.Close()
+		l = nil
+	}
+	if l == nil {
+		t.Skip("no busy port found with the 3 ports after it free")
 	}
 	defer func() { _ = l.Close() }()
-	busy := l.Addr().(*net.TCPAddr).Port
 	// The range of 3 ports from base holds the one in use, as its last.
 	base := busy - 5
 	m := &Model{cfg: config.Config{PortBase: base, PortsPerSession: 3}}

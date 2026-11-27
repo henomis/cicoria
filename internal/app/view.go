@@ -46,6 +46,8 @@ type layout struct {
 	// included. queue is empty unless the session on screen has messages
 	// waiting.
 	sessions, files, changes, log, queue rect
+	// meter is the brain fry meter, under the files; empty when hidden.
+	meter rect
 	// agentBox is the agent pane with its border; agent is the terminal
 	// inside it. Without side panels there is no border and they are equal,
 	// unless the pane is split.
@@ -54,6 +56,9 @@ type layout struct {
 	// pane is split in two. They are empty when it is not.
 	otherBox, other rect
 }
+
+// meterH is the height of the brain fry meter.
+const meterH = 3
 
 // splitMin is the height below which the agent pane is not split.
 const splitMin = 12
@@ -103,6 +108,10 @@ func (m *Model) layout() layout {
 		sessionsH := max(min(len(m.sessions)+2, l.body.h/2), 3)
 		l.sessions = rect{0, 0, left, sessionsH}
 		l.files = rect{0, sessionsH, left, l.body.h - sessionsH}
+		if m.cfg.Health.Meter && l.files.h >= meterH+3 {
+			l.files.h -= meterH
+			l.meter = rect{0, l.body.h - meterH, left, meterH}
+		}
 	}
 	if l.right {
 		l.changes = rect{m.width - right, 0, right, l.body.h}
@@ -168,9 +177,14 @@ func (m *Model) View() tea.View {
 		rows = m.renderTimeline()
 	case modeStats:
 		rows = m.renderStats()
+	case modeHealth:
+		rows = m.renderHealth()
 	default:
 		l := m.layout()
-		if m.mode == modePalette && m.paletteFrom == modeView {
+		if m.hold != nil {
+			// The agents are out of sight while the user takes a break.
+			rows = m.renderHold()
+		} else if m.mode == modePalette && m.paletteFrom == modeView {
 			rows = m.renderView()
 		} else if m.mode == modePalette && m.paletteFrom == modeBoard {
 			rows = m.renderBoard()
@@ -178,6 +192,8 @@ func (m *Model) View() tea.View {
 			rows = m.renderTimeline()
 		} else if m.mode == modePalette && m.paletteFrom == modeStats {
 			rows = m.renderStats()
+		} else if m.mode == modePalette && m.paletteFrom == modeHealth {
+			rows = m.renderHealth()
 		} else {
 			rows = m.renderWorkspace(l)
 		}
@@ -190,7 +206,7 @@ func (m *Model) View() tea.View {
 			h := min(l.body.h-2, 18)
 			box := m.palette.View("", w, h)
 			rows = ui.Overlay(rows, box, (m.width-w)/2, max((l.body.h-h)/3, 0))
-		} else if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent && m.typing() && m.anim == nil {
+		} else if s := m.current(); s != nil && s.Term != nil && m.mode == modeWorkspace && m.focus == focusAgent && m.typing() && m.anim == nil && m.hold == nil {
 			if x, y, visible := s.Term.Cursor(); visible && s.Status != agent.Exited {
 				v.Cursor = tea.NewCursor(l.agent.x+x, l.agent.y+y)
 			}
@@ -223,6 +239,9 @@ func (m *Model) renderWorkspace(l layout) []string {
 	rows := agentRows
 	if l.left {
 		left := append(m.renderSessions(l.sessions), m.renderFiles(l.files)...)
+		if l.meter.h > 0 {
+			left = append(left, m.renderMeter(l.meter)...)
+		}
 		rows = ui.JoinColumns(left, rows)
 	}
 	if l.right {
@@ -515,12 +534,18 @@ func (m *Model) renderChanges(r rect) []string {
 		if c.Deleted > 0 {
 			stat += ui.Bad.Render(fmt.Sprintf(" -%d", c.Deleted))
 		}
+		// A file the agent changed since its diff was last opened has a dot
+		// between its mark and its name.
+		gap := " "
+		if s := m.current(); s != nil && m.commit == "" && s.Unread(c.Path) {
+			gap = ui.Accent.Render("•")
+		}
 		// Long paths lose their start, not the file name.
 		path := c.Path
 		if room := inner - 2 - ansi.StringWidth(stat); ansi.StringWidth(path) > room && room > 1 {
 			path = ansi.TruncateLeft(path, ansi.StringWidth(path)-room+1, "…")
 		}
-		text := mark(c.Mark()) + " " + ui.Fit(path, max(inner-2-ansi.StringWidth(stat), 1)) + stat
+		text := mark(c.Mark()) + gap + ui.Fit(path, max(inner-2-ansi.StringWidth(stat), 1)) + stat
 		lines = append(lines, ui.Selected(text, inner, i == m.changeCursor, focused))
 	}
 
@@ -546,6 +571,16 @@ func (m *Model) renderChanges(r rect) []string {
 		case m.commits > 1:
 			title += fmt.Sprintf(" · %d commits", m.commits)
 		}
+	}
+	unread := 0
+	for _, c := range m.changes {
+		// Narrowed to a commit, a diff marks nothing read: no file is unread.
+		if s := m.current(); s != nil && !m.loading && m.commit == "" && s.Unread(c.Path) {
+			unread++
+		}
+	}
+	if unread > 0 {
+		title += fmt.Sprintf(" · %d unread", unread)
 	}
 	return ui.Box(title, lines, r.w, r.h, focused)
 }
@@ -646,6 +681,24 @@ func (m *Model) renderHelp() []string {
 		"    it what needs you now, then what you did, newest first, and what came of",
 		"    it. j/k move, a the next session that waits, d the turn of the line,",
 		"    enter goes to its session, +/- a shorter or longer time.",
+		"",
+		ui.Bold.Render("  Health"),
+		"    the brain fry meter under the files says how high the risk is now:",
+		"    low, raised or high. Each rule raises it: a long stretch without a",
+		"    15-minute pause, 4 or more agents at once, many changes of session,",
+		"    changed files you have not opened, many hours active in a day. "+p+" y",
+		"    shows the rules that fire and the numbers behind them: h/l time · z hold.",
+		"    "+p+" z holds everything for a break of 15 minutes: queues pause, no",
+		"    notification, the web cockpit stops, the agents go out of sight, and",
+		"    what is in your head is written down on the hold screen. Agents mid-turn",
+		"    finish. enter ends it and puts everything back as it was: the queues",
+		"    resume and the cockpit starts again, the same sessions shared. "+p+" e",
+		"    shows what happened meanwhile.",
+		"    A 4th agent at once is warned of before it starts.",
+		"    In the changes panel a • after the mark, as M•api.go, marks a file the",
+		"    agent changed since you last opened its diff; the diff starts with the",
+		"    turn that changed it.",
+		"    [health]: meter = true · warn_agents = 4 (0 = never)",
 		"",
 		ui.Bold.Render("  Workspaces"),
 		"    sessions are saved for the directory cicoria was opened on, wherever they",
@@ -761,6 +814,9 @@ func (m *Model) renderStatus() string {
 		return ui.Fit(text, m.width)
 	case m.mode == modeView && m.view.search != nil:
 		return ui.Fit(" "+m.view.search.View(), m.width)
+	case m.hold != nil:
+		text, right := ui.Warn.Render(" on hold"), ui.Dim.Render("enter back to work ")
+		return text + strings.Repeat(" ", max(m.width-ansi.StringWidth(text)-ansi.StringWidth(right), 1)) + right
 	}
 
 	// A palette over the full-screen view leaves its status on screen.
@@ -817,6 +873,11 @@ func (m *Model) renderStatus() string {
 		}
 	case modeStats:
 		right = m.statsHint()
+		if m.mode == modePalette {
+			right = "esc back"
+		}
+	case modeHealth:
+		right = m.healthHint()
 		if m.mode == modePalette {
 			right = "esc back"
 		}

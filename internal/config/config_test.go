@@ -106,10 +106,22 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"no ports":      "ports_per_session = 0",
 		"low ports":     "port_base = 80",
 		"too many":      "port_base = 65530",
+		"warn below 0":  "[health]\nwarn_agents = -1",
 	} {
 		if _, err := Load(write(t, content)); err == nil {
 			t.Errorf("%s: Load accepted it", name)
 		}
+	}
+}
+
+func TestLoadHealth(t *testing.T) {
+	cfg, err := Load(write(t, ""))
+	if err != nil || !cfg.Health.Meter || cfg.Health.WarnAgents != 4 {
+		t.Errorf("health by default = %+v, %v", cfg.Health, err)
+	}
+	cfg, err = Load(write(t, "[health]\nmeter = false\nwarn_agents = 0"))
+	if err != nil || cfg.Health.Meter || cfg.Health.WarnAgents != 0 {
+		t.Errorf("health = %+v, %v", cfg.Health, err)
 	}
 }
 
